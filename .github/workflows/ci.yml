@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   check:
-    name: Format / Lint / Typecheck / Build
+    name: Format / Lint / Knip / Typecheck / Build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -27,6 +27,7 @@ jobs:
       - run: npm ci
       - run: npm run format
       - run: npm run lint
+      - run: npm run knip
       - run: npm run typecheck
       - run: npm run build
 

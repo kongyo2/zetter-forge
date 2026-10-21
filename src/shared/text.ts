@@ -12,9 +12,3 @@ export function codePointLength(value: string): number {
 export function formatCount(count: number): string {
   return Number(count || 0).toLocaleString("ja-JP");
 }
-
-/** 先頭から max コードポイントまでに切る。 */
-export function sliceCodePoints(value: string, max: number): string {
-  const chars = Array.from(value);
-  return chars.length <= max ? value : chars.slice(0, max).join("");
-}

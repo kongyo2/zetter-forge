@@ -46,7 +46,7 @@ export function settingsUsage(doc: CastDocument): BudgetUsage {
   return usage(total, LIMITS.settingsTotal);
 }
 
-export function toneExamplesLength(list: readonly ToneExample[]): number {
+function toneExamplesLength(list: readonly ToneExample[]): number {
   return list.reduce(
     (sum, item) => sum + utf16Length(item.situation) + utf16Length(item.example),
     0,
