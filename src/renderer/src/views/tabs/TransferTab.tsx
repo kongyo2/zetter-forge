@@ -102,6 +102,13 @@ export function TransferTab({ vm }: { vm: TransferTabVM }) {
           </button>
           <button
             type="button"
+            className="btn btn-outline"
+            onClick={() => emit({ type: "transfer/open-zetter" })}
+          >
+            {vm.openLabel}
+          </button>
+          <button
+            type="button"
             className="btn btn-plain btn-small"
             onClick={() => emit({ type: "transfer/reset" })}
           >

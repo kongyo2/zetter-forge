@@ -1,6 +1,7 @@
 // 「Zetter へ写す」のタブに描くもの。Zetter の作成画面の順に、コピーする文字・画像・選ぶ値を並べる。
 import { formatCount, utf16Length } from "@shared/text";
 
+import { isZetterUrl } from "../machine";
 import {
   type TransferItem,
   isCopyable,
@@ -67,6 +68,9 @@ export function presentTransfer(ctx: Context): TransferTabVM {
           : `${total}項目のうち${done}項目が済んでいます。`,
     },
     next: next ? { label: next.label } : null,
+    openLabel: isZetterUrl(ctx.doc.zetterUrl.trim())
+      ? "Zetter のこのキャストのページを開く"
+      : "Zetter を開く",
     groups: groups.map((group) => {
       const sections: TransferTabVM["groups"][number]["sections"] = [];
       for (const item of group.items) {

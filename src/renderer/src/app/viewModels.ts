@@ -475,6 +475,8 @@ export interface TransferItemVM {
 
 export interface TransferTabVM {
   progress: { done: number; total: number; changed: number; text: string };
+  /** Zetter を開くボタンの文言（控えた URL があれば、そのキャストのページ） */
+  openLabel: string;
   next: { label: string } | null;
   groups: {
     title: string;

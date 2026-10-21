@@ -262,6 +262,9 @@ function handle(step: Step, event: AppEvent): void {
     case "transfer/next":
       if (!state.dialog) copyNext(step);
       return;
+    case "transfer/open-zetter":
+      if (state.session) step.effect({ type: "url/open", url: zetterPage(state.session.doc) });
+      return;
     case "transfer/reset":
       if (!state.session || state.dialog) return;
       showConfirm(step, {
@@ -1066,4 +1069,12 @@ function openUrl(step: Step, path: Path): void {
 /** Zetter のページの URL か（ほかのページは開かない） */
 export function isZetterUrl(url: string): boolean {
   return /^https:\/\/(z-etter\.com|zetter\.si)\//u.test(url);
+}
+
+const ZETTER_TOP = "https://z-etter.com/";
+
+/** 写すときに開く Zetter のページ（控えたキャストの URL があればそこ） */
+function zetterPage(doc: CastDocument): string {
+  const url = doc.zetterUrl.trim();
+  return isZetterUrl(url) ? url : ZETTER_TOP;
 }

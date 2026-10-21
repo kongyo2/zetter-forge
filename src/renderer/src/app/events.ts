@@ -56,6 +56,8 @@ export type ViewEvent =
   // Zetter へ写す
   | { type: "transfer/next" }
   | { type: "transfer/reset" }
+  /** Zetter をブラウザで開く（控えた URL があればそのページ） */
+  | { type: "transfer/open-zetter" }
   // ダイアログ
   | { type: "dialog/choose"; choice: string }
   | { type: "dialog/cancel" }

@@ -455,6 +455,23 @@ describe("Zetter へ写す", () => {
     expect([first, second, third]).toEqual(["灯里", "古書店の店主", "雨の日だけ開く"]);
   });
 
+  it("Zetter を開くと、控えた URL があればそのページ、なければ Zetter を開く", async () => {
+    const world = await started();
+    await opened(world, "cast-0", castNamed("灯里"));
+    world.dispatch({ type: "transfer/open-zetter" });
+    expect(world.take("openExternal").args).toEqual(["https://z-etter.com/"]);
+    world.dispatch({
+      type: "input",
+      path: ["cast", "zetterUrl"],
+      value: " https://z-etter.com/cast/42 ",
+    });
+    world.dispatch({ type: "transfer/open-zetter" });
+    expect(world.take("openExternal").args).toEqual(["https://z-etter.com/cast/42"]);
+    world.dispatch({ type: "input", path: ["cast", "zetterUrl"], value: "file:///etc/passwd" });
+    world.dispatch({ type: "transfer/open-zetter" });
+    expect(world.take("openExternal").args).toEqual(["https://z-etter.com/"]);
+  });
+
   it("まだ保存していない画像は、場所をコピーできないことを知らせる", async () => {
     const world = await started();
     world.dispatch({ type: "library/new" });
