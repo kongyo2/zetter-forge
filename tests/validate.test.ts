@@ -13,7 +13,9 @@ import {
   limitPartnerSettingsValue,
   missingRequired,
   partnerSettingsLength,
+  settingsShares,
   settingsUsage,
+  toneShares,
   toneUsage,
   validateAffinityConfig,
   validateCast,
@@ -90,6 +92,32 @@ describe("validateCast", () => {
     );
     // 画面のカウンタは入力中の値をそのまま数える（片方だけの行も入る）
     expect(toneUsage(doc).total).toBe(10001 + 4);
+  });
+
+  it("合計の内訳は本人、登場人物の順で、足すと合計になる", () => {
+    const doc = validCast();
+    const empty = createEmptyMember();
+    const aoi = {
+      ...createEmptyMember(),
+      name: "葵",
+      profile: "い".repeat(30),
+      toneExamples: [{ situation: "朝", example: "おはよう" }],
+    };
+    doc.members = [aoi, empty];
+    doc.toneExamples = [{ situation: "雨の日", example: "……いらっしゃい" }];
+    expect(settingsShares(doc)).toEqual([
+      { memberId: null, length: 7 },
+      { memberId: aoi.id, length: 30 },
+      { memberId: empty.id, length: 0 },
+    ]);
+    expect(toneShares(doc).map((share) => share.length)).toEqual([11, 5, 0]);
+    const sum = (shares: { length: number }[]) =>
+      shares.reduce((total, share) => total + share.length, 0);
+    expect(sum(settingsShares(doc))).toBe(settingsUsage(doc).total);
+    expect(sum(toneShares(doc))).toBe(toneUsage(doc).total);
+    doc.mode = "chat";
+    expect(settingsShares(doc)).toEqual([{ memberId: null, length: 7 }]);
+    expect(toneShares(doc)).toEqual([{ memberId: null, length: 11 }]);
   });
 
   it("名前のある登場人物はそのまま、何か書いたのに名前がない登場人物はエラー", () => {

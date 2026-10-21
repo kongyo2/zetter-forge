@@ -1,17 +1,77 @@
 import { formatCount } from "@shared/text";
-import { type ReactNode, useLayoutEffect, useRef } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+  useLayoutEffect,
+  useRef,
+} from "react";
 
-export function SectionHead({ title, description }: { title: string; description?: ReactNode }) {
+import { IconDown, IconRemove, IconUp } from "./icons";
+
+const TAB_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End"]);
+
+/**
+ * role="tablist" の中を ← → Home End で移り、移った先のタブを選ぶ。
+ * 選んでいないタブは tabIndex={-1} にして、Tab キーでは選んでいるタブにだけ止まるようにする。
+ */
+export function onTabListKeyDown(event: KeyboardEvent<HTMLElement>): void {
+  if (!TAB_KEYS.has(event.key)) return;
+  const tabs = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')];
+  const index = tabs.indexOf(document.activeElement as HTMLElement);
+  if (index < 0) return;
+  event.preventDefault();
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabs.length - 1
+        : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  tabs[next]?.focus();
+  tabs[next]?.click();
+}
+
+function SectionHead({
+  title,
+  description,
+  meta,
+}: {
+  title: string;
+  description?: ReactNode;
+  /** 見出しの右に添える数（「3 / 12パート」など） */
+  meta?: ReactNode;
+}) {
   return (
     <div className="section-head">
-      <h2>{title}</h2>
+      <div className="section-title">
+        <h2>{title}</h2>
+        {meta ? <span className="section-meta">{meta}</span> : null}
+      </div>
       {description ? <p className="note">{description}</p> : null}
     </div>
   );
 }
 
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={className ? `card ${className}` : "card"}>{children}</section>;
+/** タブの中のひとまとまり。まとまりどうしは罫線で区切る。 */
+export function Section({
+  title,
+  description,
+  meta,
+  className,
+  children,
+}: {
+  title?: string;
+  description?: ReactNode;
+  meta?: ReactNode;
+  className?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <section className={className ? `section ${className}` : "section"}>
+      {title ? <SectionHead title={title} description={description} meta={meta} /> : null}
+      {children}
+    </section>
+  );
 }
 
 export function Field({
@@ -33,7 +93,7 @@ export function Field({
     <div className="field">
       <div className="field-label">
         <span>{label}</span>
-        {required ? <span className="badge badge-required">必須</span> : null}
+        {required ? <span className="required">必須</span> : null}
       </div>
       {hint ? <p className="note">{hint}</p> : null}
       {children}
@@ -59,7 +119,7 @@ export function Counter({
   const state = length > max ? " is-over" : length >= max * 0.9 ? " is-near" : "";
   return (
     <span className={`counter${state}`}>
-      {length}/{max}
+      {formatCount(length)}/{formatCount(max)}
       {unit}
     </span>
   );
@@ -98,7 +158,7 @@ export function TextInput({
   );
 }
 
-const AUTOGROW_MAX_PX = 420;
+const AUTOGROW_MAX_PX = 480;
 
 export function TextArea({
   value,
@@ -194,31 +254,30 @@ export function Disclosure({
   );
 }
 
-export function Budget({
-  label,
-  total,
-  max,
-  note,
+/** 丸いアイコン。ink を渡すと、その人の色の輪で囲む。 */
+export function Avatar({
+  src,
+  name,
+  ink,
+  blurred,
+  size = "medium",
 }: {
-  label: string;
-  total: number;
-  max: number;
-  note: string;
+  src: string | null;
+  name: string;
+  ink?: string;
+  blurred?: boolean;
+  size?: "small" | "medium";
 }) {
-  const state = total > max ? " is-over" : max - total <= max * 0.1 ? " is-near" : "";
+  const initial = Array.from(name.trim())[0] ?? "？";
+  const classes = ["avatar", `avatar-${size}`, ink ? "is-inked" : ""].filter(Boolean).join(" ");
   return (
-    <section className={`budget${state}`} aria-label={label}>
-      <div className="budget-row">
-        <span className="budget-label">{label}</span>
-        <span className="budget-value">
-          {formatCount(total)} / {formatCount(max)}
-        </span>
-      </div>
-      <div className="budget-bar" aria-hidden="true">
-        <span style={{ width: `${Math.min(100, (total / max) * 100)}%` }} />
-      </div>
-      <p className="note">{note}</p>
-    </section>
+    <span
+      className={classes}
+      style={ink ? ({ "--ink": ink } as CSSProperties) : undefined}
+      aria-hidden="true"
+    >
+      {src ? <img src={src} alt="" className={blurred ? "is-blurred" : undefined} /> : initial}
+    </span>
   );
 }
 
@@ -227,7 +286,7 @@ export function MoveButtons({
   count,
   onMove,
   onRemove,
-  removeLabel,
+  removeLabel = "削除",
 }: {
   index: number;
   count: number;
@@ -239,23 +298,33 @@ export function MoveButtons({
     <div className="row-actions">
       <button
         type="button"
-        className="btn btn-plain btn-small"
+        className="icon-button"
         disabled={index === 0}
+        aria-label="上へ移動"
+        title="上へ移動"
         onClick={() => onMove(index, index - 1)}
       >
-        上へ
+        <IconUp />
       </button>
       <button
         type="button"
-        className="btn btn-plain btn-small"
+        className="icon-button"
         disabled={index === count - 1}
+        aria-label="下へ移動"
+        title="下へ移動"
         onClick={() => onMove(index, index + 1)}
       >
-        下へ
+        <IconDown />
       </button>
       {onRemove ? (
-        <button type="button" className="btn btn-plain btn-small btn-danger" onClick={onRemove}>
-          {removeLabel ?? "削除"}
+        <button
+          type="button"
+          className="icon-button is-danger"
+          aria-label={removeLabel}
+          title={removeLabel}
+          onClick={onRemove}
+        >
+          <IconRemove />
         </button>
       ) : null}
     </div>
