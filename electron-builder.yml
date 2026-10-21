@@ -10,6 +10,9 @@ files:
 publish: null
 win:
   target: nsis
+nsis:
+  # Release に載せるファイルの名前に空白を入れない（GitHub が勝手に「.」に替えるため）
+  artifactName: "ZetterForge-${version}-windows-${arch}-setup.${ext}"
 mac:
   target:
     - target: dmg
@@ -20,7 +23,8 @@ mac:
   identity: "-"
   hardenedRuntime: false
 dmg:
-  # 既定では Intel 版の名前にだけアーキテクチャが付かないので、両方に付ける
-  artifactName: "${productName}-${version}-${arch}.${ext}"
+  artifactName: "ZetterForge-${version}-mac-${arch}.${ext}"
 linux:
   target: AppImage
+appImage:
+  artifactName: "ZetterForge-${version}-linux-${arch}.${ext}"
