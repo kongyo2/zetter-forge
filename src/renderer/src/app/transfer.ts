@@ -5,6 +5,7 @@ import {
   AFFINITY_PACES,
   AFFINITY_STAGE_FIELDS,
   type AffinityConfig,
+  type AffinityStage,
   type CastDocument,
   type CastImage,
   type CastMember,
@@ -216,52 +217,69 @@ function affinityItems(
   subject: string,
   title: string,
   config: AffinityConfig,
-  override: boolean,
+  /** 個別設定なら共通設定、共通設定なら null */
+  common: AffinityConfig | null,
 ): void {
   const base = ["affinity", subject];
   builder.sectionOf(title);
-  if (override && !config.enabled) {
+  if (common && !config.enabled) {
     builder.setting([...base, "disabled"], "このキャラは好感度を使わない", "オン", false);
     return;
   }
-  const template = AFFINITY_TEMPLATE;
+  // 「何もしなくてよい」とするのは、Zetter のひな形と同じ値のときだけ。個別設定は、作ったときに
+  // ひな形と共通設定のどちらが入っていても困らないよう、両方と同じときだけにする
+  const baselines = common ? [AFFINITY_TEMPLATE, common] : [AFFINITY_TEMPLATE];
+  const unchanged = (pick: (target: AffinityConfig) => unknown) =>
+    baselines.every((baseline) => pick(baseline) === pick(config));
   builder.text([...base, "itemName"], "項目名", config.itemName, {
     max: LIMITS.affinityItemName,
     codePoints: true,
-    skipDefault: config.itemName === template.itemName,
+    skipDefault: unchanged((target) => target.itemName),
   });
   const number = (value: number | null) => (value === null ? "" : String(value));
   builder.text([...base, "minValue"], "最小値", number(config.minValue), {
-    skipDefault: config.minValue === template.minValue,
+    skipDefault: unchanged((target) => target.minValue),
   });
   builder.text([...base, "maxValue"], "最大値", number(config.maxValue), {
-    skipDefault: config.maxValue === template.maxValue,
+    skipDefault: unchanged((target) => target.maxValue),
   });
   builder.text([...base, "initialValue"], "初期値", number(config.initialValue), {
-    skipDefault: config.initialValue === template.initialValue,
+    skipDefault: unchanged((target) => target.initialValue),
   });
   const pace =
     AFFINITY_PACES.find((candidate) => candidate.value === config.pace)?.label ?? config.pace;
-  builder.setting([...base, "pace"], "変化の速さ", pace, config.pace === template.pace);
+  builder.setting(
+    [...base, "pace"],
+    "変化の速さ",
+    pace,
+    unchanged((target) => target.pace),
+  );
   builder.setting(
     [...base, "showInChat"],
     "チャットに好感度を表示する",
     onOff(config.showInChat),
-    config.showInChat === template.showInChat,
+    unchanged((target) => target.showInChat),
   );
   config.stages.forEach((stage, index) => {
-    const same = template.stages[index];
     const row = [...base, "stages", index];
     // ひな形より段階が多いときは、Zetter で段階を足してから写す
     const stageNotes =
-      index === template.stages.length ? ["Zetter で「段階を追加」してから写します。"] : [];
+      index === AFFINITY_TEMPLATE.stages.length
+        ? ["Zetter で「段階を追加」してから写します。"]
+        : [];
+    // その段階がない設定とは、同じとみなさない
+    const stageUnchanged = (key: keyof AffinityStage) =>
+      baselines.every((baseline) => {
+        const same = baseline.stages[index];
+        return !!same && same[key] === stage[key];
+      });
     builder.text([...row, "startValue"], `段階${index + 1}の開始値`, number(stage.startValue), {
-      skipDefault: index === 0 || stage.startValue === same?.startValue,
+      skipDefault: index === 0 || stageUnchanged("startValue"),
       notes: stageNotes,
     });
     for (const field of AFFINITY_STAGE_FIELDS) {
       builder.text([...row, field.key], `段階${index + 1}の${field.label}`, stage[field.key], {
-        skipDefault: !!same && stage[field.key] === same[field.key],
+        skipDefault: stageUnchanged(field.key),
       });
     }
   });
@@ -348,7 +366,8 @@ function build(doc: CastDocument): TransferGroup[] {
   // 好感度（雑談モードでは効かないので写さない）
   if (story && doc.affinity) {
     builder.group("好感度", "affinity");
-    affinityItems(builder, AFFINITY_DEFAULT, "共通設定", doc.affinity.default, false);
+    const common = doc.affinity.default;
+    affinityItems(builder, AFFINITY_DEFAULT, "共通設定", common, null);
     const base = doc.affinity.overrides[AFFINITY_BASE_SUBJECT];
     if (base)
       affinityItems(
@@ -356,7 +375,7 @@ function build(doc: CastDocument): TransferGroup[] {
         AFFINITY_BASE_SUBJECT,
         `${doc.name.trim() || "本体"}の個別設定`,
         base,
-        true,
+        common,
       );
     for (const member of sendableMembers(doc)) {
       const config = doc.affinity.overrides[member.id];
@@ -366,7 +385,7 @@ function build(doc: CastDocument): TransferGroup[] {
           member.id,
           `${member.name.trim() || "登場人物"}の個別設定`,
           config,
-          true,
+          common,
         );
     }
   }

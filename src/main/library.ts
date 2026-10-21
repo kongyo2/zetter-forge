@@ -11,7 +11,6 @@ import {
 } from "@shared/cast";
 import { type CopyLog, copyLogFile, normalizeCopyLog } from "@shared/copyLog";
 import { type ImageKind, imageSlotName } from "@shared/images";
-import { CAST_MISSING } from "@shared/ipc";
 
 // ライブラリの中身:
 //   <root>/<キャストのフォルダ>/cast.json        設定
@@ -39,7 +38,13 @@ export interface SavedCast extends StoredCast {
   replacedImages: Record<string, CastImage>;
 }
 
-/** キャストのフォルダがなくなっている（移動・削除された）ときのエラー */
+/** キャストのフォルダがなくなっている（移動・削除された）ときのエラーの印 */
+export const CAST_MISSING = "CAST_MISSING";
+
+export function isCastMissing(error: unknown): error is Error {
+  return error instanceof Error && "code" in error && error.code === CAST_MISSING;
+}
+
 function castMissing(): Error {
   return Object.assign(
     new Error(

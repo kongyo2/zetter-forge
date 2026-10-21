@@ -30,9 +30,14 @@ function readImageFile(file: PickedFile): Promise<string> {
   });
 }
 
-/** Zetter のキャスト作成画面と同じ設定で Cropper を作る。 */
-export function createCropper(image: HTMLImageElement, spec: ImageSpec): Cropper {
+/** Zetter のキャスト作成画面と同じ設定で Cropper を作る。切り抜けるようになったら onReady を呼ぶ */
+export function createCropper(
+  image: HTMLImageElement,
+  spec: ImageSpec,
+  onReady: () => void,
+): Cropper {
   return new Cropper(image, {
+    ready: onReady,
     aspectRatio: spec.aspectRatio ?? Number.NaN,
     viewMode: 1,
     dragMode: "move",

@@ -1,5 +1,5 @@
 import { createEmptyMember } from "@shared/cast";
-import { CAST_MISSING, type SaveCastRequest } from "@shared/ipc";
+import type { SaveCastRequest } from "@shared/ipc";
 import { LIMITS } from "@shared/limits";
 import { describe, expect, it } from "vitest";
 
@@ -176,7 +176,7 @@ describe("保存", () => {
     );
     world.dispatch(name("A2"));
     world.dispatch({ type: "editor/save" });
-    world.take("saveCast").reject(Object.assign(new Error("ない"), { code: CAST_MISSING }));
+    world.take("saveCast").resolve({ kind: "missing", message: "フォルダが見つかりません。" });
     await world.flush();
     const dialog = world.mediator.getState().dialog;
     expect(dialog).toMatchObject({ kind: "confirm", title: "保存先のフォルダが見つかりません" });
@@ -186,6 +186,45 @@ describe("保存", () => {
     expect(request.doc.name).toBe("A2");
     // 元のフォルダの画像は新しいフォルダにはないので外す
     expect(request.doc.avatar).toBeNull();
+  });
+
+  it("保存先が見つからなくても、画像を切り抜いている途中なら閉じずに知らせ、次の保存で勧める", async () => {
+    const world = await started();
+    await opened(world, "cast-0", castNamed("A"));
+    world.dispatch(name("A2"));
+    world.dispatch({ type: "editor/save" });
+    world.dispatch({
+      type: "pick",
+      path: ["cast", "avatar"],
+      files: [{ name: "a.jpg", type: "image/jpeg", size: 10 }],
+    });
+    world.take("saveCast").resolve({ kind: "missing", message: "フォルダが見つかりません。" });
+    await world.flush();
+    expect(world.mediator.getState().dialog).toMatchObject({ kind: "crop" });
+    expect(world.mediator.getState().toasts.at(-1)).toMatchObject({
+      tone: "error",
+      message: "保存できませんでした: フォルダが見つかりません。",
+    });
+    world.dispatch({ type: "crop/cancel" });
+    world.dispatch({ type: "editor/save" });
+    world.take("saveCast").resolve({ kind: "missing", message: "フォルダが見つかりません。" });
+    await world.flush();
+    expect(world.mediator.getState().dialog).toMatchObject({
+      kind: "confirm",
+      title: "保存先のフォルダが見つかりません",
+    });
+  });
+
+  it("保存のほかの失敗では、新しいキャストとしての保存は勧めない", async () => {
+    const world = await started();
+    await opened(world, "cast-0", castNamed("A"));
+    world.dispatch(name("A2"));
+    world.dispatch({ type: "editor/save" });
+    world.take("saveCast").reject(new Error("EACCES: permission denied"));
+    await world.flush();
+    expect(world.mediator.getState().dialog).toBeNull();
+    expect(world.mediator.getState().toasts.at(-1)).toMatchObject({ tone: "error" });
+    expect(world.session().dirty).toBe(true);
   });
 });
 
@@ -238,6 +277,97 @@ describe("開く・作る", () => {
     expect(world.mediator.getState().dialog).toMatchObject({ kind: "confirm" });
     world.dispatch({ type: "dialog/choose", choice: "discard" });
     expect(world.session().folder).toBe("cast-0");
+  });
+
+  it("読み込みのあいだに書き換えたら、保存してから開くこともできる", async () => {
+    const world = await started([{ name: "A" }, { name: "B" }]);
+    await opened(world, "cast-1", castNamed("B"));
+    world.dispatch({ type: "library/open", folder: "cast-0" });
+    world.dispatch(name("B2"));
+    world.take("loadCast").resolve(loadedCast("cast-0", castNamed("A")));
+    await world.flush();
+    expect(world.vm().dialog).toMatchObject({ kind: "confirm", initial: "save" });
+    world.dispatch({ type: "dialog/choose", choice: "save" });
+    const save = world.take("saveCast");
+    expect(save.args[0]).toMatchObject({ folder: "cast-1", doc: { name: "B2" } });
+    save.resolve(savedFrom(save.args[0] as SaveCastRequest));
+    await world.flush();
+    world.take("loadCast").resolve(loadedCast("cast-0", castNamed("A")));
+    await world.flush();
+    expect(world.session().folder).toBe("cast-0");
+  });
+
+  it("読み込みのあいだに出した確かめは閉じ、開いたキャストには効かない", async () => {
+    const world = await started([{ name: "A" }, { name: "B" }]);
+    await opened(world, "cast-1", castNamed("B"));
+    world.dispatch({ type: "library/open", folder: "cast-0" });
+    world.dispatch({ type: "transfer/reset" });
+    expect(world.mediator.getState().dialog).toMatchObject({ kind: "confirm" });
+    const copyLog = { "cast/name": { hash: "00000000", at: "2026-10-20T00:00:00.000Z" } };
+    world.take("loadCast").resolve(loadedCast("cast-0", castNamed("A"), copyLog));
+    await world.flush();
+    expect(world.session().folder).toBe("cast-0");
+    expect(world.mediator.getState().dialog).toBeNull();
+    world.dispatch({ type: "dialog/choose", choice: "reset" });
+    expect(world.session().copyLog).toEqual(copyLog);
+    expect(world.pending()).not.toContain("writeCopyLog");
+  });
+
+  it("読み込みのあいだに保存を頼むと、先に保存してから開き直す", async () => {
+    const world = await started([{ name: "A" }, { name: "B" }]);
+    await opened(world, "cast-1", castNamed("B"));
+    world.dispatch({ type: "library/open", folder: "cast-0" });
+    world.dispatch(name("B2"));
+    world.dispatch({ type: "menu", command: "save" });
+    const load = world.take("loadCast");
+    const save = world.take("saveCast");
+    expect(save.args[0]).toMatchObject({ folder: "cast-1", doc: { name: "B2" } });
+    // 保存を始める前に頼んだ読み込みの結果は使わない
+    load.resolve(loadedCast("cast-0", castNamed("A")));
+    await world.flush();
+    expect(world.session().folder).toBe("cast-1");
+    save.resolve(savedFrom(save.args[0] as SaveCastRequest));
+    await world.flush();
+    expect(world.mediator.getState().dialog).toBeNull();
+    world.take("loadCast").resolve(loadedCast("cast-0", castNamed("A")));
+    await world.flush();
+    expect(world.session().folder).toBe("cast-0");
+  });
+
+  it("「保存して続ける」のあとに出したダイアログは、保存が終わったら閉じて続ける", async () => {
+    const world = await started([{ name: "A" }, { name: "B" }]);
+    await opened(world, "cast-1", castNamed("B"));
+    world.dispatch(name("B2"));
+    world.dispatch({ type: "library/open", folder: "cast-0" });
+    world.dispatch({ type: "dialog/choose", choice: "save" });
+    world.dispatch({ type: "transfer/reset" });
+    expect(world.mediator.getState().dialog).toMatchObject({ kind: "confirm" });
+    const save = world.take("saveCast");
+    save.resolve(savedFrom(save.args[0] as SaveCastRequest));
+    await world.flush();
+    expect(world.mediator.getState().dialog).toBeNull();
+    expect(world.take("loadCast").args).toEqual(["cast-0"]);
+  });
+
+  it("読み込み中に別のキャストを開こうとして確かめているあいだは、先の読み込みで差し替えない", async () => {
+    const world = await started([{ name: "A" }, { name: "B" }, { name: "C" }]);
+    await opened(world, "cast-1", castNamed("B"));
+    world.dispatch({ type: "library/open", folder: "cast-0" });
+    world.dispatch(name("B2"));
+    world.dispatch({ type: "library/open", folder: "cast-2" });
+    expect(world.mediator.getState().dialog).toMatchObject({
+      kind: "confirm",
+      message: expect.stringContaining("「C」を開く") as string,
+    });
+    world.take("loadCast").resolve(loadedCast("cast-0", castNamed("A")));
+    await world.flush();
+    expect(world.mediator.getState().dialog).toMatchObject({
+      message: expect.stringContaining("「C」を開く") as string,
+    });
+    world.dispatch({ type: "dialog/choose", choice: "discard" });
+    world.take("loadCast").resolve(loadedCast("cast-2", castNamed("C")));
+    await world.flush();
+    expect(world.session().folder).toBe("cast-2");
   });
 
   it("保存先を選んでいるあいだは、キャストを切り替えず、選んだ保存先を捨てない", async () => {

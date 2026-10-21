@@ -10,7 +10,7 @@ import type {
   LoadedCast,
   MenuCommand,
   SaveCastRequest,
-  SavedCast,
+  SaveCastResult,
 } from "@shared/ipc";
 import {
   BrowserWindow,
@@ -29,6 +29,7 @@ import {
   castDir,
   castFilePath,
   castImagePath,
+  isCastMissing,
   listCasts,
   loadCast,
   referencedImages,
@@ -77,7 +78,7 @@ async function listing(): Promise<LibraryListing> {
   return { root: settings.libraryRoot, casts: summaries, errors };
 }
 
-type Result<T> = { ok: true; value: T } | { ok: false; error: string; code?: string };
+type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /** 例外の文言を Electron の前置き（Error invoking remote method…）なしで画面に届ける。 */
 function handle<A extends unknown[], T>(channel: string, task: (...args: A) => Promise<T>): void {
@@ -86,15 +87,7 @@ function handle<A extends unknown[], T>(channel: string, task: (...args: A) => P
       return { ok: true, value: await task(...(args as A)) };
     } catch (error) {
       console.error(`[${channel}]`, error);
-      const code =
-        error instanceof Error && "code" in error && typeof error.code === "string"
-          ? error.code
-          : undefined;
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-        ...(code ? { code } : {}),
-      };
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 }
@@ -139,19 +132,27 @@ function registerIpc(): void {
     const loaded = await loadCast(settings.libraryRoot, folder);
     return { ...loaded, imageUrls: imageUrlsFor(loaded.folder, loaded.doc) };
   });
-  handle("cast:save", async (request: SaveCastRequest): Promise<SavedCast> => {
-    const saved = await saveCast(settings.libraryRoot, {
-      folder: request.folder,
-      doc: request.doc,
-      pendingImages: request.pendingImages,
-    });
-    return {
-      folder: saved.folder,
-      doc: saved.doc,
-      notices: saved.notices,
-      imageUrls: imageUrlsFor(saved.folder, saved.doc),
-      replacedImages: saved.replacedImages,
-    };
+  handle("cast:save", async (request: SaveCastRequest): Promise<SaveCastResult> => {
+    try {
+      const saved = await saveCast(settings.libraryRoot, {
+        folder: request.folder,
+        doc: request.doc,
+        pendingImages: request.pendingImages,
+      });
+      return {
+        kind: "saved",
+        cast: {
+          folder: saved.folder,
+          doc: saved.doc,
+          notices: saved.notices,
+          imageUrls: imageUrlsFor(saved.folder, saved.doc),
+          replacedImages: saved.replacedImages,
+        },
+      };
+    } catch (error) {
+      if (isCastMissing(error)) return { kind: "missing", message: error.message };
+      throw error;
+    }
   });
   handle("cast:open-folder", async (folder: string) =>
     openFolder(castDir(settings.libraryRoot, folder)),

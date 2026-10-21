@@ -50,14 +50,19 @@ export interface SaveCastRequest {
   pendingImages: Record<string, string>;
 }
 
-/** 保存先のキャストのフォルダがなくなっていたときのエラーの印 */
-export const CAST_MISSING = "CAST_MISSING";
+/**
+ * 保存の結果。保存先のキャストのフォルダがなくなっていたときは missing（画面で新しいキャストとして
+ * 保存し直せるようにする）。エラーに付けた印は contextBridge を越えると文言しか残らないので、結果で返す。
+ */
+export type SaveCastResult =
+  | { kind: "saved"; cast: SavedCast }
+  | { kind: "missing"; message: string };
 
 export interface ForgeApi {
   getLibrary(): Promise<LibraryListing>;
   chooseLibraryRoot(): Promise<LibraryListing | null>;
   loadCast(folder: string): Promise<LoadedCast>;
-  saveCast(request: SaveCastRequest): Promise<SavedCast>;
+  saveCast(request: SaveCastRequest): Promise<SaveCastResult>;
   openCastFolder(folder: string): Promise<void>;
   openLibraryFolder(): Promise<void>;
   /** 画像ファイルを、フォルダの中で選んだ状態で開く */

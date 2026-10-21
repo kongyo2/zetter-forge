@@ -121,6 +121,7 @@ export interface ConfirmDialog {
 export interface CropDialog {
   kind: "crop";
   token: number;
+  /** 画像を入れるキャスト（Session.key） */
   sessionKey: number;
   /** 画像を入れる場所 */
   path: Path;
@@ -165,6 +166,7 @@ export interface AppState {
   query: string;
   session: Session | null;
   task: Task;
+  /** 開いているキャストについてのダイアログ（キャストを替えたら閉じる） */
   dialog: Dialog | null;
   toasts: Toast[];
 }

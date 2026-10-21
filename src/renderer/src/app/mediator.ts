@@ -3,7 +3,7 @@
 // 画面の部品は Mediator の状態を直接さわらず、Presenter が作った描画用の値だけを受け取る。
 import type { CopyLog } from "@shared/copyLog";
 import type { CroppedImage, CropCanvas, ImageKind } from "@shared/images";
-import { CAST_MISSING, type ForgeApi } from "@shared/ipc";
+import type { ForgeApi } from "@shared/ipc";
 
 import type { Effect } from "./effects";
 import type { AppEvent } from "./events";
@@ -28,12 +28,6 @@ export interface Ports {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function codeOf(error: unknown): string | undefined {
-  return error instanceof Error && "code" in error && typeof error.code === "string"
-    ? error.code
-    : undefined;
 }
 
 export class Mediator {
@@ -123,12 +117,20 @@ export class Mediator {
       case "cast/save":
         this.settle(
           forge.saveCast(effect.request),
-          (saved) => ({ type: "cast/saved", token: effect.token, saved }),
+          (result): AppEvent =>
+            result.kind === "saved"
+              ? { type: "cast/saved", token: effect.token, saved: result.cast }
+              : {
+                  type: "cast/save-failed",
+                  token: effect.token,
+                  message: result.message,
+                  missing: true,
+                },
           (error) => ({
             type: "cast/save-failed",
             token: effect.token,
             message: messageOf(error),
-            missing: codeOf(error) === CAST_MISSING,
+            missing: false,
           }),
         );
         return;

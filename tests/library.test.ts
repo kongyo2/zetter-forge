@@ -3,10 +3,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { type CastDocument, createEmptyCast, createEmptyMember } from "@shared/cast";
-import { CAST_MISSING } from "@shared/ipc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  CAST_MISSING,
   castFilePath,
   castImagePath,
   listCasts,

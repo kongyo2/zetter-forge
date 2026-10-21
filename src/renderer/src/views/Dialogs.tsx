@@ -1,7 +1,14 @@
 // ダイアログ。<dialog> を前面に出すと、裏の画面は操作も読み上げもされなくなり、Esc で取りやめになる。
 // 閉じるかどうかは仲介役が決めるので、Esc（cancel）ではこの部品から閉じずに知らせるだけ。
 import type Cropper from "cropperjs";
-import { type ReactNode, type SyntheticEvent, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  type ReactNode,
+  type SyntheticEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { DialogVM } from "../app/viewModels";
 import { createCropper } from "../runtime/crop";
@@ -92,14 +99,17 @@ function CropDialog({ vm }: { vm: Extract<DialogVM, { kind: "crop" }> }) {
   const emit = useEmit();
   const imageRef = useRef<HTMLImageElement | null>(null);
   const cropperRef = useRef<Cropper | null>(null);
+  // 切り抜けるようになった画像（token）。それまでは「この範囲にする」を押せない（押しても切り抜けない）
+  const [readyToken, setReadyToken] = useState<number | null>(null);
 
   // Cropper は描き方の道具なので、この部品が持つ。画像が替わるたびに作り直す
   useEffect(() => {
     const image = imageRef.current;
     if (!image || !vm.source) return undefined;
+    const token = vm.token;
     const start = () => {
       cropperRef.current?.destroy();
-      cropperRef.current = createCropper(image, vm.spec);
+      cropperRef.current = createCropper(image, vm.spec, () => setReadyToken(token));
     };
     const fail = () => emit({ type: "crop/failed", message: "画像として読めませんでした。" });
     if (image.complete && image.naturalWidth > 0) start();
@@ -113,7 +123,7 @@ function CropDialog({ vm }: { vm: Extract<DialogVM, { kind: "crop" }> }) {
       cropperRef.current?.destroy();
       cropperRef.current = null;
     };
-  }, [vm.source, vm.spec, emit]);
+  }, [vm.source, vm.spec, vm.token, emit]);
 
   const confirm = () => {
     const canvas = cropperRef.current?.getCroppedCanvas(vm.spec.output);
@@ -151,7 +161,7 @@ function CropDialog({ vm }: { vm: Extract<DialogVM, { kind: "crop" }> }) {
         <button
           type="button"
           className="btn btn-primary"
-          disabled={vm.busy || !vm.source}
+          disabled={vm.busy || readyToken !== vm.token}
           onClick={confirm}
           data-initial-focus
         >

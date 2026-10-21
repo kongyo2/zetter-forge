@@ -8,6 +8,7 @@ import type {
   LibraryListing,
   LoadedCast,
   SaveCastRequest,
+  SaveCastResult,
   SavedCast,
 } from "@shared/ipc";
 
@@ -45,27 +46,36 @@ export function createWorld(): World {
   const calls: Call[] = [];
   const timers: { at: number; task: () => void }[] = [];
   const call =
-    (method: string) =>
+    (method: string, crossesBridge = false) =>
     (...args: unknown[]) =>
       new Promise<never>((resolve, reject) =>
-        calls.push({ method, args, resolve: resolve as (value: unknown) => void, reject }),
+        calls.push({
+          method,
+          args,
+          resolve: resolve as (value: unknown) => void,
+          // メインプロセスからのエラーは contextBridge を越えると文言しか残らないので、同じにする
+          reject: crossesBridge
+            ? (error) => reject(new Error(error instanceof Error ? error.message : String(error)))
+            : reject,
+        }),
       );
+  const forge = (method: string) => call(method, true);
   const world = {
     now: Date.parse("2026-10-21T00:00:00.000Z"),
   } as World;
   const ports: Ports = {
     forge: {
-      getLibrary: call("getLibrary"),
-      chooseLibraryRoot: call("chooseLibraryRoot"),
-      loadCast: call("loadCast"),
-      saveCast: call("saveCast"),
-      openCastFolder: call("openCastFolder"),
-      openLibraryFolder: call("openLibraryFolder"),
-      showImage: call("showImage"),
-      imagePath: call("imagePath"),
-      writeCopyLog: call("writeCopyLog"),
-      copyText: call("copyText"),
-      openExternal: call("openExternal"),
+      getLibrary: forge("getLibrary"),
+      chooseLibraryRoot: forge("chooseLibraryRoot"),
+      loadCast: forge("loadCast"),
+      saveCast: forge("saveCast"),
+      openCastFolder: forge("openCastFolder"),
+      openLibraryFolder: forge("openLibraryFolder"),
+      showImage: forge("showImage"),
+      imagePath: forge("imagePath"),
+      writeCopyLog: forge("writeCopyLog"),
+      copyText: forge("copyText"),
+      openExternal: forge("openExternal"),
     },
     images: { read: call("read"), encode: call("encode") },
     schedule: (ms, task) => timers.push({ at: world.now + ms, task }),
@@ -139,7 +149,7 @@ export function loadedCast(folder: string, doc: CastDocument, copyLog: CopyLog =
 export function savedFrom(
   request: SaveCastRequest,
   folder = request.folder ?? "saved-folder",
-): SavedCast {
+): SaveCastResult {
   const doc = structuredClone(request.doc);
   const replacedImages: SavedCast["replacedImages"] = {};
   const swap = <T extends { file: string; width: number; height: number; bytes: number }>(
@@ -159,7 +169,7 @@ export function savedFrom(
   doc.gallery = doc.gallery.map((image) => swap(image) as typeof image);
   for (const member of doc.members) member.avatar = swap(member.avatar);
   doc.updatedAt = "2026-10-21T01:00:00.000Z";
-  return { folder, doc, imageUrls: {}, notices: [], replacedImages };
+  return { kind: "saved", cast: { folder, doc, imageUrls: {}, notices: [], replacedImages } };
 }
 
 export const croppedImage: CroppedImage = {

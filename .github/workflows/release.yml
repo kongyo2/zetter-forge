@@ -19,9 +19,10 @@ on:
 permissions:
   contents: write
 
-# 同じ版のリリースを重ねて走らせない
+# リリースは 1 つずつ走らせる（タグの push と手動の実行が重なると、同じ版の下書きが 2 つできるため。
+# 版はジョブの中で決まるので、版ごとには分けられない）
 concurrency:
-  group: release-${{ github.ref_name }}-${{ inputs.version }}
+  group: release
   cancel-in-progress: false
 
 jobs:

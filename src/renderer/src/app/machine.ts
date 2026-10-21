@@ -204,8 +204,8 @@ function handle(step: Step, event: AppEvent): void {
           library: { status: "ready", listing: event.listing },
           libraryAt: step.now,
           libraryToken: step.next(),
-          session: null,
         });
+        switchSession(step, null);
       }
       return;
     case "root/failed":
@@ -391,6 +391,14 @@ function sessionFromLoaded(key: number, loaded: LoadedCast): Session {
   };
 }
 
+/**
+ * 開いているキャストを替える。前のキャストについて出していたダイアログは閉じる
+ * （残すと、消す・切り抜くなどの確かめが、替えたあとのキャストに効いてしまう）。
+ */
+function switchSession(step: Step, session: Session | null): void {
+  step.set({ session, dialog: null });
+}
+
 /** いま編集しているキャストを、確かめずに離れてよいか */
 function mayLeave(state: AppState, intent: { discard: boolean }): boolean {
   const session = state.session;
@@ -431,6 +439,8 @@ function request(step: Step, intent: Intent): void {
     if (state.task.kind === "opening" && state.task.folder === intent.folder) return;
   }
   if (!mayLeave(state, intent)) {
+    // 前に頼んだキャストの読み込みはやめる（あとから届いて、この確かめを差し替えないように）
+    if (state.task.kind === "opening") step.set({ task: { kind: "idle" } });
     const what =
       intent.kind === "open"
         ? `「${castTitle(state, intent.folder)}」を開く`
@@ -483,10 +493,8 @@ function perform(step: Step, intent: Intent): void {
       if (!mayLeave(state, intent)) return request(step, intent);
       const key = step.next();
       // 読み込み中のキャストがあれば、その結果は捨てる
-      step.set({
-        session: newSession(key, createEmptyCast(new Date(step.now))),
-        task: state.task.kind === "opening" ? { kind: "idle" } : state.task,
-      });
+      if (state.task.kind === "opening") step.set({ task: { kind: "idle" } });
+      switchSession(step, newSession(key, createEmptyCast(new Date(step.now))));
       return;
     }
     case "choose-root": {
@@ -523,7 +531,7 @@ function perform(step: Step, intent: Intent): void {
       return;
     }
     case "adopt":
-      step.set({ session: sessionFromLoaded(step.next(), intent.loaded) });
+      switchSession(step, sessionFromLoaded(step.next(), intent.loaded));
       return;
     case "remove-member":
       if (state.session) commit(step, removeMemberById(state.session.doc, intent.id));
@@ -555,11 +563,21 @@ function castLoaded(step: Step, token: number, cast: LoadedCast): void {
   ) {
     showConfirm(step, {
       title: "読み込みのあいだに書き換えた内容があります",
-      message: `「${castTitle(state, cast.folder)}」を開くと、いま書き換えた内容は失われます。`,
+      message: `「${castTitle(state, cast.folder)}」を開く前に、いまのキャストを保存しますか？保存しないで開くと、書き換えた内容は失われます。`,
       choices: [
         {
+          id: "save",
+          label: "保存して開く",
+          tone: "primary",
+          // 保存してから読み直す（保存のあいだにまた書き換えたら、もう一度確かめる）
+          intent: {
+            kind: "save-then",
+            then: { kind: "open", folder: cast.folder, discard: true },
+          },
+        },
+        {
           id: "discard",
-          label: "破棄して開く",
+          label: "保存しないで開く",
           tone: "danger",
           intent: { kind: "adopt", loaded: cast },
         },
@@ -567,7 +585,7 @@ function castLoaded(step: Step, token: number, cast: LoadedCast): void {
     });
     return;
   }
-  step.set({ session: sessionFromLoaded(step.next(), cast) });
+  switchSession(step, sessionFromLoaded(step.next(), cast));
 }
 
 function save(step: Step, then: Intent | null): void {
@@ -580,12 +598,18 @@ function save(step: Step, then: Intent | null): void {
     step.set({ task: { ...task, again: true, then: then ?? task.then } });
     return;
   }
-  if (task.kind !== "idle") return;
+  // 保存先を選ぶ画面を出しているあいだは、どこへ保存するかが決まらない
+  if (task.kind === "choosing-root") return;
   if (session.folder && !session.dirty) {
     if (then) perform(step, then);
     else step.toast("変更はありません。");
     return;
   }
+  // 別のキャストを読み込んでいる途中なら、その読み込みはやめて先に保存し、保存してから開き直す
+  // （黙って保存をとばすと、書いた内容が残らない）
+  const next: Intent | null =
+    then ??
+    (task.kind === "opening" ? { kind: "open", folder: task.folder, discard: false } : null);
   const token = step.next();
   step.set({
     task: {
@@ -594,7 +618,7 @@ function save(step: Step, then: Intent | null): void {
       sessionKey: session.key,
       revision: session.revision,
       again: false,
-      then,
+      then: next,
     },
   });
   step.effect({
@@ -663,7 +687,12 @@ function saved(step: Step, token: number, result: SavedCast): void {
   // 保存中に書き足した分は保存していないので、続ける操作でも黙って捨てずに確かめ直す
   const then = task.then && editedWhileSaving ? keepChanges(task.then) : task.then;
   if (task.again && step.state.session?.dirty) save(step, then);
-  else if (then) request(step, then);
+  else if (then) {
+    // 続ける操作は保存を始める前に頼まれたもの。保存のあいだに出したダイアログ（いまのキャストに
+    // ついてのもの）は閉じて進める（閉じずにいると、頼んだ切り替えが黙って行われなくなる）
+    step.set({ dialog: null });
+    request(step, then);
+  }
 }
 
 /** 「保存しないで続ける」をやめて、もう一度確かめる形にする */
@@ -681,7 +710,8 @@ function saveFailed(step: Step, token: number, message: string, missing: boolean
   // 保存できなかったら、続けるはずだった操作はしない（変更が失われるので）
   step.set({ task: { kind: "idle" } });
   loadLibrary(step);
-  if (missing && state.session?.folder) {
+  // 保存のあいだに出したダイアログ（画像の切り抜きなど）は残す。もう一度保存すれば、ここでまた勧める
+  if (missing && state.session?.folder && !state.dialog) {
     showConfirm(step, {
       title: "保存先のフォルダが見つかりません",
       message:

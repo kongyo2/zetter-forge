@@ -1,4 +1,5 @@
 import {
+  AFFINITY_BASE_SUBJECT,
   createDefaultAffinityConfig,
   createEmptyCast,
   createEmptyMember,
@@ -57,6 +58,25 @@ describe("写す項目", () => {
       transferItems(structuredClone(doc)).find((candidate) => candidate.key === "cast/public")
         ?.skip,
     ).toBeNull();
+  });
+
+  it("好感度の個別設定は、ひな形とも共通設定とも同じ欄だけを、何もしない項目にする", () => {
+    const common = { ...createDefaultAffinityConfig(), itemName: "信頼度" };
+    const override = { ...createDefaultAffinityConfig(), maxValue: 50 };
+    const doc = cast({
+      affinity: { default: common, overrides: { [AFFINITY_BASE_SUBJECT]: override } },
+    });
+    const skip = (key: string) =>
+      transferItems(doc).find((candidate) => candidate.key === key)?.skip;
+    const base = `affinity/${AFFINITY_BASE_SUBJECT}`;
+    // 共通設定はひな形と比べる
+    expect(skip("affinity/default/itemName")).toBeNull();
+    expect(skip("affinity/default/maxValue")).toBe("default");
+    // 個別設定の項目名はひな形と同じでも、共通設定とは違うので写す
+    expect(skip(`${base}/itemName`)).toBeNull();
+    expect(skip(`${base}/maxValue`)).toBeNull();
+    expect(skip(`${base}/minValue`)).toBe("default");
+    expect(skip(`${base}/stages/1/startValue`)).toBe("default");
   });
 
   it("雑談モードでは、送られない登場人物・キャッチコピー・好感度を出さない", () => {

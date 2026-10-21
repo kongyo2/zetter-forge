@@ -37,10 +37,23 @@ function Panel({ vm }: { vm: PanelVM }) {
   }
 }
 
-function Checks({ vm, closeRef }: { vm: ChecksVM; closeRef: RefObject<HTMLButtonElement | null> }) {
+function Checks({
+  vm,
+  panelRef,
+  closeRef,
+}: {
+  vm: ChecksVM;
+  panelRef: RefObject<HTMLElement | null>;
+  closeRef: RefObject<HTMLButtonElement | null>;
+}) {
   const emit = useEmit();
   return (
-    <aside className="issues" id={CHECKS_PANEL_ID} aria-label="Zetter で完成するときの確認">
+    <aside
+      ref={panelRef}
+      className="issues"
+      id={CHECKS_PANEL_ID}
+      aria-label="Zetter で完成するときの確認"
+    >
       <div className="issues-head">
         <h2>Zetter で完成するときの確認</h2>
         <button
@@ -98,12 +111,18 @@ function Checks({ vm, closeRef }: { vm: ChecksVM; closeRef: RefObject<HTMLButton
 export function Editor({ vm }: { vm: EditorVM }) {
   const emit = useEmit();
   const toggleRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const wasOpen = useRef(false);
-  // 重ねて出した確認欄は、開いたら中へ、閉じたら「確認」ボタンへフォーカスを移す
+  // 重ねて出した確認欄は、開いたら中へ、閉じたら「確認」ボタンへフォーカスを移す。
+  // ただし項目を押して直す欄へ移ったときは、その欄にフォーカスを残す（欄の中にあったときだけ戻す）
   useEffect(() => {
     if (vm.checks.open) closeRef.current?.focus();
-    else if (wasOpen.current) toggleRef.current?.focus();
+    else if (wasOpen.current) {
+      const active = document.activeElement;
+      if (!active || active === document.body || panelRef.current?.contains(active))
+        toggleRef.current?.focus();
+    }
     wasOpen.current = vm.checks.open;
   }, [vm.checks.open]);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -202,7 +221,7 @@ export function Editor({ vm }: { vm: EditorVM }) {
           aria-hidden="true"
           onClick={() => emit({ type: "editor/checks", open: false })}
         />
-        <Checks vm={vm.checks} closeRef={closeRef} />
+        <Checks vm={vm.checks} panelRef={panelRef} closeRef={closeRef} />
       </div>
     </div>
   );
