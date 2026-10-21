@@ -8,8 +8,11 @@ files:
   - dist/**/*
 # 自動更新は使わないので、更新用のファイルは作らない
 publish: null
+# アイコンは、どれも build/icon.svg から `npm run icons` で作る
 win:
   target: nsis
+  # 小さいサイズを描き分けた ICO を使う（PNG から縮めさせると、16px などで罫がにじむ）
+  icon: build/icon.ico
 nsis:
   # Release に載せるファイルの名前に空白を入れない（GitHub が勝手に「.」に替えるため）
   artifactName: "ZetterForge-${version}-windows-${arch}-setup.${ext}"
@@ -17,6 +20,8 @@ mac:
   target:
     - target: dmg
       arch: [arm64, x64]
+  # 1024 四方の PNG を渡し、icns への変換は electron-builder に任せる
+  icon: build/icon.png
   # 証明書がないのでアドホック署名にする。署名しないと、Apple Silicon では
   # ダウンロードしたアプリが「壊れている」と表示されて開けない。
   # Hardened Runtime は公証のためのものなので、アドホック署名では使わない。
@@ -26,5 +31,9 @@ dmg:
   artifactName: "ZetterForge-${version}-mac-${arch}.${ext}"
 linux:
   target: AppImage
+  # アイコンのテーマが探すのは 512 四方までなので、macOS 用の 1024 四方は渡さない
+  icon: build/icons
+  # 動いている窓と .desktop（とそのアイコン）を結び付ける StartupWMClass は、package.json の
+  # desktopName から決まる（Electron も窓にこの名前を付ける）
 appImage:
   artifactName: "ZetterForge-${version}-linux-${arch}.${ext}"

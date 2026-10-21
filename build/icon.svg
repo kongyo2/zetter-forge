@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!--
+    Zetter Forge のアイコン。原稿用紙のマスに明朝で書いた Z と、Forge の F の朱印。
+    - 1024 四方に 824 四方の角丸を置き、影を付ける（macOS のアイコンの決まり）。
+      Windows 向けは scripts/icons.mjs が余白と影を除き、小さいサイズでは罫と印の字を省いて描く。
+    - 罫・墨・紙の色は、画面（src/renderer/src/styles.css）の色に合わせる。
+    - Z と F は BIZ UDP明朝（SIL Open Font License 1.1）の字形。
+    描き直したら `npm run icons` で icon.png と icon.ico を作り直す。
+  -->
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbfbf8" />
+      <stop offset="1" stop-color="#e9ece6" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#141a28" flood-opacity="0.3" />
+    </filter>
+    <clipPath id="tile-shape">
+      <rect x="100" y="100" width="824" height="824" rx="184" />
+    </clipPath>
+  </defs>
+  <rect id="tile" x="100" y="100" width="824" height="824" rx="184" fill="url(#paper)" filter="url(#shadow)" />
+  <!-- 原稿用紙の罫。真ん中の列の 1 マスと、その上下・左右のマスの端（列のあいだは行間の帯） -->
+  <g id="grid" clip-path="url(#tile-shape)" fill="none" stroke="#b4c6b8" stroke-width="7">
+    <path d="M216 100V924M272 100V924M752 100V924M808 100V924" />
+    <path d="M100 272H216M272 272H752M808 272H924M100 752H216M272 752H752M808 752H924" />
+  </g>
+  <!-- 縁。明るい背景でも角丸の形が分かるように、内側だけに細く引く -->
+  <rect id="edge" x="100" y="100" width="824" height="824" rx="184" clip-path="url(#tile-shape)" fill="none" stroke="#1d2435" stroke-opacity="0.12" stroke-width="4" />
+  <path id="z" transform="translate(375 342) scale(0.2185)" fill="#1d2435" stroke="#1d2435" stroke-width="70" stroke-linejoin="round" d="M96 0H1200V118L178 1454H709Q978 1454 1069 1360Q1144 1282 1182 1044H1253L1223 1556H0V1446L1024 102H520Q329 102 242 187Q162 266 137 450H66Z" />
+  <g id="seal" transform="rotate(-4 748 748)">
+    <rect x="680" y="680" width="136" height="136" rx="12" fill="#c4362a" />
+    <path id="seal-mark" transform="translate(712 704) scale(0.0566)" fill="#f6f7f3" stroke="#f6f7f3" stroke-width="80" stroke-linejoin="round" d="M0 0H1225L1258 450H1186Q1158 245 1062 171Q973 102 803 102H508Q419 102 385 133Q348 166 348 251V679H588Q734 679 794 625Q850 574 852 450H924V1035H852Q847 884 783 831Q721 781 588 781H348V1320Q348 1417 384 1446Q419 1474 563 1482V1556H0V1482Q141 1474 175 1440Q203 1413 203 1320V235Q203 139 172 112Q135 80 0 73Z" />
+  </g>
+</svg>

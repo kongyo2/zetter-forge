@@ -8,6 +8,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "package": "npm run build && electron-builder --publish never",
+    "icons": "node scripts/icons.mjs",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
@@ -21,6 +22,7 @@
     "knip:fix": "knip --fix"
   },
   "devDependencies": {
+    "@resvg/resvg-wasm": "2.6.2",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
@@ -37,5 +39,6 @@
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "5.0.5"
-  }
+  },
+  "desktopName": "zetter-forge.desktop"
 }
