@@ -417,6 +417,8 @@ function request(step: Step, intent: Intent): void {
     perform(step, intent);
     return;
   }
+  // 保存先を選ぶ画面を出しているあいだは、ほかのキャストへ切り替えない（選んだ結果を捨てないため）
+  if (state.task.kind === "choosing-root") return;
   if (intent.kind === "open") {
     if (state.session?.folder === intent.folder) {
       // 開いているものをもう一度選んだら、別のキャストの読み込みはやめる
@@ -480,7 +482,7 @@ function perform(step: Step, intent: Intent): void {
       // 読み込み中のキャストがあれば、その結果は捨てる
       step.set({
         session: newSession(key, createEmptyCast(new Date(step.now))),
-        task: { kind: "idle" },
+        task: state.task.kind === "opening" ? { kind: "idle" } : state.task,
       });
       return;
     }

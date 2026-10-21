@@ -4,7 +4,8 @@ name: Release
 # GitHub の Release に載せて公開する。
 # - Actions タブの「Release」→「Run workflow」から実行する。版を空にすると package.json の version
 # - v で始まるタグ（v0.2.0 など）を push しても実行される
-# 同じ版でもう一度実行すると、その Release のファイルを差し替える。
+# 同じ版でもう一度実行すると、その Release のファイルを差し替える
+# （公開した Release を書き換えられない設定にしているときは、版を上げて実行する）。
 on:
   workflow_dispatch:
     inputs:

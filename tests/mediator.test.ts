@@ -240,6 +240,20 @@ describe("開く・作る", () => {
     expect(world.session().folder).toBe("cast-0");
   });
 
+  it("保存先を選んでいるあいだは、キャストを切り替えず、選んだ保存先を捨てない", async () => {
+    const world = await started([{ name: "A" }]);
+    world.dispatch({ type: "library/choose-root" });
+    const choose = world.take("chooseLibraryRoot");
+    world.dispatch({ type: "menu", command: "new" });
+    world.dispatch({ type: "library/open", folder: "cast-0" });
+    expect(world.pending()).toEqual([]);
+    expect(world.mediator.getState().session).toBeNull();
+    choose.resolve({ ...listing([{ name: "B" }]), root: "/other" });
+    await world.flush();
+    expect(world.vm().sidebar.root).toBe("/other");
+    expect(world.vm().sidebar.items.map((item) => item.title)).toEqual(["B"]);
+  });
+
   it("ダイアログを出しているあいだは、メニューの新規・保存を受け付けない", async () => {
     const world = await started();
     world.dispatch({ type: "library/new" });
