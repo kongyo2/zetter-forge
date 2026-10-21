@@ -6,6 +6,12 @@ directories:
   output: release
 files:
   - dist/**/*
+  # 依存パッケージ（pomljs とその依存）のソースマップは使わないので入れない
+  - "!**/node_modules/**/*.map"
+# pomljs が使う sharp は、ネイティブのライブラリ（@img/*）を asar の外に置かないと読み込めない
+asarUnpack:
+  - "**/node_modules/sharp/**/*"
+  - "**/node_modules/@img/**/*"
 # 自動更新は使わないので、更新用のファイルは作らない
 publish: null
 win:
