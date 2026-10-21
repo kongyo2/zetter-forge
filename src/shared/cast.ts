@@ -7,7 +7,7 @@ export const CAST_FILE_VERSION = 1;
 
 export type CastMode = "story" | "chat";
 export type CastStatus = "private" | "public";
-export type IntroKind = "narration" | "speech";
+type IntroKind = "narration" | "speech";
 export type AffinityPace = "gentle" | "normal" | "rapid";
 
 /** 好感度の「本体」の個別設定を指すキー（Zetter と同じ）。 */
@@ -85,14 +85,14 @@ export interface AffinityConfig {
   stages: AffinityStage[];
 }
 
-export interface CastAffinity {
+interface CastAffinity {
   default: AffinityConfig;
   /** キーは AFFINITY_BASE_SUBJECT か登場人物の id。 */
   overrides: Record<string, AffinityConfig>;
 }
 
 /** 連動する設定集のメモ（設定集そのものは Zetter 側にある）。 */
-export interface LorebookNote {
+interface LorebookNote {
   id: string;
   title: string;
   note: string;
@@ -193,10 +193,6 @@ export const AFFINITY_PACES: readonly { value: AffinityPace; label: string }[] =
 
 export function newId(): string {
   return globalThis.crypto.randomUUID();
-}
-
-export function isPendingImage(image: CastImage | null | undefined): boolean {
-  return !!image && image.file.startsWith("pending:");
 }
 
 export function createEmptyPartnerSettings(): PartnerSettings {
@@ -366,7 +362,7 @@ function normalizeToneExample(raw: unknown): ToneExample {
   return keepExtras(raw, { situation: str(source.situation), example: str(source.example) });
 }
 
-export function normalizePartnerSettings(raw: unknown): PartnerSettings {
+function normalizePartnerSettings(raw: unknown): PartnerSettings {
   const source = isRecord(raw) ? raw : {};
   return keepExtras(raw, {
     dailyRoutine: str(source.dailyRoutine),
@@ -553,11 +549,6 @@ export function sendableMembers(doc: CastDocument): CastMember[] {
         member.avatar ||
         member.toneExamples.some((tone) => tone.situation.trim() || tone.example.trim()),
     );
-}
-
-/** 好感度が会話で効くかどうか（Zetter ではストーリーモードだけ）。 */
-export function affinityApplies(doc: CastDocument): boolean {
-  return doc.mode === "story";
 }
 
 /** 一覧などに出す代表の名前（Zetter と同じく、ストーリーでキャッチコピーがあればそれを使う）。 */

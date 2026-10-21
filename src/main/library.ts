@@ -15,10 +15,10 @@ import { type ImageKind, imageSlotName } from "@shared/images";
 //   <root>/<キャストのフォルダ>/cast.json        設定
 //   <root>/<キャストのフォルダ>/images/*.jpg     画像（中身のハッシュ入りの名前で、一度書いたら変えない）
 //   <root>/<キャストのフォルダ>/history/*.json   保存のたびに残す前の版
-export const CAST_FILE = "cast.json";
-export const IMAGES_DIR = "images";
-export const HISTORY_DIR = "history";
-export const HISTORY_LIMIT = 30;
+const CAST_FILE = "cast.json";
+const IMAGES_DIR = "images";
+const HISTORY_DIR = "history";
+const HISTORY_LIMIT = 30;
 
 export interface StoredCast {
   folder: string;

@@ -1,7 +1,7 @@
 import { encodeWithinLimit, type ImageSpec, SOURCE_IMAGE_MAX_BYTES } from "@shared/images";
 import Cropper from "cropperjs";
 
-export class ImageInputError extends Error {}
+class ImageInputError extends Error {}
 
 /** 選んだファイルを dataURL として読む（Zetter と同じく画像だけ、5MB まで）。 */
 export function readImageFile(file: File): Promise<string> {
