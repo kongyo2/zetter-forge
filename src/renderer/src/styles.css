@@ -315,6 +315,14 @@ h3 {
   background: var(--warn-mark);
 }
 
+.library-error {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  overflow-wrap: anywhere;
+}
+
 .library-foot {
   display: flex;
   flex-direction: column;
@@ -637,6 +645,11 @@ h3 {
   color: var(--warn);
 }
 
+.tab-count.is-info {
+  background: var(--wash);
+  color: var(--text-2);
+}
+
 .editor-body {
   position: relative;
   display: grid;
@@ -749,6 +762,30 @@ h3 {
   font-weight: 700;
 }
 
+/* 見出しの右端に、Zetter に貼るためのコピーのボタン */
+.field-copy {
+  align-self: center;
+  margin-left: auto;
+}
+
+/* 見出しを出さない欄は、コピーのボタンを欄の右に置く */
+.field-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.field-row > .input,
+.field-row > .textarea {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.field-row > .copy-button {
+  margin-top: 7px;
+}
+
 .required {
   color: var(--text-3);
   font-size: 11.5px;
@@ -761,6 +798,20 @@ h3 {
   justify-content: space-between;
   gap: 12px;
   min-height: 18px;
+}
+
+.field-foot-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.field-tools {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: -8px;
 }
 
 .field-error {
@@ -823,6 +874,10 @@ h3 {
 }
 
 .textarea {
+  /* 中身の高さに合わせて伸ばす（長い設定を読み返せるように）。rows ぶんより低くはしない */
+  field-sizing: content;
+  min-block-size: calc(var(--rows, 3) * 1.9em + 22px);
+  max-block-size: 480px;
   padding: 10px 14px;
   letter-spacing: 0.02em;
   line-height: 1.9;
@@ -863,7 +918,7 @@ h3 {
 .search,
 .select,
 .input-number,
-.input-url {
+.input-plain {
   font-family: var(--font-ui);
   font-size: 14px;
 }
@@ -1004,6 +1059,18 @@ h3 {
   min-width: 12em;
 }
 
+.url-row {
+  align-items: flex-end;
+}
+
+.url-row > .field {
+  flex: 1;
+}
+
+.url-row > .btn {
+  margin-bottom: 24px;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -1021,6 +1088,47 @@ h3 {
 
 .chip:hover {
   border-color: var(--text);
+}
+
+/* ---------- copy (Zetter へ写す) ---------- */
+
+.copy-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 9px 1px 7px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--sheet);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  white-space: nowrap;
+}
+
+.copy-button:hover {
+  border-color: var(--rule-strong);
+  color: var(--text);
+}
+
+.copy-button.is-done {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--rule));
+  color: var(--ok);
+}
+
+/* コピーしたあとに書き換えた（Zetter 側を直す必要がある） */
+.copy-button.is-changed {
+  border-color: var(--warn-mark);
+  background: var(--warn-wash);
+  color: var(--warn);
+}
+
+.copy-button.is-flash {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: var(--on-action);
 }
 
 /* ---------- toggles ---------- */
@@ -1786,6 +1894,9 @@ h3 {
 }
 
 .stage-start {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   max-width: 14em;
 }
 
@@ -1852,7 +1963,14 @@ h3 {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 4px;
+}
+
+.image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
 }
 
 .image-size {
@@ -1939,14 +2057,16 @@ h3 {
 
 .tag {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
 }
 
-.tag .input {
+.tag > .field {
   flex: 1;
-  width: auto;
-  min-width: 0;
+}
+
+.tag > .icon-button {
+  margin-top: 6px;
 }
 
 .gallery {
@@ -1995,6 +2115,14 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  white-space: nowrap;
+}
+
+.gallery-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 3px 5px 8px;
 }
 
 .gallery-add {
@@ -2014,6 +2142,169 @@ h3 {
 .gallery-add:hover {
   border-color: var(--text);
   color: var(--text);
+}
+
+/* ---------- Zetter へ写す ---------- */
+
+/* 写しているあいだも「次の項目をコピー」に手が届くよう、上に貼り付ける */
+.transfer-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 0 0 8px 8px;
+  background: var(--sheet);
+  box-shadow: 0 6px 12px -10px rgb(20 26 40 / 0.4);
+}
+
+.transfer-progress {
+  margin: 0;
+  font-weight: 700;
+}
+
+.transfer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transfer-section + .transfer-section {
+  margin-top: 8px;
+}
+
+.transfer-section-title {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.transfer-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+  list-style: none;
+}
+
+/* 済みは緑、書き換えたものは黄土の傍線 */
+.transfer-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 6px 10px 12px;
+  border-bottom: 1px solid var(--rule);
+  box-shadow: inset 3px 0 0 transparent;
+}
+
+.transfer-item.is-done {
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+
+.transfer-item.is-changed {
+  background: color-mix(in srgb, var(--warn-wash) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--warn-mark);
+}
+
+.transfer-item.is-skip {
+  padding-block: 6px;
+  color: var(--text-3);
+}
+
+.transfer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.transfer-label {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.transfer-item.is-skip .transfer-label {
+  font-weight: 400;
+}
+
+.transfer-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.transfer-status.is-todo {
+  color: var(--text-2);
+}
+
+.transfer-status.is-done {
+  color: var(--ok);
+}
+
+.transfer-status.is-changed {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.transfer-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.transfer-thumb {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  object-fit: cover;
+}
+
+.transfer-preview {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.transfer-preview.is-text {
+  color: var(--text);
+  font-family: var(--font-text);
+}
+
+.transfer-length {
+  margin-left: 8px;
+  color: var(--text-3);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.transfer-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.transfer-notes {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--warn);
+  font-size: 12.5px;
 }
 
 /* ---------- memo ---------- */
@@ -2168,29 +2459,55 @@ h3 {
 
 /* ---------- modal ---------- */
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  background: rgb(14 18 28 / 0.5);
-}
-
+/* <dialog> を前面に出す（裏の画面は操作できなくなる） */
 .modal {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
   width: min(720px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   padding: 20px 22px;
+  border: 0;
   border-radius: 12px;
   background: var(--page);
   box-shadow: var(--shadow-float);
+  color: var(--text);
+}
+
+.modal[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal::backdrop {
+  background: rgb(14 18 28 / 0.5);
+}
+
+.confirm-modal {
+  width: min(500px, calc(100vw - 48px));
 }
 
 .modal-title {
   font-size: 16px;
+}
+
+.modal-progress {
+  margin-left: 12px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.modal-message {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.8;
+}
+
+.crop-loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  color: #c9ced8;
 }
 
 .crop-stage {
@@ -2226,13 +2543,28 @@ h3 {
 }
 
 .toast {
-  max-width: 420px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 460px;
   padding: 10px 16px;
   border-radius: 8px;
   background: var(--action);
   box-shadow: var(--shadow-float);
   color: var(--on-action);
   font-size: 13px;
+}
+
+.toast-action {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  pointer-events: auto;
 }
 
 .toast-error {

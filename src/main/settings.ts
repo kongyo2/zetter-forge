@@ -25,5 +25,8 @@ export async function readSettings(file: string, defaults: AppSettings): Promise
 
 export async function writeSettings(file: string, settings: AppSettings): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+  // 書いている途中で落ちても設定が壊れないよう、別のファイルに書いてから置き換える
+  const temp = `${file}.${process.pid}.tmp`;
+  await fs.writeFile(temp, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+  await fs.rename(temp, file);
 }
