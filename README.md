@@ -2,6 +2,11 @@
 
 # Zetter Forge
 
+[![CI](https://github.com/kongyo2/zetter-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/kongyo2/zetter-forge/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kongyo2/zetter-forge)](https://github.com/kongyo2/zetter-forge/releases/latest)
+[![License](https://img.shields.io/github/license/kongyo2/zetter-forge)](LICENSE)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
+
 Zetter のキャスト設定をパソコンに保存して、手元で書き直すためのデスクトップアプリです。Zetter に載せる前の下書き、載せたあとの控え、手元での改良に使います。
 
 ![キャラクターの編集画面。左に保存したキャストの一覧、真ん中に設定の欄と、登場人物ごとの字数を原稿用紙のマスで示す枠、右に Zetter で完成するときの確認が並ぶ](docs/screenshots/editor.png)
