@@ -1,0 +1,36 @@
+{
+  "name": "zetter-forge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zetter のキャスト設定をローカルに保存・改良するためのデスクトップアプリ",
+  "main": "./dist/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "format": "oxfmt --check",
+    "format:fix": "oxfmt --write",
+    "lint": "oxlint --deny-warnings --format agent",
+    "lint:fix": "oxlint --fix --deny-warnings --format agent",
+    "lint:pretty": "oxlint --deny-warnings",
+    "lint:pretty:fix": "oxlint --fix --deny-warnings"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "cropperjs": "1.6.2",
+    "electron": "45.0.0",
+    "electron-vite": "6.0.0",
+    "oxfmt": "^0.74.0",
+    "oxlint": "^1.89.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
