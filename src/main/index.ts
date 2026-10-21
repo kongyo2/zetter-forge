@@ -25,6 +25,7 @@ import {
   shell,
 } from "electron";
 
+import icon from "../../build/icons/512x512.png?asset";
 import {
   castDir,
   castFilePath,
@@ -295,6 +296,8 @@ function createWindow(): void {
     minWidth: 980,
     minHeight: 640,
     title: APP_NAME,
+    // Windows と macOS では、配布するアプリに埋め込んだアイコンが窓にも出る。Linux（AppImage）は窓に渡す
+    ...(process.platform === "linux" ? { icon } : {}),
     show: false,
     // 画面が描かれるまでの下地。styles.css の --desk に合わせる
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#13171e" : "#e9ece6",
