@@ -1133,7 +1133,10 @@ h3 {
 
 /* ---------- toggles ---------- */
 
+/* 隠したチェックボックスの置き場所をこの中に留める。外にはみ出ると、押したときのフォーカスで
+   overflow: hidden の .workspace が流れ、編集画面が真っ白になる */
 .toggle {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
