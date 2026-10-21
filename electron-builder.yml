@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=./node_modules/app-builder-lib/scheme.json
+appId: io.github.kongyo2.zetter-forge
+productName: Zetter Forge
+directories:
+  # dist は electron-vite の出力先なので、インストーラーは別のフォルダに出す
+  output: release
+files:
+  - dist/**/*
+# 自動更新は使わないので、更新用のファイルは作らない
+publish: null
+win:
+  target: nsis
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  # 証明書がないのでアドホック署名にする。署名しないと、Apple Silicon では
+  # ダウンロードしたアプリが「壊れている」と表示されて開けない。
+  # Hardened Runtime は公証のためのものなので、アドホック署名では使わない。
+  identity: "-"
+  hardenedRuntime: false
+dmg:
+  # 既定では Intel 版の名前にだけアーキテクチャが付かないので、両方に付ける
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+linux:
+  target: AppImage
