@@ -110,8 +110,11 @@ export function ImageField({
       </button>
       {image ? (
         <div className="image-meta">
-          <span className="note">
-            {image.width}×{image.height}・{Math.round(image.bytes / 1024)}KB
+          <span className="image-size">
+            <span>
+              {image.width}×{image.height}
+            </span>
+            <span>{Math.round(image.bytes / 1024)}KB</span>
           </span>
           <button type="button" className="btn btn-plain btn-small" onClick={() => onChange(null)}>
             {removeLabel}

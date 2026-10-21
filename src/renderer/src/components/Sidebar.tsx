@@ -2,6 +2,9 @@ import { castDisplayTitle } from "@shared/cast";
 import type { LibraryListing } from "@shared/ipc";
 import { useMemo, useState } from "react";
 
+import { IconPlus } from "./icons";
+import { Avatar } from "./ui";
+
 function relativeTime(iso: string): string {
   const time = Date.parse(iso);
   if (!Number.isFinite(time)) return "";
@@ -35,31 +38,20 @@ export function Sidebar({
   onOpenRoot: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
   const casts = useMemo(() => {
     const items = library?.casts ?? [];
-    const needle = query.trim().toLowerCase();
     if (!needle) return items;
     return items.filter((cast) => `${cast.name}\n${cast.tagline}`.toLowerCase().includes(needle));
-  }, [library, query]);
+  }, [library, needle]);
 
   return (
     <aside className="sidebar">
-      <div className="brand">
-        <strong>Zetter Forge</strong>
-        <span>キャスト設定の保管庫</span>
-      </div>
-      <button type="button" className="btn btn-primary btn-block" onClick={onNew}>
+      <div className="brand">Zetter Forge</div>
+      <button type="button" className="btn btn-outline btn-block" onClick={onNew}>
+        <IconPlus />
         新しいキャスト
       </button>
-      {newCastOpen ? (
-        <div className="cast-item is-current is-new">
-          <span className="cast-avatar">新</span>
-          <span className="cast-text">
-            <strong>新しいキャスト</strong>
-            <small>{dirty ? "まだ保存していません" : "書きはじめると保存できます"}</small>
-          </span>
-        </div>
-      ) : null}
       <input
         className="input search"
         type="search"
@@ -69,9 +61,25 @@ export function Sidebar({
         onChange={(event) => setQuery(event.target.value)}
       />
       <nav className="cast-list" aria-label="保存したキャスト">
+        {newCastOpen ? (
+          <div className="cast-item is-current is-new">
+            <span className="avatar avatar-medium is-blank" aria-hidden="true">
+              新
+            </span>
+            <span className="cast-text">
+              <span className="cast-title">新しいキャスト</span>
+              <span className="cast-meta">
+                <span>{dirty ? "まだ保存していません" : "書きはじめると保存できます"}</span>
+              </span>
+            </span>
+          </div>
+        ) : null}
         {library === null ? <p className="note">読み込み中…</p> : null}
         {library && library.casts.length === 0 ? (
           <p className="note">まだキャストがありません。「新しいキャスト」から作れます。</p>
+        ) : null}
+        {library && library.casts.length > 0 && casts.length === 0 ? (
+          <p className="note">「{query.trim()}」に合うキャストはありません。</p>
         ) : null}
         {casts.map((cast) => {
           const { title, sub } = castDisplayTitle(cast);
@@ -84,24 +92,19 @@ export function Sidebar({
               aria-current={current || undefined}
               onClick={() => onOpen(cast.folder)}
             >
-              <span className="cast-avatar">
-                {cast.avatarUrl ? (
-                  <img src={cast.avatarUrl} alt="" />
-                ) : (
-                  cast.name.trim().slice(0, 1) || "？"
-                )}
-              </span>
+              <Avatar src={cast.avatarUrl} name={cast.name} />
               <span className="cast-text">
-                <strong>
-                  {title || "名前未設定"}
+                <span className="cast-title">
+                  <span className="cast-title-text">{title || "名前未設定"}</span>
                   {current && dirty ? (
-                    <span className="dot" title="保存していない変更があります" />
+                    <span className="dirty-dot" title="保存していない変更があります" />
                   ) : null}
-                </strong>
-                <small>
-                  {sub ? `${sub} ・ ` : ""}
-                  {cast.mode === "chat" ? "雑談" : "ストーリー"} ・ {relativeTime(cast.updatedAt)}
-                </small>
+                </span>
+                <span className="cast-meta">
+                  {sub ? <span>{sub}</span> : null}
+                  <span>{cast.mode === "chat" ? "雑談" : "ストーリー"}</span>
+                  <span>{relativeTime(cast.updatedAt)}</span>
+                </span>
               </span>
             </button>
           );
@@ -113,8 +116,9 @@ export function Sidebar({
         ))}
       </nav>
       <div className="library-foot">
-        <span className="note" title={library?.root}>
-          保存先: {library?.root ?? "…"}
+        <span className="library-root" title={library?.root}>
+          <span className="library-root-label">保存先</span>
+          <span className="library-root-path">{library?.root ?? "…"}</span>
         </span>
         <div className="button-row">
           <button type="button" className="btn btn-plain btn-small" onClick={onChooseRoot}>

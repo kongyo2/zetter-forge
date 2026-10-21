@@ -19,6 +19,7 @@ import {
 
 import { IssuesPanel, TAB_LABELS } from "./components/IssuesPanel";
 import { Sidebar } from "./components/Sidebar";
+import { onTabListKeyDown } from "./components/ui";
 import { type EditorApi, EditorContext } from "./editor";
 import {
   type EditorSession,
@@ -61,7 +62,11 @@ export function App() {
 
   const notify = useCallback((message: string, tone: "error" | "info" = "info") => {
     const id = newId();
-    setToasts((current) => [...current.slice(-3), { id, message, tone }]);
+    // 同じ知らせは重ねずに出し直す（続けて保存したときなど）
+    setToasts((current) => [
+      ...current.filter((toast) => toast.message !== message).slice(-3),
+      { id, message, tone },
+    ]);
     setTimeout(
       () => setToasts((current) => current.filter((toast) => toast.id !== id)),
       tone === "error" ? 6000 : 3000,
@@ -239,16 +244,25 @@ export function App() {
   );
 }
 
+/** 原稿用紙のマスに 1 字ずつ書く見出し */
+const WELCOME_HEADLINE = "キャストを、手元で育てる。";
+
 function Welcome({ onNew, hasCasts }: { onNew: () => void; hasCasts: boolean }) {
   return (
     <div className="welcome">
-      <h1>Zetter のキャストを、手元で育てる</h1>
-      <p>
+      <h1 className="manuscript" aria-label={WELCOME_HEADLINE}>
+        {Array.from(WELCOME_HEADLINE).map((char, index) => (
+          <span key={index} className="manuscript-cell" aria-hidden="true">
+            {char}
+          </span>
+        ))}
+      </h1>
+      <p className="welcome-lead">
         Zetter
         のキャスト作成画面と同じ項目・同じ上限で、キャストの設定をパソコンに保存します。Zetter
         に載せる前の下書き、載せたあとの控え、手元での改良に使えます。
       </p>
-      <ul>
+      <ul className="welcome-points">
         <li>
           画像は Zetter と同じ比率・大きさで切り抜いて、そのまま Zetter で選べるファイルにします。
         </li>
@@ -257,13 +271,17 @@ function Welcome({ onNew, hasCasts }: { onNew: () => void; hasCasts: boolean }) 
         </li>
         <li>保存するたびに前の版を残します。</li>
       </ul>
-      <button type="button" className="btn btn-primary" onClick={onNew}>
-        新しいキャストを作る
-      </button>
-      {hasCasts ? <p className="note">左の一覧から保存したキャストを開けます。</p> : null}
+      <div className="welcome-actions">
+        <button type="button" className="btn btn-primary btn-large" onClick={onNew}>
+          新しいキャストを作る
+        </button>
+        {hasCasts ? <p className="note">左の一覧から保存したキャストを開けます。</p> : null}
+      </div>
     </div>
   );
 }
+
+const CHECKS_PANEL_ID = "checks-panel";
 
 function Editor({
   session,
@@ -284,6 +302,7 @@ function Editor({
   onSave: () => void;
   notify: (message: string, tone?: "error" | "info") => void;
 }) {
+  const [checksOpen, setChecksOpen] = useState(false);
   const api = useMemo<EditorApi>(
     () => ({
       session,
@@ -313,10 +332,40 @@ function Editor({
   const issues = useMemo(() => validateCast(doc), [doc]);
   const missing = missingRequired(doc);
   const { title, sub } = castDisplayTitle(doc);
-  const multi = sendableMembers(doc).length > 0;
-  const issueCount = (target: EditorTab) =>
-    issues.filter((issue) => issue.tab === target && issue.level !== "info").length;
+  const people = 1 + sendableMembers(doc).length;
+  const countOf = (target: EditorTab, level: "error" | "warning") =>
+    issues.filter((issue) => issue.tab === target && issue.level === level).length;
+  const blocking = issues.filter((issue) => issue.level !== "info").length;
   const folder = session.folder;
+
+  // 重ねて出している確認は Esc で閉じる。開いたら中へ、閉じたら「確認」ボタンへフォーカスを移す。
+  const checksToggleRef = useRef<HTMLButtonElement | null>(null);
+  const checksWereOpen = useRef(false);
+  useEffect(() => {
+    if (checksOpen) {
+      document
+        .getElementById(CHECKS_PANEL_ID)
+        ?.querySelector<HTMLButtonElement>(".issues-close")
+        ?.focus();
+    } else if (checksWereOpen.current) {
+      checksToggleRef.current?.focus();
+    }
+    checksWereOpen.current = checksOpen;
+    if (!checksOpen) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setChecksOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [checksOpen]);
+
+  const saveState = saving
+    ? { text: "保存中…", tone: "is-busy" }
+    : folder === null
+      ? { text: "まだ保存していません", tone: "is-new" }
+      : dirty
+        ? { text: "保存していない変更があります", tone: "is-dirty" }
+        : { text: "保存済み", tone: "is-saved" };
 
   return (
     <EditorContext.Provider value={api}>
@@ -324,23 +373,26 @@ function Editor({
         <header className="editor-head">
           <div className="editor-title">
             <h1>{title || "名前未設定のキャスト"}</h1>
-            <div className="chips-inline">
-              {sub ? <span className="note">{sub}</span> : null}
-              <span className="chip-static">{doc.mode === "chat" ? "雑談" : "ストーリー"}</span>
-              {multi ? <span className="chip-static">複数</span> : null}
-              <span className="chip-static">{doc.status === "public" ? "公開する" : "非公開"}</span>
-            </div>
+            <p className="editor-meta">
+              {sub ? <span>{sub}</span> : null}
+              <span>{doc.mode === "chat" ? "雑談" : "ストーリー"}</span>
+              {people > 1 ? <span>登場人物{people}人</span> : null}
+              <span>{doc.status === "public" ? "公開する" : "非公開"}</span>
+            </p>
           </div>
           <div className="editor-actions">
-            <span className={dirty ? "save-state is-dirty" : "save-state"}>
-              {saving
-                ? "保存中…"
-                : folder === null
-                  ? "まだ保存していません"
-                  : dirty
-                    ? "保存していない変更があります"
-                    : "保存済み"}
-            </span>
+            <span className={`save-state ${saveState.tone}`}>{saveState.text}</span>
+            <button
+              ref={checksToggleRef}
+              type="button"
+              className="btn btn-outline checks-toggle"
+              aria-expanded={checksOpen}
+              aria-controls={CHECKS_PANEL_ID}
+              onClick={() => setChecksOpen((open) => !open)}
+            >
+              確認
+              {blocking > 0 ? <span className="tab-count is-error">{blocking}</span> : null}
+            </button>
             {folder ? (
               <button
                 type="button"
@@ -370,9 +422,10 @@ function Editor({
             {notice}
           </p>
         ))}
-        <nav className="tabs" role="tablist" aria-label="設定の種類">
+        <nav className="tabs" role="tablist" aria-label="設定の種類" onKeyDown={onTabListKeyDown}>
           {TABS.map((item) => {
-            const count = issueCount(item);
+            const errors = countOf(item, "error");
+            const warnings = countOf(item, "warning");
             const unfilled =
               (item === "character" && missing.character) ||
               (item === "experience" && missing.experience);
@@ -381,19 +434,40 @@ function Editor({
                 key={item}
                 type="button"
                 role="tab"
+                id={`editor-tab-${item}`}
                 aria-selected={tab === item}
+                aria-controls="editor-panel"
+                tabIndex={tab === item ? 0 : -1}
                 className={tab === item ? "tab is-selected" : "tab"}
                 onClick={() => setTab(item)}
               >
                 {TAB_LABELS[item]}
-                {unfilled ? <span className="badge badge-required">未入力</span> : null}
-                {!unfilled && count > 0 ? <span className="badge">{count}</span> : null}
+                {unfilled ? <span className="tab-flag">未入力</span> : null}
+                {!unfilled && errors > 0 ? (
+                  <span className="tab-count is-error" aria-label={`直すもの${errors}件`}>
+                    {errors}
+                  </span>
+                ) : null}
+                {!unfilled && errors === 0 && warnings > 0 ? (
+                  <span
+                    className="tab-count is-warning"
+                    aria-label={`保存されないもの${warnings}件`}
+                  >
+                    {warnings}
+                  </span>
+                ) : null}
               </button>
             );
           })}
         </nav>
-        <div className="editor-body">
-          <div className="editor-main" key={`${session.folder ?? "new"}:${doc.id}`}>
+        <div className={checksOpen ? "editor-body is-checks-open" : "editor-body"}>
+          <div
+            className="editor-main"
+            id="editor-panel"
+            role="tabpanel"
+            aria-labelledby={`editor-tab-${tab}`}
+            key={`${session.folder ?? "new"}:${doc.id}`}
+          >
             {tab === "character" ? <CharacterTab /> : null}
             {tab === "experience" ? <ExperienceTab /> : null}
             {tab === "affinity" ? <AffinityTab /> : null}
@@ -412,7 +486,16 @@ function Editor({
               />
             ) : null}
           </div>
-          <IssuesPanel issues={issues} onJump={setTab} />
+          <div className="checks-scrim" aria-hidden="true" onClick={() => setChecksOpen(false)} />
+          <IssuesPanel
+            id={CHECKS_PANEL_ID}
+            issues={issues}
+            onJump={(target) => {
+              setTab(target);
+              setChecksOpen(false);
+            }}
+            onClose={() => setChecksOpen(false)}
+          />
         </div>
       </div>
     </EditorContext.Provider>

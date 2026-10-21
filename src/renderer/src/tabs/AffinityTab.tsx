@@ -12,7 +12,7 @@ import {
   sortAffinityStages,
 } from "@shared/cast";
 import { LIMITS } from "@shared/limits";
-import { codePointLength } from "@shared/text";
+import { codePointLength, formatCount } from "@shared/text";
 import {
   affinityStageTextLength,
   duplicateStageIndexes,
@@ -20,8 +20,10 @@ import {
 } from "@shared/validate";
 import { useState } from "react";
 
-import { Card, SectionHead, TextArea, TextInput, Toggle } from "../components/ui";
+import { IconError, IconPlus } from "../components/icons";
+import { Avatar, onTabListKeyDown, Section, TextArea, TextInput, Toggle } from "../components/ui";
 import { useEditor } from "../editor";
+import { castInk } from "../ink";
 
 type SubjectKey = "default" | string;
 
@@ -30,7 +32,7 @@ function parseInteger(value: string): number | null {
 }
 
 export function AffinityTab() {
-  const { doc, update } = useEditor();
+  const { doc, update, src } = useEditor();
   const [subject, setSubject] = useState<SubjectKey>("default");
   const [openStage, setOpenStage] = useState(0);
   const notice =
@@ -43,45 +45,58 @@ export function AffinityTab() {
   if (!affinity) {
     return (
       <div className="tab-body">
-        <SectionHead
+        <Section
           title="好感度"
           description="会話の積み重ねに合わせて、キャラクターごとの態度を変えます。"
-        />
-        {notice}
-        <Card>
-          <p className="note">まだ設定されていません。設定を始めると4段階のひな形が入ります。</p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              update(
-                (draft) =>
-                  void (draft.affinity = { default: createDefaultAffinityConfig(), overrides: {} }),
-              );
-              setSubject("default");
-              setOpenStage(0);
-            }}
-          >
-            好感度を設定する
-          </button>
-        </Card>
+        >
+          {notice}
+          <p className="note empty">
+            まだ設定されていません。設定を始めると4段階のひな形が入ります。
+          </p>
+          <div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                update(
+                  (draft) =>
+                    void (draft.affinity = {
+                      default: createDefaultAffinityConfig(),
+                      overrides: {},
+                    }),
+                );
+                setSubject("default");
+                setOpenStage(0);
+              }}
+            >
+              好感度を設定する
+            </button>
+          </div>
+        </Section>
       </div>
     );
   }
 
   const members = sendableMembers(doc);
   const choices = [
-    { key: "default", label: "共通設定", common: true },
+    { key: "default", label: "共通設定", common: true, ink: null, avatar: null },
     {
       key: AFFINITY_BASE_SUBJECT,
-      label: doc.name.trim() ? `本体（${doc.name.trim()}）` : "本体",
+      label: doc.name.trim() || "本体",
       common: false,
+      ink: castInk(0),
+      avatar: src(doc.avatar),
     },
-    ...members.map((member) => ({
-      key: member.id,
-      label: member.name.trim() || `${doc.members.indexOf(member) + 2}人目`,
-      common: false,
-    })),
+    ...members.map((member) => {
+      const index = doc.members.indexOf(member);
+      return {
+        key: member.id,
+        label: member.name.trim() || `${index + 2}人目`,
+        common: false,
+        ink: castInk(index + 1),
+        avatar: src(member.avatar),
+      };
+    }),
   ];
   const selected = choices.find((choice) => choice.key === subject) ?? choices[0]!;
   const config = selected.key === "default" ? affinity.default : affinity.overrides[selected.key];
@@ -99,110 +114,200 @@ export function AffinityTab() {
 
   return (
     <div className="tab-body">
-      <SectionHead
+      <Section
         title="好感度"
-        description="会話の積み重ねに合わせて、キャラクターごとの態度を変えます。"
-      />
-      {notice}
-      <p className="note">
-        共通設定は個別設定のないキャラ全員に使われます。本体や登場人物ごとに個別設定を作成したり、好感度を使わない設定にできます。
-      </p>
-      <div className="character-chooser" role="tablist" aria-label="好感度の設定対象">
-        {choices.map((choice) => {
-          const override = affinity.overrides[choice.key];
-          const state = choice.common
-            ? "既定"
-            : override?.enabled === false
-              ? "好感度なし"
-              : override
-                ? "個別設定"
-                : "共通を使用";
-          return (
-            <button
-              key={choice.key}
-              type="button"
-              role="tab"
-              aria-selected={selected.key === choice.key}
-              className={selected.key === choice.key ? "chooser-item is-selected" : "chooser-item"}
-              onClick={() => {
-                setSubject(choice.key);
-                setOpenStage(0);
-              }}
-            >
-              <span>{choice.label}</span>
-              <small>{state}</small>
-            </button>
-          );
-        })}
-      </div>
-      <div className="selected-head">
-        <h2>{selected.label}</h2>
-        <span className="note">{isOverride && config ? "個別設定" : "共通設定"}</span>
-      </div>
-      {config ? (
-        <ConfigEditor
-          config={config}
-          isOverride={isOverride}
-          openStage={openStage}
-          setOpenStage={setOpenStage}
-          edit={editConfig}
-          onResetOverride={() => {
-            update(
-              (draft) => void (draft.affinity && delete draft.affinity.overrides[selected.key]),
-            );
-            setSubject("default");
-          }}
-        />
-      ) : (
-        <Card>
-          <p className="note">
-            共通設定を使用しています。個別に変えたい場合は、このキャラ用の設定を作成してください。
-          </p>
-          <div className="button-row">
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={() =>
-                update((draft) => {
-                  if (!draft.affinity) return;
-                  draft.affinity.overrides[selected.key] = normalizeAffinityConfig(
-                    structuredClone(draft.affinity.default),
-                  )!;
-                })
-              }
-            >
-              個別設定を作る
-            </button>
-            <button
-              type="button"
-              className="btn btn-plain"
-              onClick={() =>
-                update((draft) => {
-                  if (!draft.affinity) return;
-                  const copy = normalizeAffinityConfig(structuredClone(draft.affinity.default))!;
-                  copy.enabled = false;
-                  draft.affinity.overrides[selected.key] = copy;
-                })
-              }
-            >
-              このキャラは好感度を使わない
-            </button>
-          </div>
-        </Card>
-      )}
-      <button
-        type="button"
-        className="btn btn-plain btn-danger"
-        onClick={() => {
-          if (window.confirm("好感度設定を削除しますか？（共通設定と個別設定がすべて消えます）")) {
-            update((draft) => void (draft.affinity = null));
-            setSubject("default");
-          }
-        }}
+        description="会話の積み重ねに合わせて、キャラクターごとの態度を変えます。共通設定は、個別設定のないキャラ全員に使われます。本体や登場人物ごとに個別設定を作ったり、好感度を使わない設定にもできます。"
       >
-        好感度設定を削除
-      </button>
+        {notice}
+      </Section>
+      <div className="cast-desk">
+        <div
+          className="cast-tabs"
+          role="tablist"
+          aria-label="好感度の設定対象"
+          onKeyDown={onTabListKeyDown}
+        >
+          {choices.map((choice) => {
+            const override = affinity.overrides[choice.key];
+            const state = choice.common
+              ? "既定"
+              : override?.enabled === false
+                ? "好感度なし"
+                : override
+                  ? "個別設定"
+                  : "共通を使用";
+            return (
+              <button
+                key={choice.key}
+                type="button"
+                role="tab"
+                aria-selected={selected.key === choice.key}
+                tabIndex={selected.key === choice.key ? 0 : -1}
+                className={selected.key === choice.key ? "cast-tab is-selected" : "cast-tab"}
+                onClick={() => {
+                  setSubject(choice.key);
+                  setOpenStage(0);
+                }}
+              >
+                {choice.ink ? (
+                  <Avatar src={choice.avatar} name={choice.label} ink={choice.ink} size="small" />
+                ) : null}
+                <span className="cast-tab-text">
+                  <span className="cast-tab-name">{choice.label}</span>
+                  <small>{state}</small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="cast-sheet" role="tabpanel">
+          {config ? (
+            <ConfigEditor
+              config={config}
+              isOverride={isOverride}
+              openStage={openStage}
+              setOpenStage={setOpenStage}
+              edit={editConfig}
+              onResetOverride={() => {
+                update(
+                  (draft) => void (draft.affinity && delete draft.affinity.overrides[selected.key]),
+                );
+                setSubject("default");
+              }}
+            />
+          ) : (
+            <>
+              <p className="note">
+                共通設定を使っています。このキャラだけ変えたいときは、個別設定を作ってください。
+              </p>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() =>
+                    update((draft) => {
+                      if (!draft.affinity) return;
+                      draft.affinity.overrides[selected.key] = normalizeAffinityConfig(
+                        structuredClone(draft.affinity.default),
+                      )!;
+                    })
+                  }
+                >
+                  個別設定を作る
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-plain"
+                  onClick={() =>
+                    update((draft) => {
+                      if (!draft.affinity) return;
+                      const copy = normalizeAffinityConfig(
+                        structuredClone(draft.affinity.default),
+                      )!;
+                      copy.enabled = false;
+                      draft.affinity.overrides[selected.key] = copy;
+                    })
+                  }
+                >
+                  このキャラは好感度を使わない
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+      <div>
+        <button
+          type="button"
+          className="btn btn-plain btn-small btn-danger"
+          onClick={() => {
+            if (
+              window.confirm("好感度設定を削除しますか？（共通設定と個別設定がすべて消えます）")
+            ) {
+              update((draft) => void (draft.affinity = null));
+              setSubject("default");
+            }
+          }}
+        >
+          好感度設定を削除
+        </button>
+      </div>
     </div>
+  );
+}
+
+/**
+ * 段階を最小値〜最大値の目盛りに並べた帯。開始値が範囲内で小さい順に並んでいるときだけ描く
+ * （そうでなければ、すぐ上のエラー文が直し方を伝える）。
+ */
+function StageRuler({
+  config,
+  openStage,
+  onOpen,
+}: {
+  config: AffinityConfig;
+  openStage: number;
+  onOpen: (index: number) => void;
+}) {
+  const { minValue: min, maxValue: max, initialValue: initial } = config;
+  if (min === null || max === null || !Number.isSafeInteger(min) || !Number.isSafeInteger(max))
+    return null;
+  if (max <= min) return null;
+  const starts = config.stages.map((stage) => stage.startValue);
+  const ordered = starts.every(
+    (value, index) =>
+      value !== null &&
+      Number.isSafeInteger(value) &&
+      value >= min &&
+      value <= max &&
+      (index === 0 || value > (starts[index - 1] as number)),
+  );
+  if (!ordered || starts.length === 0) return null;
+  const percent = (value: number) => ((value - min) / (max - min)) * 100;
+  const bands = starts.map((value, index) => {
+    const from = value as number;
+    const to = (starts[index + 1] as number | undefined) ?? max;
+    return { index, from, to };
+  });
+  const showInitial =
+    initial !== null && Number.isSafeInteger(initial) && initial >= min && initial <= max;
+  return (
+    <figure className="ruler">
+      <div className="ruler-track">
+        {bands.map((band) => (
+          <button
+            key={band.index}
+            type="button"
+            className={band.index === openStage ? "ruler-band is-open" : "ruler-band"}
+            style={{
+              left: `${percent(band.from)}%`,
+              width: `max(4px, calc(${percent(band.to) - percent(band.from)}% - 2px))`,
+            }}
+            aria-label={`段階${band.index + 1}（${band.from}〜）を開く`}
+            title={`段階${band.index + 1}（${band.from}〜）`}
+            onClick={() => onOpen(band.index)}
+          />
+        ))}
+      </div>
+      <div className="ruler-scale" aria-hidden="true">
+        {bands.map((band) => (
+          <span key={band.index} style={{ left: `${percent(band.from)}%` }}>
+            {band.from}
+          </span>
+        ))}
+        <span className="is-end" style={{ left: "100%" }}>
+          {max}
+        </span>
+      </div>
+      {showInitial ? (
+        <div className="ruler-initial" style={{ left: `${percent(initial)}%` }}>
+          初期値 {initial}
+        </div>
+      ) : null}
+      <figcaption className="visually-hidden">
+        {bands.map((band) => `段階${band.index + 1}は${band.from}から`).join("、")}
+      </figcaption>
+    </figure>
   );
 }
 
@@ -232,13 +337,15 @@ function ConfigEditor({
   ) : null;
   if (isOverride && config.enabled === false) {
     return (
-      <Card>
+      <>
         {disabledToggle}
         <p className="note">このキャラには好感度を使いません。</p>
-        <button type="button" className="btn btn-plain" onClick={onResetOverride}>
-          共通設定に戻す
-        </button>
-      </Card>
+        <div>
+          <button type="button" className="btn btn-plain" onClick={onResetOverride}>
+            共通設定に戻す
+          </button>
+        </div>
+      </>
     );
   }
   const current = openStage >= config.stages.length ? 0 : openStage;
@@ -247,8 +354,9 @@ function ConfigEditor({
       const stage = target.stages[index];
       if (stage) recipe(stage);
     });
+  const itemNameLength = codePointLength(config.itemName);
   return (
-    <Card className="affinity-editor">
+    <>
       <div className="affinity-grid">
         <label className="field">
           <span className="field-label">項目名</span>
@@ -257,14 +365,13 @@ function ConfigEditor({
             ariaLabel="項目名"
             onChange={(value) => edit((target) => void (target.itemName = value))}
           />
-          <span
-            className={
-              codePointLength(config.itemName) > LIMITS.affinityItemName
-                ? "counter is-over"
-                : "counter"
-            }
-          >
-            {codePointLength(config.itemName)}/{LIMITS.affinityItemName}字
+          <span className="field-foot">
+            <span />
+            <span
+              className={itemNameLength > LIMITS.affinityItemName ? "counter is-over" : "counter"}
+            >
+              {itemNameLength}/{LIMITS.affinityItemName}字
+            </span>
           </span>
         </label>
         <div className="affinity-range">
@@ -278,7 +385,7 @@ function ConfigEditor({
             <label className="field" key={key}>
               <span className="field-label">{label}</span>
               <input
-                className="input"
+                className="input input-number"
                 type="number"
                 step={1}
                 value={config[key] ?? ""}
@@ -293,23 +400,23 @@ function ConfigEditor({
               />
             </label>
           ))}
+          <label className="field">
+            <span className="field-label">変化の速さ</span>
+            <select
+              className="input select"
+              value={config.pace}
+              onChange={(event) =>
+                edit((target) => void (target.pace = event.target.value as AffinityPace))
+              }
+            >
+              {AFFINITY_PACES.map((pace) => (
+                <option key={pace.value} value={pace.value}>
+                  {pace.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <label className="field">
-          <span className="field-label">変化の速さ</span>
-          <select
-            className="input"
-            value={config.pace}
-            onChange={(event) =>
-              edit((target) => void (target.pace = event.target.value as AffinityPace))
-            }
-          >
-            {AFFINITY_PACES.map((pace) => (
-              <option key={pace.value} value={pace.value}>
-                {pace.label}
-              </option>
-            ))}
-          </select>
-        </label>
         <Toggle
           checked={config.showInChat}
           onChange={(checked) => edit((target) => void (target.showInChat = checked))}
@@ -317,36 +424,44 @@ function ConfigEditor({
         />
         {disabledToggle}
       </div>
-      {error ? <p className="field-error block">{error}</p> : null}
-      <div className="stages">
+      {error ? (
+        <p className="field-error block">
+          <IconError />
+          {error}
+        </p>
+      ) : null}
+      <StageRuler config={config} openStage={current} onOpen={setOpenStage} />
+      <ol className="stages">
         {config.stages.map((stage, index) => {
           const isOpen = index === current;
           const length = affinityStageTextLength(stage);
-          const summary = [
-            ["呼び方", stage.callText],
-            ["話し方", stage.speechText],
-            ["距離感", stage.distanceText],
-          ]
-            .map(([label, value]) => `${label} ${value || "—"}`)
-            .join(" ・ ");
+          const filled = AFFINITY_STAGE_FIELDS.filter((field) => stage[field.key].trim());
           return (
-            <section key={index} className={isOpen ? "stage is-open" : "stage"}>
+            <li key={index} className={isOpen ? "stage is-open" : "stage"}>
               <button
                 type="button"
                 className="stage-toggle"
                 aria-expanded={isOpen}
                 onClick={() => setOpenStage(isOpen ? -1 : index)}
               >
-                <strong>段階 {index + 1}</strong>
+                <span className="stage-name">段階 {index + 1}</span>
                 <span className="stage-range">{stage.startValue ?? "—"}〜</span>
-                <span className="note stage-summary">{summary}</span>
+                <span className="stage-summary">
+                  {stage.callText.trim() ||
+                    stage.speechText.trim() ||
+                    stage.freeText.trim() ||
+                    "まだ書いていません"}
+                </span>
+                <span className="stage-filled">
+                  {filled.length}/{AFFINITY_STAGE_FIELDS.length}欄
+                </span>
               </button>
               {isOpen ? (
                 <div className="stage-body">
-                  <label className="field">
+                  <label className="field stage-start">
                     <span className="field-label">開始値</span>
                     <input
-                      className="input"
+                      className="input input-number"
                       type="number"
                       step={1}
                       min={config.minValue ?? undefined}
@@ -369,6 +484,9 @@ function ConfigEditor({
                         setOpenStage(order.indexOf(stage));
                       }}
                     />
+                    {index === 0 ? (
+                      <span className="note">1段階目は最小値から始まります。</span>
+                    ) : null}
                     {duplicates.has(index) ? (
                       <span className="field-error">開始値が他の段階と重複しています。</span>
                     ) : null}
@@ -398,39 +516,43 @@ function ConfigEditor({
                       )}
                     </label>
                   ))}
-                  <p
-                    className={
-                      length > LIMITS.affinityStageText
-                        ? "counter is-over"
-                        : length >= 900
-                          ? "counter is-near"
-                          : "counter"
-                    }
-                  >
-                    合計 {length}/{LIMITS.affinityStageText}字
-                  </p>
-                  {config.stages.length > 1 ? (
-                    <button
-                      type="button"
-                      className="btn btn-plain btn-small btn-danger"
-                      onClick={() => {
-                        edit((target) => {
-                          target.stages.splice(index, 1);
-                          const first = target.stages[0];
-                          if (index === 0 && first) first.startValue = target.minValue;
-                        });
-                        setOpenStage(Math.min(index, config.stages.length - 2));
-                      }}
+                  <div className="field-foot">
+                    {config.stages.length > 1 ? (
+                      <button
+                        type="button"
+                        className="btn btn-plain btn-small btn-danger"
+                        onClick={() => {
+                          edit((target) => {
+                            target.stages.splice(index, 1);
+                            const first = target.stages[0];
+                            if (index === 0 && first) first.startValue = target.minValue;
+                          });
+                          setOpenStage(Math.min(index, config.stages.length - 2));
+                        }}
+                      >
+                        この段階を削除
+                      </button>
+                    ) : (
+                      <span />
+                    )}
+                    <span
+                      className={
+                        length > LIMITS.affinityStageText
+                          ? "counter is-over"
+                          : length >= 900
+                            ? "counter is-near"
+                            : "counter"
+                      }
                     >
-                      この段階を削除
-                    </button>
-                  ) : null}
+                      6欄の合計 {length}/{formatCount(LIMITS.affinityStageText)}字
+                    </span>
+                  </div>
                 </div>
               ) : null}
-            </section>
+            </li>
           );
         })}
-      </div>
+      </ol>
       <div className="button-row">
         <button
           type="button"
@@ -447,7 +569,11 @@ function ConfigEditor({
             setOpenStage(config.stages.length);
           }}
         >
-          段階を追加（{config.stages.length}/{LIMITS.affinityStages}）
+          <IconPlus />
+          段階を追加
+          <span className="btn-count">
+            {config.stages.length}/{LIMITS.affinityStages}
+          </span>
         </button>
         {isOverride ? (
           <button type="button" className="btn btn-plain" onClick={onResetOverride}>
@@ -455,6 +581,6 @@ function ConfigEditor({
           </button>
         ) : null}
       </div>
-    </Card>
+    </>
   );
 }

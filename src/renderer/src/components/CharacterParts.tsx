@@ -10,6 +10,7 @@ import { formatCount } from "@shared/text";
 import { limitPartnerSettingsValue, partnerSettingsLength } from "@shared/validate";
 import { useRef } from "react";
 
+import { IconPlus } from "./icons";
 import { Counter, MoveButtons, TextArea, TextInput, moveItem } from "./ui";
 
 /** 「ふだんの1日」の札: カーソル位置に【朝】を入れる（行の途中なら改行してから）。Zetter と同じ。 */
@@ -45,13 +46,13 @@ export function PartnerSettingsEditor({
     onChange({ ...value, [field]: limitPartnerSettingsValue(value, field, next) });
 
   return (
-    <div className="partner-settings">
+    <div className="subsection">
       <div className="subhead">
         <h3>パートナー設定</h3>
         <span className={nearLimit ? "counter is-near" : "counter"}>
           {nearLimit
             ? `残り${formatCount(Math.max(0, LIMITS.partnerSettingsTotal - total))}字`
-            : `${formatCount(total)}字`}
+            : `${formatCount(total)}/${formatCount(LIMITS.partnerSettingsTotal)}字`}
         </span>
       </div>
       <p className="note">
@@ -59,12 +60,12 @@ export function PartnerSettingsEditor({
         のようなやり取り）での、このキャラクターのふるまいです。5つの欄の合計で5,000字まで書けます。
       </p>
       {PARTNER_SETTINGS_FIELDS.map((field) => (
-        <div key={field.key} className="partner-field">
+        <div key={field.key} className="field">
           <div className="field-label">
             <span>{field.label}</span>
           </div>
           {field.key === "dailyRoutine" ? (
-            <div className="chips">
+            <div className="chips" aria-label="時間帯の見出しを入れる">
               {PARTNER_TIME_CHIPS.map((label) => (
                 <button
                   key={label}
@@ -82,13 +83,13 @@ export function PartnerSettingsEditor({
                     });
                   }}
                 >
-                  {label}
+                  【{label}】
                 </button>
               ))}
             </div>
           ) : null}
           {field.key === "messageHabits" ? (
-            <div className="chips">
+            <div className="chips" aria-label="よくある癖を書き足す">
               {PARTNER_HABIT_CHIPS.map((label) => (
                 <button
                   key={label}
@@ -132,70 +133,80 @@ export function ToneExamplesEditor({
     onChange(draft);
   };
   return (
-    <div className="tone-examples">
+    <div className="subsection">
       <div className="subhead">
         <h3>口調サンプル</h3>
         <span className="counter">
-          {items.length} / {LIMITS.toneItemsPerCharacter} 件
+          {items.length} / {LIMITS.toneItemsPerCharacter}件
         </span>
       </div>
       <p className="note">口調例は基本の話し方の見本です。好感度の段階の話し方が優先されます。</p>
       {items.length === 0 ? (
         <p className="note empty">まだありません。3〜5件あると声が安定します。</p>
-      ) : null}
-      {items.map((item, index) => (
-        <div className="tone-row" key={index}>
-          <div className="row-head">
-            <span className="row-index">{index + 1}</span>
-            <MoveButtons
-              index={index}
-              count={items.length}
-              onMove={(from, to) => edit((draft) => moveItem(draft, from, to))}
-              onRemove={() => edit((draft) => draft.splice(index, 1))}
-              removeLabel="この話し方の例を削除"
-            />
-          </div>
-          <label className="field-label" htmlFor={undefined}>
-            状況
-          </label>
-          <TextInput
-            value={item.situation}
-            maxLength={LIMITS.toneSituation}
-            placeholder="例: 元気がないと相談された"
-            ariaLabel={`口調サンプル${index + 1}の状況`}
-            onChange={(next) => edit((draft) => ((draft[index] as ToneExample).situation = next))}
-          />
-          <div className="field-foot">
-            <span />
-            <Counter length={item.situation.length} max={LIMITS.toneSituation} />
-          </div>
-          <label className="field-label">発話例</label>
-          <TextArea
-            value={item.example}
-            maxLength={LIMITS.toneExample}
-            placeholder="そのときどう返すか"
-            rows={2}
-            ariaLabel={`口調サンプル${index + 1}の発話例`}
-            onChange={(next) => edit((draft) => ((draft[index] as ToneExample).example = next))}
-          />
-          <div className="field-foot">
-            <span className="field-error">
-              {item.situation.trim() && item.example.trim()
-                ? ""
-                : item.situation.trim() || item.example.trim()
-                  ? "状況と発話例の両方を書くと保存されます"
-                  : ""}
-            </span>
-            <Counter length={item.example.length} max={LIMITS.toneExample} />
-          </div>
-        </div>
-      ))}
+      ) : (
+        <ol className="rows">
+          {items.map((item, index) => {
+            const half =
+              !!item.situation.trim() !== !!item.example.trim()
+                ? "状況と発話例の両方を書くと保存されます"
+                : "";
+            return (
+              <li className="row tone-row" key={index}>
+                <div className="row-head">
+                  <span className="row-index">{index + 1}</span>
+                  <MoveButtons
+                    index={index}
+                    count={items.length}
+                    onMove={(from, to) => edit((draft) => moveItem(draft, from, to))}
+                    onRemove={() => edit((draft) => draft.splice(index, 1))}
+                    removeLabel="この話し方の例を削除"
+                  />
+                </div>
+                <div className="field">
+                  <span className="field-label">状況</span>
+                  <TextInput
+                    value={item.situation}
+                    maxLength={LIMITS.toneSituation}
+                    placeholder="例: 元気がないと相談された"
+                    ariaLabel={`口調サンプル${index + 1}の状況`}
+                    onChange={(next) =>
+                      edit((draft) => ((draft[index] as ToneExample).situation = next))
+                    }
+                  />
+                  <div className="field-foot">
+                    <span />
+                    <Counter length={item.situation.length} max={LIMITS.toneSituation} />
+                  </div>
+                </div>
+                <div className="field">
+                  <span className="field-label">発話例</span>
+                  <TextArea
+                    value={item.example}
+                    maxLength={LIMITS.toneExample}
+                    placeholder="そのときどう返すか"
+                    rows={2}
+                    ariaLabel={`口調サンプル${index + 1}の発話例`}
+                    onChange={(next) =>
+                      edit((draft) => ((draft[index] as ToneExample).example = next))
+                    }
+                  />
+                  <div className="field-foot">
+                    <span className="field-warning">{half}</span>
+                    <Counter length={item.example.length} max={LIMITS.toneExample} />
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
       <button
         type="button"
         className="btn btn-outline"
         disabled={items.length >= LIMITS.toneItemsPerCharacter}
         onClick={() => edit((draft) => draft.push({ situation: "", example: "" }))}
       >
+        <IconPlus />
         口調サンプルを追加
       </button>
     </div>

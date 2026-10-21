@@ -32,18 +32,37 @@ export interface BudgetUsage {
   over: number;
 }
 
-function usage(total: number, max: number): BudgetUsage {
+/** 合計のうち、ひとりぶん（本人か登場人物ひとり）が使っている字数。 */
+export interface UsageShare {
+  /** 本人は null、登場人物はその id */
+  memberId: string | null;
+  length: number;
+}
+
+function usage(shares: readonly UsageShare[], max: number): BudgetUsage {
+  const total = shares.reduce((sum, share) => sum + share.length, 0);
   return { total, remaining: Math.max(0, max - total), over: Math.max(0, total - max) };
 }
 
-/** 「キャラクター設定の合計」。雑談モードでは登場人物を数えない。入力中の値をそのまま数える。 */
+/** 数える登場人物。雑談モードでは登場人物を数えない。 */
+function countedMembers(doc: CastDocument) {
+  return doc.mode === "chat" ? [] : doc.members;
+}
+
+/** 「キャラクター設定の合計」の内訳（本人、登場人物の順）。入力中の値をそのまま数える。 */
+export function settingsShares(doc: CastDocument): UsageShare[] {
+  return [
+    { memberId: null, length: utf16Length(doc.persona) },
+    ...countedMembers(doc).map((member) => ({
+      memberId: member.id,
+      length: utf16Length(member.profile),
+    })),
+  ];
+}
+
+/** 「キャラクター設定の合計」。 */
 export function settingsUsage(doc: CastDocument): BudgetUsage {
-  const members = doc.mode === "chat" ? [] : doc.members;
-  const total = members.reduce(
-    (sum, member) => sum + utf16Length(member.profile),
-    utf16Length(doc.persona),
-  );
-  return usage(total, LIMITS.settingsTotal);
+  return usage(settingsShares(doc), LIMITS.settingsTotal);
 }
 
 function toneExamplesLength(list: readonly ToneExample[]): number {
@@ -53,14 +72,20 @@ function toneExamplesLength(list: readonly ToneExample[]): number {
   );
 }
 
+/** 「口調サンプルの使用量（全員合計）」の内訳（本人、登場人物の順）。 */
+export function toneShares(doc: CastDocument): UsageShare[] {
+  return [
+    { memberId: null, length: toneExamplesLength(doc.toneExamples) },
+    ...countedMembers(doc).map((member) => ({
+      memberId: member.id,
+      length: toneExamplesLength(member.toneExamples),
+    })),
+  ];
+}
+
 /** 「口調サンプルの使用量（全員合計）」。 */
 export function toneUsage(doc: CastDocument): BudgetUsage {
-  const members = doc.mode === "chat" ? [] : doc.members;
-  const total = members.reduce(
-    (sum, member) => sum + toneExamplesLength(member.toneExamples),
-    toneExamplesLength(doc.toneExamples),
-  );
-  return usage(total, LIMITS.toneTotal);
+  return usage(toneShares(doc), LIMITS.toneTotal);
 }
 
 export function partnerSettingsLength(settings: PartnerSettings): number {

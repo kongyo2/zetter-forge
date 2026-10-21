@@ -9,7 +9,17 @@ import type {
   SaveCastRequest,
   SavedCast,
 } from "@shared/ipc";
-import { BrowserWindow, Menu, app, dialog, ipcMain, net, protocol, shell } from "electron";
+import {
+  BrowserWindow,
+  Menu,
+  app,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  net,
+  protocol,
+  shell,
+} from "electron";
 
 import {
   castDir,
@@ -194,7 +204,8 @@ function createWindow(): void {
     minHeight: 640,
     title: "Zetter Forge",
     show: false,
-    backgroundColor: "#f6f5f2",
+    // 画面が描かれるまでの下地。styles.css の --desk に合わせる
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#13171e" : "#e9ece6",
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,

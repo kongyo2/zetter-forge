@@ -1,4 +1,4 @@
-import { Card, Field, SectionHead, TextArea, TextInput } from "../components/ui";
+import { Field, Section, TextArea, TextInput } from "../components/ui";
 import { useEditor } from "../editor";
 
 export function MemoTab({ onOpenFolder }: { onOpenFolder: (() => void) | null }) {
@@ -7,11 +7,7 @@ export function MemoTab({ onOpenFolder }: { onOpenFolder: (() => void) | null })
   const openable = /^https:\/\/(z-etter\.com|zetter\.si)\//u.test(url);
   return (
     <div className="tab-body">
-      <SectionHead
-        title="メモ"
-        description="このアプリの中だけで使う欄です。Zetter には送られません。"
-      />
-      <Card>
+      <Section title="メモ" description="このアプリの中だけで使う欄です。Zetter には送られません。">
         <Field
           label="Zetter のキャストの URL"
           hint="アップロードしたあとのキャストのページ（例: https://z-etter.com/cast/…）を控えておけます。"
@@ -21,6 +17,7 @@ export function MemoTab({ onOpenFolder }: { onOpenFolder: (() => void) | null })
               value={doc.zetterUrl}
               placeholder="https://z-etter.com/cast/…"
               ariaLabel="Zetter のキャストの URL"
+              className="input-url"
               onChange={(value) => update((draft) => void (draft.zetterUrl = value))}
             />
             <button
@@ -42,12 +39,12 @@ export function MemoTab({ onOpenFolder }: { onOpenFolder: (() => void) | null })
             onChange={(value) => update((draft) => void (draft.memo = value))}
           />
         </Field>
-      </Card>
-      <Card>
+      </Section>
+      <Section title="このキャストのファイル">
         <dl className="facts">
           <div>
             <dt>保存先</dt>
-            <dd>{session.folder ?? "（まだ保存していません）"}</dd>
+            <dd>{session.folder ?? "まだ保存していません"}</dd>
           </div>
           <div>
             <dt>作成</dt>
@@ -63,11 +60,13 @@ export function MemoTab({ onOpenFolder }: { onOpenFolder: (() => void) | null })
           images にあり、Zetter の画面でそのまま選べます。
         </p>
         {onOpenFolder ? (
-          <button type="button" className="btn btn-outline" onClick={onOpenFolder}>
-            フォルダを開く
-          </button>
+          <div>
+            <button type="button" className="btn btn-outline" onClick={onOpenFolder}>
+              フォルダを開く
+            </button>
+          </div>
         ) : null}
-      </Card>
+      </Section>
     </div>
   );
 }
