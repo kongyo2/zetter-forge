@@ -17,7 +17,6 @@ import {
   MoveButtons,
   Section,
   TextArea,
-  type TextHandle,
   TextInput,
   Toggle,
   moveItem,
@@ -136,7 +135,7 @@ export function ExperienceTab() {
   );
 }
 
-function insertAtCursor(element: TextHandle | null, value: string, insertion: string) {
+function insertAtCursor(element: HTMLTextAreaElement | null, value: string, insertion: string) {
   const start = element?.selectionStart ?? value.length;
   const end = element?.selectionEnd ?? start;
   return {
@@ -152,7 +151,7 @@ function roleValue(part: IntroPart): string {
 
 function StoryIntro() {
   const { doc, update } = useEditor();
-  const refs = useRef<(TextHandle | null)[]>([]);
+  const refs = useRef<(HTMLTextAreaElement | null)[]>([]);
   const members = sendableMembers(doc);
   const mainName = doc.name.trim() || "キャスト本体";
   const edit = (index: number, recipe: (part: IntroPart) => void) =>
@@ -294,7 +293,7 @@ function StoryIntro() {
 
 function ChatIntro() {
   const { doc, update } = useEditor();
-  const ref = useRef<TextHandle | null>(null);
+  const ref = useRef<HTMLTextAreaElement | null>(null);
   const first = doc.introScript[0];
   const text = first?.text ?? "";
   const hidden = Math.max(0, doc.introScript.length - 1);

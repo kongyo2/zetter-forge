@@ -5,7 +5,6 @@ import {
   newId,
   sendableMembers,
 } from "@shared/cast";
-import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from "@shared/editorSettings";
 import type { LibraryListing } from "@shared/ipc";
 import { type EditorTab, missingRequired, validateCast } from "@shared/validate";
 import {
@@ -19,11 +18,9 @@ import {
 } from "react";
 
 import { IssuesPanel, TAB_LABELS } from "./components/IssuesPanel";
-import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { onTabListKeyDown } from "./components/ui";
 import { type EditorApi, EditorContext } from "./editor";
-import { EditorSettingsContext } from "./editorSettings";
 import {
   type EditorSession,
   canonicalJson,
@@ -59,8 +56,6 @@ export function App() {
   const [tab, setTab] = useState<EditorTab>("character");
   const [saving, setSaving] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const savingRef = useRef(false);
@@ -89,27 +84,6 @@ export function App() {
   useEffect(() => {
     void refreshLibrary();
   }, [refreshLibrary]);
-
-  useEffect(() => {
-    window.forge
-      .getEditorSettings()
-      .then(setEditorSettings, (error: unknown) =>
-        notify(`入力欄の設定を読めませんでした: ${errorMessage(error)}`, "error"),
-      );
-  }, [notify]);
-
-  const changeEditorSettings = useCallback(
-    (next: EditorSettings) => {
-      setEditorSettings(next);
-      window.forge
-        .setEditorSettings(next)
-        .then(setEditorSettings, (error: unknown) =>
-          notify(`入力欄の設定を保存できませんでした: ${errorMessage(error)}`, "error"),
-        );
-    },
-    [notify],
-  );
-  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   // 保存していない変更があるまま閉じようとしたら、メインプロセスが確認を出す
   useEffect(() => {
@@ -200,15 +174,14 @@ export function App() {
     }
   }, [notify, refreshLibrary]);
 
-  // メニュー（Ctrl+S / Ctrl+N / Ctrl+,）
+  // メニュー（Ctrl+S / Ctrl+N）
   const commandsRef = useRef({ save, newCast });
   commandsRef.current = { save, newCast };
   useEffect(
     () =>
       window.forge.onCommand((command) => {
         if (command === "save") void commandsRef.current.save();
-        else if (command === "new") commandsRef.current.newCast();
-        else setSettingsOpen(true);
+        else commandsRef.current.newCast();
       }),
     [],
   );
@@ -229,55 +202,45 @@ export function App() {
   const dirty = session ? isDirty(session) : false;
 
   return (
-    <EditorSettingsContext.Provider value={editorSettings}>
-      <div className="app">
-        <Sidebar
-          library={library}
-          currentFolder={session?.folder ?? null}
-          newCastOpen={!!session && session.folder === null}
-          dirty={dirty}
-          onOpen={(folder) => void openCast(folder)}
-          onNew={newCast}
-          onChooseRoot={() => void chooseRoot()}
-          onOpenRoot={() =>
-            void window.forge
-              .openLibraryFolder()
-              .catch((error: unknown) => notify(errorMessage(error), "error"))
-          }
-          onOpenSettings={() => setSettingsOpen(true)}
-        />
-        <main className="workspace">
-          {session ? (
-            <Editor
-              session={session}
-              setSession={setSession}
-              tab={tab}
-              setTab={setTab}
-              saving={saving}
-              dirty={dirty}
-              onSave={() => void save()}
-              notify={notify}
-            />
-          ) : (
-            <Welcome onNew={newCast} hasCasts={(library?.casts.length ?? 0) > 0} />
-          )}
-        </main>
-        {settingsOpen ? (
-          <SettingsDialog
-            settings={editorSettings}
-            onChange={changeEditorSettings}
-            onClose={closeSettings}
+    <div className="app">
+      <Sidebar
+        library={library}
+        currentFolder={session?.folder ?? null}
+        newCastOpen={!!session && session.folder === null}
+        dirty={dirty}
+        onOpen={(folder) => void openCast(folder)}
+        onNew={newCast}
+        onChooseRoot={() => void chooseRoot()}
+        onOpenRoot={() =>
+          void window.forge
+            .openLibraryFolder()
+            .catch((error: unknown) => notify(errorMessage(error), "error"))
+        }
+      />
+      <main className="workspace">
+        {session ? (
+          <Editor
+            session={session}
+            setSession={setSession}
+            tab={tab}
+            setTab={setTab}
+            saving={saving}
+            dirty={dirty}
+            onSave={() => void save()}
+            notify={notify}
           />
-        ) : null}
-        <div className="toasts" role="status" aria-live="polite">
-          {toasts.map((toast) => (
-            <div key={toast.id} className={`toast toast-${toast.tone}`}>
-              {toast.message}
-            </div>
-          ))}
-        </div>
+        ) : (
+          <Welcome onNew={newCast} hasCasts={(library?.casts.length ?? 0) > 0} />
+        )}
+      </main>
+      <div className="toasts" role="status" aria-live="polite">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`toast toast-${toast.tone}`}>
+            {toast.message}
+          </div>
+        ))}
       </div>
-    </EditorSettingsContext.Provider>
+    </div>
   );
 }
 

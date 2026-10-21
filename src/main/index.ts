@@ -2,12 +2,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { CastDocument } from "@shared/cast";
-import { DEFAULT_EDITOR_SETTINGS, normalizeEditorSettings } from "@shared/editorSettings";
 import type {
   CastSummary,
   LibraryListing,
   LoadedCast,
-  MenuCommand,
   SaveCastRequest,
   SavedCast,
 } from "@shared/ipc";
@@ -32,7 +30,6 @@ import {
   saveCast,
   type StoredCast,
 } from "./library";
-import { analyzePoml, completePoml, hoverPoml } from "./poml";
 import { type AppSettings, readSettings, writeSettings } from "./settings";
 
 const IMAGE_SCHEME = "forge-image";
@@ -132,19 +129,6 @@ function registerIpc(): void {
     const error = await shell.openPath(settings.libraryRoot);
     if (error) throw new Error(error);
   });
-  handle("settings:get-editor", async () => settings.editor);
-  handle("settings:set-editor", async (editor: unknown) => {
-    settings = { ...settings, editor: normalizeEditorSettings(editor) };
-    await writeSettings(settingsFile(), settings);
-    return settings.editor;
-  });
-  handle("poml:analyze", async (text: unknown) => analyzePoml(String(text)));
-  handle("poml:complete", async (text: unknown, offset: unknown) =>
-    completePoml(String(text), Number(offset)),
-  );
-  handle("poml:hover", async (text: unknown, offset: unknown) =>
-    hoverPoml(String(text), Number(offset)),
-  );
 }
 
 function registerImageProtocol(): void {
@@ -162,7 +146,7 @@ function registerImageProtocol(): void {
   });
 }
 
-function sendCommand(command: MenuCommand): void {
+function sendCommand(command: "new" | "save"): void {
   mainWindow?.webContents.send("menu:command", command);
 }
 
@@ -173,8 +157,6 @@ function buildMenu(): void {
       submenu: [
         { label: "新しいキャスト", accelerator: "CmdOrCtrl+N", click: () => sendCommand("new") },
         { label: "保存", accelerator: "CmdOrCtrl+S", click: () => sendCommand("save") },
-        { type: "separator" },
-        { label: "設定…", accelerator: "CmdOrCtrl+,", click: () => sendCommand("settings") },
         { type: "separator" },
         {
           label: "ライブラリのフォルダを開く",
@@ -300,7 +282,6 @@ async function runSmoke(window: BrowserWindow, shot: string): Promise<void> {
 async function start(): Promise<void> {
   settings = await readSettings(settingsFile(), {
     libraryRoot: path.join(app.getPath("documents"), "ZetterForge"),
-    editor: DEFAULT_EDITOR_SETTINGS,
   });
   // 開発中の確認用に、ライブラリの場所を環境変数で差し替えられる（設定ファイルには書かない）。
   if (!app.isPackaged && process.env.FORGE_LIBRARY_ROOT)
