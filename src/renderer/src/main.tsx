@@ -1,18 +1,32 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App";
+import { Mediator } from "./app/mediator";
+import { browserImages } from "./runtime/crop";
+import { Root } from "./views/Root";
 
-async function start() {
-  // ブラウザだけで開いたとき（開発中の画面確認）は、保存先をメモリにした代用ブリッジを使う
-  if (import.meta.env.DEV && !("forge" in window)) await import("./devBridge");
+/** 一覧の「N分前」を進めるための時計の間隔 */
+const CLOCK_MS = 30_000;
+
+function start() {
   const container = document.getElementById("root");
   if (!container) throw new Error("#root が見つかりません。");
+  const forge = window.forge;
+  const mediator = new Mediator({
+    forge,
+    images: browserImages,
+    schedule: (ms, task) => void window.setTimeout(task, ms),
+    now: () => Date.now(),
+  });
+  // メニュー（Ctrl+S・Ctrl+N・Ctrl+Shift+C）と時計も、画面の部品と同じく仲介役に届ける
+  forge.onCommand((command) => mediator.dispatch({ type: "menu", command }));
+  window.setInterval(() => mediator.dispatch({ type: "clock", now: Date.now() }), CLOCK_MS);
+  mediator.dispatch({ type: "app/start" });
   createRoot(container).render(
     <StrictMode>
-      <App />
+      <Root mediator={mediator} />
     </StrictMode>,
   );
 }
 
-void start();
+start();

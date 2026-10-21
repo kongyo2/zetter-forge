@@ -88,6 +88,24 @@ export interface EncodableCanvas {
   toDataURL(type: string, quality: number): string;
 }
 
+/** 切り抜いたキャンバス（切り抜きの画面が渡し、圧縮は仲介役が頼む） */
+export type CropCanvas = EncodableCanvas;
+
+/** 切り抜いて圧縮した画像 */
+export interface CroppedImage {
+  dataUrl: string;
+  width: number;
+  height: number;
+  bytes: number;
+}
+
+/** base64 の dataURL が表すファイルの大きさ（バイト） */
+export function dataUrlBytes(dataUrl: string): number {
+  const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return (base64.length * 3) / 4 - padding;
+}
+
 export interface CanvasFactory<C extends EncodableCanvas> {
   /** source を width×height に縮小した新しいキャンバスを返す */
   resize(source: C, width: number, height: number): C | null;

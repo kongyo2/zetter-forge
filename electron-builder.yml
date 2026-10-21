@@ -6,16 +6,13 @@ directories:
   output: release
 files:
   - dist/**/*
-  # 依存パッケージ（pomljs とその依存）のソースマップは使わないので入れない
-  - "!**/node_modules/**/*.map"
-# pomljs が使う sharp は、ネイティブのライブラリ（@img/*）を asar の外に置かないと読み込めない
-asarUnpack:
-  - "**/node_modules/sharp/**/*"
-  - "**/node_modules/@img/**/*"
 # 自動更新は使わないので、更新用のファイルは作らない
 publish: null
 win:
   target: nsis
+nsis:
+  # Release に載せるファイルの名前に空白を入れない（GitHub が勝手に「.」に替えるため）
+  artifactName: "ZetterForge-${version}-windows-${arch}-setup.${ext}"
 mac:
   target:
     - target: dmg
@@ -26,7 +23,8 @@ mac:
   identity: "-"
   hardenedRuntime: false
 dmg:
-  # 既定では Intel 版の名前にだけアーキテクチャが付かないので、両方に付ける
-  artifactName: "${productName}-${version}-${arch}.${ext}"
+  artifactName: "ZetterForge-${version}-mac-${arch}.${ext}"
 linux:
   target: AppImage
+appImage:
+  artifactName: "ZetterForge-${version}-linux-${arch}.${ext}"

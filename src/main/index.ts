@@ -1,20 +1,22 @@
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { CastDocument } from "@shared/cast";
-import { DEFAULT_EDITOR_SETTINGS, normalizeEditorSettings } from "@shared/editorSettings";
+import type { CopyLog } from "@shared/copyLog";
 import type {
   CastSummary,
   LibraryListing,
   LoadedCast,
   MenuCommand,
   SaveCastRequest,
-  SavedCast,
+  SaveCastResult,
 } from "@shared/ipc";
 import {
   BrowserWindow,
   Menu,
   app,
+  clipboard,
   dialog,
   ipcMain,
   nativeTheme,
@@ -26,15 +28,17 @@ import {
 import {
   castDir,
   castFilePath,
+  castImagePath,
+  isCastMissing,
   listCasts,
   loadCast,
   referencedImages,
   saveCast,
-  type StoredCast,
+  writeCopyLog,
 } from "./library";
-import { analyzePoml, completePoml, hoverPoml } from "./poml";
 import { type AppSettings, readSettings, writeSettings } from "./settings";
 
+const APP_NAME = "Zetter Forge";
 const IMAGE_SCHEME = "forge-image";
 
 protocol.registerSchemesAsPrivileged([
@@ -58,15 +62,6 @@ function imageUrlsFor(folder: string, doc: CastDocument): Record<string, string>
   return Object.fromEntries(referencedImages(doc).map((file) => [file, imageUrl(folder, file)]));
 }
 
-function toLoaded(stored: StoredCast): LoadedCast {
-  return {
-    folder: stored.folder,
-    doc: stored.doc,
-    imageUrls: imageUrlsFor(stored.folder, stored.doc),
-    notices: stored.notices,
-  };
-}
-
 async function listing(): Promise<LibraryListing> {
   const { casts, errors } = await listCasts(settings.libraryRoot);
   const summaries: CastSummary[] = casts.map(({ folder, doc }) => ({
@@ -78,6 +73,7 @@ async function listing(): Promise<LibraryListing> {
     status: doc.status,
     updatedAt: doc.updatedAt,
     avatarUrl: doc.avatar ? imageUrl(folder, doc.avatar.file) : null,
+    avatarBlurred: doc.avatarBlurred,
   }));
   return { root: settings.libraryRoot, casts: summaries, errors };
 }
@@ -96,6 +92,17 @@ function handle<A extends unknown[], T>(channel: string, task: (...args: A) => P
   });
 }
 
+async function openFolder(folder: string): Promise<void> {
+  const error = await shell.openPath(folder);
+  if (error) throw new Error(error);
+}
+
+async function openLibraryFolder(): Promise<void> {
+  // まだ一度も保存していなくても開けるように、フォルダを用意してから開く
+  await fs.mkdir(settings.libraryRoot, { recursive: true });
+  await openFolder(settings.libraryRoot);
+}
+
 function registerIpc(): void {
   handle("library:get", () => listing());
   handle("library:choose", async () => {
@@ -109,42 +116,67 @@ function registerIpc(): void {
       : await dialog.showOpenDialog(options);
     const chosen = result.filePaths[0];
     if (result.canceled || !chosen) return null;
+    const previous = settings;
     settings = { ...settings, libraryRoot: chosen };
-    await writeSettings(settingsFile(), settings);
-    return listing();
+    try {
+      // 一覧が読めるのを確かめてから、新しい保存先を覚える
+      const next = await listing();
+      await writeSettings(settingsFile(), settings);
+      return next;
+    } catch (error) {
+      settings = previous;
+      throw error;
+    }
   });
-  handle("cast:load", async (folder: string) =>
-    toLoaded(await loadCast(settings.libraryRoot, folder)),
+  handle("cast:load", async (folder: string): Promise<LoadedCast> => {
+    const loaded = await loadCast(settings.libraryRoot, folder);
+    return { ...loaded, imageUrls: imageUrlsFor(loaded.folder, loaded.doc) };
+  });
+  handle("cast:save", async (request: SaveCastRequest): Promise<SaveCastResult> => {
+    try {
+      const saved = await saveCast(settings.libraryRoot, {
+        folder: request.folder,
+        doc: request.doc,
+        pendingImages: request.pendingImages,
+      });
+      return {
+        kind: "saved",
+        cast: {
+          folder: saved.folder,
+          doc: saved.doc,
+          notices: saved.notices,
+          imageUrls: imageUrlsFor(saved.folder, saved.doc),
+          replacedImages: saved.replacedImages,
+        },
+      };
+    } catch (error) {
+      if (isCastMissing(error)) return { kind: "missing", message: error.message };
+      throw error;
+    }
+  });
+  handle("cast:open-folder", async (folder: string) =>
+    openFolder(castDir(settings.libraryRoot, folder)),
   );
-  handle("cast:save", async (request: SaveCastRequest): Promise<SavedCast> => {
-    const saved = await saveCast(settings.libraryRoot, {
-      folder: request.folder,
-      doc: request.doc,
-      pendingImages: request.pendingImages,
-    });
-    return { ...toLoaded(saved), replacedImages: saved.replacedImages };
+  handle("cast:show-image", async (folder: string, file: string) => {
+    shell.showItemInFolder(await castImagePath(settings.libraryRoot, folder, file));
   });
-  handle("cast:open-folder", async (folder: string) => {
-    const error = await shell.openPath(castDir(settings.libraryRoot, folder));
-    if (error) throw new Error(error);
-  });
-  handle("library:open-folder", async () => {
-    const error = await shell.openPath(settings.libraryRoot);
-    if (error) throw new Error(error);
-  });
-  handle("settings:get-editor", async () => settings.editor);
-  handle("settings:set-editor", async (editor: unknown) => {
-    settings = { ...settings, editor: normalizeEditorSettings(editor) };
-    await writeSettings(settingsFile(), settings);
-    return settings.editor;
-  });
-  handle("poml:analyze", async (text: unknown) => analyzePoml(String(text)));
-  handle("poml:complete", async (text: unknown, offset: unknown) =>
-    completePoml(String(text), Number(offset)),
+  handle("cast:image-path", async (folder: string, file: string) =>
+    castImagePath(settings.libraryRoot, folder, file),
   );
-  handle("poml:hover", async (text: unknown, offset: unknown) =>
-    hoverPoml(String(text), Number(offset)),
+  handle("cast:write-copy-log", async (folder: string, log: CopyLog) =>
+    writeCopyLog(settings.libraryRoot, folder, log),
   );
+  handle("library:open-folder", () => openLibraryFolder());
+  handle("clipboard:write", async (text: unknown) => {
+    if (typeof text !== "string") throw new Error("コピーする文字がありません。");
+    clipboard.writeText(text);
+  });
+  handle("shell:open-external", async (url: unknown) => {
+    // 開いてよいのは https のページだけ（ファイルやほかの種類の URL は開かない）
+    if (typeof url !== "string" || new URL(url).protocol !== "https:")
+      throw new Error("https で始まる URL だけ開けます。");
+    await shell.openExternal(url);
+  });
 }
 
 function registerImageProtocol(): void {
@@ -166,22 +198,56 @@ function sendCommand(command: MenuCommand): void {
   mainWindow?.webContents.send("menu:command", command);
 }
 
+function showAbout(): void {
+  const options = {
+    type: "info" as const,
+    title: APP_NAME,
+    message: `${APP_NAME} ${app.getVersion()}`,
+    detail: `Electron ${process.versions.electron} / Chromium ${process.versions.chrome}`,
+    buttons: ["OK"],
+  };
+  if (mainWindow) void dialog.showMessageBox(mainWindow, options);
+  else void dialog.showMessageBox(options);
+}
+
 function buildMenu(): void {
+  const mac = process.platform === "darwin";
+  const openLibrary = () =>
+    void openLibraryFolder().catch((error: unknown) =>
+      dialog.showErrorBox(
+        APP_NAME,
+        `ライブラリのフォルダを開けませんでした。\n${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
   const template: Electron.MenuItemConstructorOptions[] = [
+    // macOS では最初のメニューがアプリの名前のメニューになるので、ファイルとは分ける
+    ...(mac
+      ? [
+          {
+            label: APP_NAME,
+            submenu: [
+              { label: `${APP_NAME} について`, role: "about" as const },
+              { type: "separator" as const },
+              { label: "サービス", role: "services" as const },
+              { type: "separator" as const },
+              { label: `${APP_NAME} を隠す`, role: "hide" as const },
+              { label: "ほかを隠す", role: "hideOthers" as const },
+              { label: "すべてを表示", role: "unhide" as const },
+              { type: "separator" as const },
+              { label: `${APP_NAME} を終了`, role: "quit" as const },
+            ],
+          },
+        ]
+      : []),
     {
       label: "ファイル",
       submenu: [
         { label: "新しいキャスト", accelerator: "CmdOrCtrl+N", click: () => sendCommand("new") },
         { label: "保存", accelerator: "CmdOrCtrl+S", click: () => sendCommand("save") },
         { type: "separator" },
-        { label: "設定…", accelerator: "CmdOrCtrl+,", click: () => sendCommand("settings") },
+        { label: "ライブラリのフォルダを開く", click: openLibrary },
         { type: "separator" },
-        {
-          label: "ライブラリのフォルダを開く",
-          click: () => void shell.openPath(settings.libraryRoot),
-        },
-        { type: "separator" },
-        { label: "終了", role: "quit" },
+        mac ? { label: "ウィンドウを閉じる", role: "close" } : { label: "終了", role: "quit" },
       ],
     },
     {
@@ -194,6 +260,12 @@ function buildMenu(): void {
         { label: "コピー", role: "copy" },
         { label: "貼り付け", role: "paste" },
         { label: "すべて選択", role: "selectAll" },
+        { type: "separator" },
+        {
+          label: "Zetter へ写す: 次の項目をコピー",
+          accelerator: "CmdOrCtrl+Shift+C",
+          click: () => sendCommand("copy-next"),
+        },
       ],
     },
     {
@@ -210,6 +282,8 @@ function buildMenu(): void {
             ]),
       ],
     },
+    ...(mac ? [{ label: "ウィンドウ", role: "windowMenu" as const }] : []),
+    ...(mac ? [] : [{ label: "ヘルプ", submenu: [{ label: "バージョン情報", click: showAbout }] }]),
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -220,7 +294,7 @@ function createWindow(): void {
     height: 900,
     minWidth: 980,
     minHeight: 640,
-    title: "Zetter Forge",
+    title: APP_NAME,
     show: false,
     // 画面が描かれるまでの下地。styles.css の --desk に合わせる
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#13171e" : "#e9ece6",
@@ -234,7 +308,7 @@ function createWindow(): void {
   mainWindow = window;
   window.on("ready-to-show", () => window.show());
   window.on("closed", () => {
-    mainWindow = null;
+    if (mainWindow === window) mainWindow = null;
   });
   // 保存していない変更があるときは、閉じる前に確かめる（画面側の beforeunload が合図）。
   window.webContents.on("will-prevent-unload", (event) => {
@@ -243,68 +317,29 @@ function createWindow(): void {
       buttons: ["保存しないで閉じる", "キャンセル"],
       defaultId: 1,
       cancelId: 1,
-      title: "Zetter Forge",
+      title: APP_NAME,
       message: "保存していない変更があります。",
       detail: "閉じると、最後に保存したあとの変更は失われます。",
     });
     if (choice === 0) event.preventDefault();
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//u.test(url)) void shell.openExternal(url);
+    if (/^https:\/\//u.test(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
   window.webContents.on("will-navigate", (event, url) => {
     if (url !== window.webContents.getURL()) event.preventDefault();
   });
-  if (!app.isPackaged) {
-    window.webContents.on("console-message", (event) => {
-      console.log(`[renderer:${event.level}] ${event.message}`);
-    });
-  }
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (!app.isPackaged && devUrl) void window.loadURL(devUrl);
   else void window.loadFile(path.join(__dirname, "../renderer/index.html"));
-  // 動作確認用（開発中だけ）: FORGE_SMOKE_SCREENSHOT に PNG のパスを渡すと、表示後に
-  // FORGE_SMOKE_SCRIPT の JavaScript を画面で実行してから画面を保存し、終了する。
-  const smokeShot = process.env.FORGE_SMOKE_SCREENSHOT;
-  if (!app.isPackaged && smokeShot) {
-    window.webContents.once("did-finish-load", () => {
-      runSmoke(window, smokeShot).then(
-        () => app.exit(0),
-        (error: unknown) => {
-          console.error(error);
-          app.exit(1);
-        },
-      );
-    });
-  }
-}
-
-async function runSmoke(window: BrowserWindow, shot: string): Promise<void> {
-  const { readFile, writeFile } = await import("node:fs/promises");
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  await wait(Number(process.env.FORGE_SMOKE_DELAY_MS ?? 2000));
-  const script = process.env.FORGE_SMOKE_SCRIPT;
-  if (script) {
-    const result: unknown = await window.webContents.executeJavaScript(
-      await readFile(script, "utf8"),
-      true,
-    );
-    console.log(`[smoke] ${JSON.stringify(result)}`);
-    await wait(500);
-  }
-  const image = await window.webContents.capturePage();
-  await writeFile(shot, image.toPNG());
 }
 
 async function start(): Promise<void> {
   settings = await readSettings(settingsFile(), {
     libraryRoot: path.join(app.getPath("documents"), "ZetterForge"),
-    editor: DEFAULT_EDITOR_SETTINGS,
   });
-  // 開発中の確認用に、ライブラリの場所を環境変数で差し替えられる（設定ファイルには書かない）。
-  if (!app.isPackaged && process.env.FORGE_LIBRARY_ROOT)
-    settings = { ...settings, libraryRoot: process.env.FORGE_LIBRARY_ROOT };
+  app.setAboutPanelOptions({ applicationName: APP_NAME, applicationVersion: app.getVersion() });
   registerImageProtocol();
   registerIpc();
   buildMenu();
@@ -314,14 +349,23 @@ async function start(): Promise<void> {
   });
 }
 
-app
-  .whenReady()
-  .then(start)
-  .catch((error: unknown) => {
-    console.error(error);
-    app.quit();
+// 2 つ目を起動したときは、同じライブラリに 2 か所から書かないよう、開いている窓を前に出すだけにする
+if (app.requestSingleInstanceLock()) {
+  app.on("second-instance", () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
   });
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+  app
+    .whenReady()
+    .then(start)
+    .catch((error: unknown) => {
+      console.error(error);
+      app.quit();
+    });
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+} else {
+  app.quit();
+}

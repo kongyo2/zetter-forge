@@ -9,26 +9,49 @@ import {
   CastFormatError,
   normalizeCastDocument,
 } from "@shared/cast";
+import { type CopyLog, copyLogFile, normalizeCopyLog } from "@shared/copyLog";
 import { type ImageKind, imageSlotName } from "@shared/images";
 
 // ライブラリの中身:
 //   <root>/<キャストのフォルダ>/cast.json        設定
 //   <root>/<キャストのフォルダ>/images/*.jpg     画像（中身のハッシュ入りの名前で、一度書いたら変えない）
 //   <root>/<キャストのフォルダ>/history/*.json   保存のたびに残す前の版
+//   <root>/<キャストのフォルダ>/copied.json      Zetter へ写すためにコピーした記録
 const CAST_FILE = "cast.json";
 const IMAGES_DIR = "images";
 const HISTORY_DIR = "history";
 const HISTORY_LIMIT = 30;
+const COPY_LOG_FILE = "copied.json";
 
-export interface StoredCast {
+interface StoredCast {
   folder: string;
   doc: CastDocument;
   notices: string[];
 }
 
+export interface LoadedCast extends StoredCast {
+  copyLog: CopyLog;
+}
+
 export interface SavedCast extends StoredCast {
   /** 保存前の画像（"pending:<id>"）→ 書き出したファイルを指す参照 */
   replacedImages: Record<string, CastImage>;
+}
+
+/** キャストのフォルダがなくなっている（移動・削除された）ときのエラーの印 */
+export const CAST_MISSING = "CAST_MISSING";
+
+export function isCastMissing(error: unknown): error is Error {
+  return error instanceof Error && "code" in error && error.code === CAST_MISSING;
+}
+
+function castMissing(): Error {
+  return Object.assign(
+    new Error(
+      "キャストのフォルダが見つかりません。フォルダが移動または削除された可能性があります。",
+    ),
+    { code: CAST_MISSING },
+  );
 }
 
 export interface CastListing {
@@ -113,9 +136,55 @@ export async function listCasts(root: string): Promise<CastListing> {
   return { casts, errors };
 }
 
-export async function loadCast(root: string, folder: string): Promise<StoredCast> {
-  const doc = await readCastFile(castDir(root, folder));
-  return { folder, doc, notices: noticesFor(doc) };
+export async function loadCast(root: string, folder: string): Promise<LoadedCast> {
+  const dir = castDir(root, folder);
+  if (!(await exists(path.join(dir, CAST_FILE)))) throw castMissing();
+  const doc = await readCastFile(dir);
+  return { folder, doc, notices: noticesFor(doc), copyLog: await readCopyLog(dir) };
+}
+
+async function readCopyLog(dir: string): Promise<CopyLog> {
+  try {
+    return normalizeCopyLog(JSON.parse(await fs.readFile(path.join(dir, COPY_LOG_FILE), "utf8")));
+  } catch {
+    // まだコピーしていない（ファイルがない）か、壊れた記録は空から始める
+    return {};
+  }
+}
+
+const copyLogWrites = new Map<string, Promise<void>>();
+
+/**
+ * コピーした記録を書く。キャストのフォルダがなければ（新しく作らずに）エラー。
+ * 続けてコピーしたときに古い記録で上書きしないよう、同じキャストへの書き込みは順に行う。
+ */
+export function writeCopyLog(root: string, folder: string, log: CopyLog): Promise<void> {
+  const dir = castDir(root, folder);
+  const write = async () => {
+    if (!(await exists(path.join(dir, CAST_FILE)))) throw castMissing();
+    await writeFileAtomic(
+      path.join(dir, COPY_LOG_FILE),
+      `${JSON.stringify(copyLogFile(log), null, 2)}\n`,
+    );
+  };
+  const previous = copyLogWrites.get(dir) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(write);
+  copyLogWrites.set(dir, next);
+  void next
+    .finally(() => {
+      if (copyLogWrites.get(dir) === next) copyLogWrites.delete(dir);
+    })
+    .catch(() => undefined);
+  return next;
+}
+
+/** キャストの画像ファイルの絶対パス。images の外やない画像はエラー。 */
+export async function castImagePath(root: string, folder: string, file: string): Promise<string> {
+  const full = castFilePath(root, folder, file);
+  if (!full.startsWith(path.join(castDir(root, folder), IMAGES_DIR) + path.sep))
+    throw new Error(`キャストの画像ではありません: ${file}`);
+  if (!(await exists(full))) throw new Error("画像のファイルが見つかりません。");
+  return full;
 }
 
 /** Windows でも使えるフォルダ名にする。 */
@@ -216,11 +285,7 @@ export async function saveCast(root: string, input: SaveCastInput): Promise<Save
   });
   let folder = input.folder;
   if (folder) {
-    if (!(await exists(path.join(castDir(root, folder), CAST_FILE)))) {
-      throw new Error(
-        "保存先のキャストが見つかりません。フォルダが移動または削除された可能性があります。",
-      );
-    }
+    if (!(await exists(path.join(castDir(root, folder), CAST_FILE)))) throw castMissing();
   } else {
     folder = await newFolderName(root, working);
   }
@@ -275,8 +340,12 @@ function historyStamp(date: Date): string {
   return date.toISOString().replace(/[:.]/gu, "-");
 }
 
+let tempCounter = 0;
+
 async function writeFileAtomic(file: string, data: string | Buffer): Promise<void> {
-  const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  // 同じファイルを続けて書いても一時ファイルが重ならないよう、通し番号を付ける
+  tempCounter += 1;
+  const temp = `${file}.${process.pid}.${Date.now()}.${tempCounter}.tmp`;
   await fs.writeFile(temp, data);
   try {
     await fs.rename(temp, file);

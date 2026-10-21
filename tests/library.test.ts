@@ -6,11 +6,14 @@ import { type CastDocument, createEmptyCast, createEmptyMember } from "@shared/c
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  CAST_MISSING,
   castFilePath,
+  castImagePath,
   listCasts,
   loadCast,
   sanitizeFolderName,
   saveCast,
+  writeCopyLog,
 } from "../src/main/library";
 
 // 1×1 の JPEG（中身は何でもよいが、ファイル名のハッシュが変わることを確かめる）
@@ -129,10 +132,59 @@ describe("saveCast", () => {
     expect((await loadCast(root, saved.folder)).notices).toHaveLength(1);
   });
 
-  it("見つからないフォルダへの保存はエラー", async () => {
-    await expect(
-      saveCast(root, { folder: "ない", doc: createEmptyCast(), pendingImages: {} }),
-    ).rejects.toThrow("保存先のキャストが見つかりません");
+  it("見つからないフォルダへの保存は、フォルダがないことが分かるエラー", async () => {
+    const saving = saveCast(root, { folder: "ない", doc: createEmptyCast(), pendingImages: {} });
+    await expect(saving).rejects.toThrow("キャストのフォルダが見つかりません");
+    await expect(saving).rejects.toMatchObject({ code: CAST_MISSING });
+    // 保存先のフォルダを勝手に作らない
+    expect(await filesIn(root)).toEqual([]);
+  });
+});
+
+describe("コピーした記録", () => {
+  it("書いた記録を読み込みで返し、壊れた記録は空として読む", async () => {
+    const saved = await saveCast(root, { folder: null, doc: castWithImages(), pendingImages: {} });
+    expect((await loadCast(root, saved.folder)).copyLog).toEqual({});
+    const log = { "cast/name": { hash: "0123abcd", at: "2026-10-21T00:00:00.000Z" } };
+    await writeCopyLog(root, saved.folder, log);
+    expect((await loadCast(root, saved.folder)).copyLog).toEqual(log);
+    await fs.writeFile(path.join(root, saved.folder, "copied.json"), "{ broken");
+    expect((await loadCast(root, saved.folder)).copyLog).toEqual({});
+  });
+
+  it("続けて書いても、最後に書いた記録が残る", async () => {
+    const saved = await saveCast(root, { folder: null, doc: castWithImages(), pendingImages: {} });
+    const writes = Array.from({ length: 8 }, (_, index) =>
+      writeCopyLog(root, saved.folder, {
+        [`cast/${index}`]: { hash: String(index), at: "2026-10-21T00:00:00.000Z" },
+      }),
+    );
+    await Promise.all(writes);
+    expect(Object.keys((await loadCast(root, saved.folder)).copyLog)).toEqual(["cast/7"]);
+    const names = await filesIn(path.join(root, saved.folder));
+    expect(names.filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("ないキャストには書かない", async () => {
+    await expect(writeCopyLog(root, "ない", {})).rejects.toMatchObject({ code: CAST_MISSING });
+    expect(await filesIn(root)).toEqual([]);
+  });
+});
+
+describe("画像のファイルの場所", () => {
+  it("キャストの images の中のファイルだけ返す", async () => {
+    const saved = await saveCast(root, {
+      folder: null,
+      doc: castWithImages(),
+      pendingImages: { "pending:a": JPEG_A },
+    });
+    const file = saved.doc.avatar?.file as string;
+    expect(await castImagePath(root, saved.folder, file)).toBe(path.join(root, saved.folder, file));
+    await expect(castImagePath(root, saved.folder, "cast.json")).rejects.toThrow();
+    await expect(castImagePath(root, saved.folder, "images/../cast.json")).rejects.toThrow();
+    await expect(castImagePath(root, saved.folder, "images/none.jpg")).rejects.toThrow(
+      "見つかりません",
+    );
   });
 });
 
