@@ -27,6 +27,7 @@ export function Sidebar({
   onNew,
   onChooseRoot,
   onOpenRoot,
+  onOpenSettings,
 }: {
   library: LibraryListing | null;
   currentFolder: string | null;
@@ -36,6 +37,7 @@ export function Sidebar({
   onNew: () => void;
   onChooseRoot: () => void;
   onOpenRoot: () => void;
+  onOpenSettings: () => void;
 }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
@@ -126,6 +128,14 @@ export function Sidebar({
           </button>
           <button type="button" className="btn btn-plain btn-small" onClick={onOpenRoot}>
             フォルダを開く
+          </button>
+          <button
+            type="button"
+            className="btn btn-plain btn-small"
+            onClick={onOpenSettings}
+            title="Ctrl+,"
+          >
+            入力欄の設定
           </button>
         </div>
       </div>

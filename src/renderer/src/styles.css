@@ -15,6 +15,10 @@
   --font-text:
     "BIZ UDPMincho", "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP",
     "Noto Serif CJK JP", "IPAPMincho", serif;
+  /* 書式つきの欄の中のコード（``` の中・`code`） */
+  --font-code:
+    ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "BIZ UDGothic",
+    "Noto Sans Mono CJK JP", monospace;
 
   /* 面: 机（左右の欄）・頁（編集する面）・紙（書き込む欄） */
   --desk: #e9ece6;
@@ -2209,6 +2213,161 @@ h3 {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* ---------- code editor（書式つきの欄。CodeMirror） ---------- */
+
+.code-textarea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* POML の色（shiki の CSS 変数テーマ。codeEditor/poml/poml.ts） */
+  --poml-foreground: var(--text);
+  --poml-background: transparent;
+  --poml-token-string-expression: var(--cast-1);
+  --poml-token-function: var(--cast-3);
+  --poml-token-string: var(--ok);
+  --poml-token-constant: var(--cast-7);
+  --poml-token-keyword: var(--cast-5);
+  --poml-token-parameter: var(--cast-6);
+  --poml-token-comment: var(--text-3);
+  --poml-token-punctuation: var(--text-2);
+  --poml-token-link: var(--focus);
+}
+
+.code-textarea .cm-editor {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  letter-spacing: 0.02em;
+}
+
+.code-textarea .cm-editor.cm-focused {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent);
+}
+
+.code-textarea.is-invalid .cm-editor {
+  border-color: var(--error);
+}
+
+.code-textarea.is-invalid .cm-editor.cm-focused {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 20%, transparent);
+}
+
+.code-textarea .cm-scroller {
+  line-height: 1.9;
+}
+
+.code-textarea .cm-content {
+  padding: 10px 0;
+}
+
+.code-textarea .cm-line {
+  padding: 0 14px;
+}
+
+.code-textarea .cm-placeholder {
+  color: var(--text-3);
+}
+
+.code-textarea .cm-tooltip {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--page);
+  color: var(--text);
+  box-shadow: var(--shadow-float);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: normal;
+}
+
+.code-textarea .cm-tooltip-autocomplete > ul {
+  font-family: var(--font-code);
+}
+
+.code-textarea .cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--action);
+  color: var(--on-action);
+}
+
+.code-textarea .cm-completionInfo,
+.cm-poml-doc {
+  max-width: 420px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.code-textarea .cm-diagnostic {
+  white-space: pre-wrap;
+}
+
+/* POML が式として読むところ（{{ }}・if / for の値）と、Zetter の {{user}} */
+.cm-poml-expression,
+.cm-zetter-placeholder {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--cast-7) 14%, transparent);
+}
+
+.mermaid-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mermaid-diagram {
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--sheet);
+  text-align: center;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--error-wash);
+  color: var(--error);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+}
+
+/* ---------- settings ---------- */
+
+.settings-modal {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-section h3 {
+  font-size: 14px;
+}
+
+.mode-options.settings-syntax {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 /* ---------- toasts ---------- */

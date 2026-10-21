@@ -1,4 +1,4 @@
-import type { ForgeApi } from "@shared/ipc";
+import type { ForgeApi, MenuCommand } from "@shared/ipc";
 import { contextBridge, ipcRenderer } from "electron";
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -16,9 +16,13 @@ const api: ForgeApi = {
   saveCast: (request) => invoke("cast:save", request),
   openCastFolder: (folder) => invoke("cast:open-folder", folder),
   openLibraryFolder: () => invoke("library:open-folder"),
+  getEditorSettings: () => invoke("settings:get-editor"),
+  setEditorSettings: (settings) => invoke("settings:set-editor", settings),
+  analyzePoml: (text) => invoke("poml:analyze", text),
+  completePoml: (text, offset) => invoke("poml:complete", text, offset),
+  hoverPoml: (text, offset) => invoke("poml:hover", text, offset),
   onCommand: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, command: "new" | "save") =>
-      listener(command);
+    const handler = (_event: Electron.IpcRendererEvent, command: MenuCommand) => listener(command);
     ipcRenderer.on("menu:command", handler);
     return () => {
       ipcRenderer.removeListener("menu:command", handler);

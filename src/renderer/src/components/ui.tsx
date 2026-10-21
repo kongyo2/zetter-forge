@@ -7,6 +7,8 @@ import {
   useRef,
 } from "react";
 
+import { CodeTextArea } from "../codeEditor/CodeTextArea";
+import { useEditorSettings } from "../editorSettings";
 import { IconDown, IconRemove, IconUp } from "./icons";
 
 const TAB_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End"]);
@@ -160,7 +162,33 @@ export function TextInput({
 
 const AUTOGROW_MAX_PX = 480;
 
-export function TextArea({
+/** 文章の欄のカーソル位置とフォーカス。<textarea> も、書式つきの欄（CodeMirror）もこの形で渡す */
+export interface TextHandle {
+  readonly selectionStart: number;
+  readonly selectionEnd: number;
+  focus(): void;
+  setSelectionRange(start: number, end: number): void;
+}
+
+/** 文章の欄。設定で書式（Markdown・POML）を選んでいれば、色分けと入力補助のある欄にする */
+export function TextArea(props: TextAreaProps) {
+  const settings = useEditorSettings();
+  if (settings.syntax === "plain") return <PlainTextArea {...props} />;
+  return <CodeTextArea {...props} rows={props.rows ?? 3} settings={settings} />;
+}
+
+interface TextAreaProps {
+  value: string;
+  onChange: (value: string) => void;
+  maxLength?: number;
+  placeholder?: string;
+  rows?: number;
+  invalid?: boolean;
+  ariaLabel?: string;
+  textareaRef?: (element: TextHandle | null) => void;
+}
+
+function PlainTextArea({
   value,
   onChange,
   maxLength,
@@ -169,16 +197,7 @@ export function TextArea({
   invalid,
   ariaLabel,
   textareaRef,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  maxLength?: number;
-  placeholder?: string;
-  rows?: number;
-  invalid?: boolean;
-  ariaLabel?: string;
-  textareaRef?: (element: HTMLTextAreaElement | null) => void;
-}) {
+}: TextAreaProps) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   // 中身の高さに合わせて伸ばす（長い設定を読み返せるように）
   useLayoutEffect(() => {

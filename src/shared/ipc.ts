@@ -1,4 +1,6 @@
 import type { CastDocument, CastImage, CastMode, CastStatus } from "./cast";
+import type { EditorSettings } from "./editorSettings";
+import type { PomlAnalysis, PomlCompletions, PomlHover } from "./poml";
 
 /** ライブラリの一覧に出す 1 件 */
 export interface CastSummary {
@@ -49,11 +51,18 @@ export interface ForgeApi {
   saveCast(request: SaveCastRequest): Promise<SavedCast>;
   openCastFolder(folder: string): Promise<void>;
   openLibraryFolder(): Promise<void>;
-  /** メニューの「新しいキャスト」「保存」。戻り値で登録を外す */
+  getEditorSettings(): Promise<EditorSettings>;
+  /** 書き込んだあとの（整えた）設定を返す */
+  setEditorSettings(settings: EditorSettings): Promise<EditorSettings>;
+  /** POML として読んだときの書き間違いと、式として読むところ */
+  analyzePoml(text: string): Promise<PomlAnalysis>;
+  completePoml(text: string, offset: number): Promise<PomlCompletions | null>;
+  hoverPoml(text: string, offset: number): Promise<PomlHover | null>;
+  /** メニューの「新しいキャスト」「保存」「設定」。戻り値で登録を外す */
   onCommand(listener: (command: MenuCommand) => void): () => void;
 }
 
-export type MenuCommand = "new" | "save";
+export type MenuCommand = "new" | "save" | "settings";
 
 declare global {
   interface Window {

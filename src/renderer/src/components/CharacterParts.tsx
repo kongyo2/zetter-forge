@@ -11,7 +11,7 @@ import { limitPartnerSettingsValue, partnerSettingsLength } from "@shared/valida
 import { useRef } from "react";
 
 import { IconPlus } from "./icons";
-import { Counter, MoveButtons, TextArea, TextInput, moveItem } from "./ui";
+import { Counter, MoveButtons, TextArea, type TextHandle, TextInput, moveItem } from "./ui";
 
 /** 「ふだんの1日」の札: カーソル位置に【朝】を入れる（行の途中なら改行してから）。Zetter と同じ。 */
 function insertTimeChip(value: string, start: number, end: number, label: string) {
@@ -39,7 +39,7 @@ export function PartnerSettingsEditor({
   value: PartnerSettings;
   onChange: (next: PartnerSettings) => void;
 }) {
-  const routineRef = useRef<HTMLTextAreaElement | null>(null);
+  const routineRef = useRef<TextHandle | null>(null);
   const total = partnerSettingsLength(value);
   const nearLimit = total >= LIMITS.partnerSettingsTotal * 0.9;
   const setField = (field: keyof PartnerSettings, next: string) =>

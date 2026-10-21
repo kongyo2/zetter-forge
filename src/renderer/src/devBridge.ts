@@ -1,6 +1,11 @@
 // ブラウザだけで画面を確かめるための代用ブリッジ（開発用。Electron では使われない）。
 // 保存先はメモリの中だけで、再読み込みすると消える。
 import { type CastDocument, type CastImage, normalizeCastDocument } from "@shared/cast";
+import {
+  DEFAULT_EDITOR_SETTINGS,
+  type EditorSettings,
+  normalizeEditorSettings,
+} from "@shared/editorSettings";
 import type {
   CastSummary,
   ForgeApi,
@@ -18,6 +23,7 @@ interface MemoryCast {
 const casts = new Map<string, MemoryCast>();
 const listeners = new Set<(command: MenuCommand) => void>();
 const ROOT = "（ブラウザのメモリ）";
+let editorSettings: EditorSettings = DEFAULT_EDITOR_SETTINGS;
 
 function imageFiles(doc: CastDocument): string[] {
   return [
@@ -94,6 +100,15 @@ const api: ForgeApi = {
   },
   openCastFolder: async () => undefined,
   openLibraryFolder: async () => undefined,
+  getEditorSettings: async () => editorSettings,
+  setEditorSettings: async (settings) => {
+    editorSettings = normalizeEditorSettings(settings);
+    return editorSettings;
+  },
+  // pomljs はメインプロセスで動くので、ブラウザだけのときは POML の入力補助を出さない
+  analyzePoml: async () => ({ diagnostics: [], expressions: [] }),
+  completePoml: async () => null,
+  hoverPoml: async () => null,
   onCommand: (listener) => {
     listeners.add(listener);
     return () => listeners.delete(listener);
@@ -102,7 +117,8 @@ const api: ForgeApi = {
 
 window.addEventListener("keydown", (event) => {
   if (!(event.ctrlKey || event.metaKey)) return;
-  const command: MenuCommand | null = event.key === "s" ? "save" : event.key === "n" ? "new" : null;
+  const command: MenuCommand | null =
+    event.key === "s" ? "save" : event.key === "n" ? "new" : event.key === "," ? "settings" : null;
   if (!command) return;
   event.preventDefault();
   for (const listener of listeners) listener(command);
