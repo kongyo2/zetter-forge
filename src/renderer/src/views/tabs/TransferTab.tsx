@@ -84,35 +84,35 @@ export function TransferTab({ vm }: { vm: TransferTabVM }) {
       <Section
         title="Zetter へ写す"
         description="Zetter のキャスト作成画面と同じ順に並べています。文章は「コピー」で写し、画像は「場所をコピー」してから Zetter のファイル選択の画面に貼り付けると選べます。コピーしたあとに書き換えた項目には「書き換えあり」が付きます。"
-      >
-        <div className="transfer-bar">
-          <p className="transfer-progress" aria-live="polite">
-            {vm.progress.text}
-          </p>
-          <div className="button-row">
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={!vm.next}
-              onClick={() => emit({ type: "transfer/next" })}
-              title={vm.shortcut}
-            >
-              {vm.next ? `次の項目をコピー（${vm.next.label}）` : "コピーする項目はありません"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-plain btn-small"
-              onClick={() => emit({ type: "transfer/reset" })}
-            >
-              コピーの記録を消す
-            </button>
-          </div>
-          <p className="note">
-            このアプリの窓で {vm.shortcut}（Mac は ⌘⇧C）を押しても、次の項目をコピーできます。Zetter
-            の欄に貼ったら、ここに戻って続けてください。
-          </p>
+      />
+      {/* 一覧のどこにいても使えるよう、タブの直下に置いて上に貼り付ける */}
+      <div className="transfer-bar">
+        <p className="transfer-progress" aria-live="polite">
+          {vm.progress.text}
+        </p>
+        <div className="button-row">
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!vm.next}
+            onClick={() => emit({ type: "transfer/next" })}
+            title={vm.shortcut}
+          >
+            {vm.next ? `次の項目をコピー（${vm.next.label}）` : "コピーする項目はありません"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-plain btn-small"
+            onClick={() => emit({ type: "transfer/reset" })}
+          >
+            コピーの記録を消す
+          </button>
         </div>
-      </Section>
+        <p className="note">
+          このアプリの窓で {vm.shortcut}（Mac は ⌘⇧C）を押しても、次の項目をコピーできます。Zetter
+          の欄に貼ったら、ここに戻って続けてください。
+        </p>
+      </div>
       {vm.groups.map((group) => (
         <Section key={group.title} title={group.title}>
           {group.sections.map((section, index) => (

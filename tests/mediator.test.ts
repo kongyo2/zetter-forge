@@ -282,6 +282,18 @@ describe("書き換え", () => {
     });
   });
 
+  it("フォーカスを移す頼みは一度きりで、タブを切り替えて戻っても効かない", async () => {
+    const world = await started();
+    world.dispatch({ type: "library/new" });
+    world.dispatch({ type: "add", path: ["cast", "toneExamples"] });
+    expect(world.session().ui.focus?.path).toEqual(["cast", "toneExamples", 0, "situation"]);
+    world.dispatch({ type: "reveal" });
+    expect(world.session().ui.focus).not.toBeNull();
+    world.dispatch({ type: "editor/tab", tab: "memo" });
+    world.dispatch({ type: "editor/tab", tab: "character" });
+    expect(world.session().ui.focus).toBeNull();
+  });
+
   it("消したものは「元に戻す」で戻せる（そのあと書き換えたら戻さない）", async () => {
     const world = await started();
     world.dispatch({ type: "library/new" });

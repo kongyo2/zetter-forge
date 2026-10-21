@@ -229,6 +229,8 @@ export function presentAffinity(ctx: Context): AffinityTabVM {
           ? {
               kind: "disabled",
               disabled: toggle(["disabled"], "このキャラは好感度を使わない", true),
+              // 使わない設定でも中身は確認されるので、直すものがあれば見せる（欄は使う設定に戻すと出る）
+              error: validateAffinityConfig(value) || null,
             }
           : { kind: "config", config: configVM(ctx, scope, value, isOverride, session.ui.stage) },
     },

@@ -270,9 +270,17 @@ function presentToasts(state: AppState): ToastVM[] {
   }));
 }
 
+function windowTitle(session: Session | null): string {
+  if (!session) return "Zetter Forge";
+  const title = castDisplayTitle(session.doc).title || "名前未設定のキャスト";
+  // 保存していない変更があれば、名前の前に印を付ける
+  return `${session.dirty ? "● " : ""}${title} — Zetter Forge`;
+}
+
 export function presentRoot(state: AppState): RootVM {
   const session = state.session;
   return {
+    title: windowTitle(session),
     sidebar: presentSidebar(state),
     workspace: session
       ? { kind: "editor", editor: presentEditor(state, session) }

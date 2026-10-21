@@ -39,6 +39,9 @@ function RootView({ vm }: { vm: RootVM }) {
   const preventUnload = useRef(vm.preventUnload);
   preventUnload.current = vm.preventUnload;
   useEffect(() => {
+    document.title = vm.title;
+  }, [vm.title]);
+  useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!preventUnload.current) return;
       event.preventDefault();
@@ -69,7 +72,7 @@ function RootView({ vm }: { vm: RootVM }) {
 }
 
 export function Root({ mediator }: { mediator: Mediator }) {
-  const state = useSyncExternalStore(mediator.subscribe, mediator.getState);
+  const state = useSyncExternalStore(mediator.subscribe, mediator.getState, mediator.getState);
   const vm = useMemo(() => presentRoot(state), [state]);
   return (
     <ChainRoot onEvent={mediator.dispatch}>

@@ -112,7 +112,6 @@ export function Editor({ vm }: { vm: EditorVM }) {
       emit({ type: "editor/checks", open: false });
     }
   };
-  const selected = vm.tabs.find((tab) => tab.selected);
   return (
     <div className="editor" onKeyDown={onKeyDown}>
       <header className="editor-head">
@@ -193,7 +192,7 @@ export function Editor({ vm }: { vm: EditorVM }) {
           className="editor-main"
           id="editor-panel"
           role="tabpanel"
-          aria-labelledby={selected ? `editor-tab-${selected.id}` : undefined}
+          aria-labelledby={`editor-tab-${vm.tab}`}
           key={`${vm.key}:${vm.tab}`}
         >
           <Panel vm={vm.panel} />

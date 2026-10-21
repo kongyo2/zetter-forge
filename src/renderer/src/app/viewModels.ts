@@ -207,6 +207,8 @@ export interface SidebarVM {
 }
 
 export interface RootVM {
+  /** 窓のタイトル */
+  title: string;
   sidebar: SidebarVM;
   workspace: { kind: "welcome"; hasCasts: boolean } | { kind: "editor"; editor: EditorVM };
   dialog: DialogVM | null;
@@ -396,7 +398,7 @@ export interface AffinityTabVM {
     subject: Path;
     sheet:
       | { kind: "inherit" }
-      | { kind: "disabled"; disabled: ToggleVM }
+      | { kind: "disabled"; disabled: ToggleVM; error: string | null }
       | { kind: "config"; config: AffinityConfigVM };
   };
 }

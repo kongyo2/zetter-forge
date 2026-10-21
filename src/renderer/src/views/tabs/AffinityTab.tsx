@@ -244,6 +244,12 @@ function Subject({ sheet }: { sheet: NonNullable<AffinityTabVM["setup"]>["sheet"
       <>
         <Toggle vm={sheet.disabled} />
         <p className="note">このキャラには好感度を使いません。</p>
+        {sheet.error ? (
+          <p className="field-error block">
+            <IconError />
+            {sheet.error}（上の切り替えをオフにすると、直す欄が出ます）
+          </p>
+        ) : null}
         <div>
           <button
             type="button"

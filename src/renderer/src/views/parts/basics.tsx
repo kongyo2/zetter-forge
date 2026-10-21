@@ -218,7 +218,10 @@ export function CopyButton({
     if (vm.flash === null) return undefined;
     setFlashing(true);
     const timer = window.setTimeout(() => setFlashing(false), FLASH_MS);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      setFlashing(false);
+    };
   }, [vm.flash]);
   const text = flashing
     ? "コピーしました"

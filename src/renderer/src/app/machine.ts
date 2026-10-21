@@ -108,8 +108,38 @@ class Step {
   }
 }
 
+/** 利用者の操作ではないできごと（処理の結果・時計・画面の中だけのもの） */
+const NOT_USER_ACTIONS = new Set<AppEvent["type"]>([
+  "app/start",
+  "clock",
+  "reveal",
+  "tab/select",
+  "window/focus",
+  "library/loaded",
+  "library/failed",
+  "root/chosen",
+  "root/failed",
+  "cast/loaded",
+  "cast/load-failed",
+  "cast/saved",
+  "cast/save-failed",
+  "image/read",
+  "image/read-failed",
+  "image/encoded",
+  "image/encode-failed",
+  "copy/done",
+  "copy/failed",
+  "task/failed",
+  "toast/expire",
+]);
+
 export function arbitrate(state: AppState, event: AppEvent, now: number): Transition {
   const step = new Step(state, now);
+  // フォーカスを移す頼みと「コピーしました」は一度きり。次の操作で消す
+  // （残っていると、タブを切り替えて戻ったときにもう一度効いてしまう）
+  const ui = state.session?.ui;
+  if (ui && (ui.focus || ui.flash) && !NOT_USER_ACTIONS.has(event.type))
+    step.ui({ focus: null, flash: null });
   handle(step, event);
   return { state: step.state, effects: step.effects };
 }

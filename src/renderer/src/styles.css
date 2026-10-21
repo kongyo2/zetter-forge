@@ -2155,10 +2155,17 @@ h3 {
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
+  margin-top: -10px;
   border: 1px solid var(--rule);
-  border-radius: 0 0 8px 8px;
+  border-radius: 8px;
   background: var(--sheet);
   box-shadow: 0 6px 12px -10px rgb(20 26 40 / 0.4);
+}
+
+/* 写す一覧では、見出しどうしの罫線を帯のすぐ下から始める */
+.transfer > .transfer-bar + .section {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .transfer-progress {
