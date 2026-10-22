@@ -19,7 +19,7 @@ export interface ImagePort {
 
 /** Mediator が外とやり取りする口 */
 export interface Ports {
-  forge: Omit<ForgeApi, "onCommand">;
+  forge: Omit<ForgeApi, "onCommand" | "onRemote">;
   images: ImagePort;
   /** ms ミリ秒後に task を行う */
   schedule(ms: number, task: () => void): void;
@@ -36,7 +36,9 @@ type FailureType =
   | "root/failed"
   | "cast/load-failed"
   | "image/read-failed"
-  | "image/encode-failed";
+  | "image/encode-failed"
+  | "mcp/load-failed"
+  | "mcp/save-failed";
 
 function toFailure(type: FailureType, token: number): (error: unknown) => AppEvent {
   return (error) => ({ type, token, message: messageOf(error) });
@@ -193,6 +195,27 @@ export class Mediator {
       }
       case "url/open":
         this.attempt(forge.openExternal(effect.url), "ページを開けませんでした");
+        return;
+      case "mcp/load":
+        this.settle(
+          forge.getMcp(),
+          (info) => ({ type: "mcp/loaded", token: effect.token, info }),
+          toFailure("mcp/load-failed", effect.token),
+        );
+        return;
+      case "mcp/save":
+        this.settle(
+          forge.saveMcp(effect.settings),
+          (info) => ({ type: "mcp/saved", token: effect.token, info }),
+          toFailure("mcp/save-failed", effect.token),
+        );
+        return;
+      case "clipboard/write":
+        this.settle(
+          forge.copyText(effect.text),
+          () => ({ type: "notice", message: effect.message }),
+          (error) => ({ type: "copy/failed", message: messageOf(error) }),
+        );
         return;
       case "toast/expire":
         this.ports.schedule(effect.after, () =>

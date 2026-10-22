@@ -189,7 +189,20 @@ export type DialogVM =
       progress: string | null;
       busy: boolean;
       error: string | null;
-    };
+    }
+  | SettingsDialogVM;
+
+export interface SettingsDialogVM {
+  kind: "settings";
+  enabled: ToggleVM;
+  port: { value: string; invalid: boolean; disabled: boolean; hint: string };
+  /** MCP サーバーのいまの様子（保存した設定で立てたもの） */
+  status: { tone: "off" | "running" | "failed" | "loading"; text: string; url: string | null };
+  error: string | null;
+  canApply: boolean;
+  /** 変えた値があれば「キャンセル」、なければ「閉じる」 */
+  closeLabel: string;
+}
 
 export interface SidebarVM {
   draft: { title: string; note: string } | null;
@@ -213,6 +226,8 @@ export interface SidebarVM {
   errors: { folder: string; message: string }[];
   root: string;
   refreshing: boolean;
+  /** MCP サーバーの様子（使っていなければ null） */
+  mcp: { tone: "running" | "failed"; text: string } | null;
 }
 
 export interface RootVM {

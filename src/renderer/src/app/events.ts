@@ -3,6 +3,7 @@
 // 上る途中の部品は、自分の場所（path の前半）を付け足していく。
 import type { CroppedImage, CropCanvas } from "@shared/images";
 import type { LibraryListing, LoadedCast, MenuCommand, SavedCast } from "@shared/ipc";
+import type { McpInfo } from "@shared/mcp";
 import type { EditorTab } from "@shared/validate";
 
 import type { Path, PickedFile, Selection, ViewTab } from "./types";
@@ -66,6 +67,11 @@ export type ViewEvent =
   | { type: "crop/cancel" }
   /** タブの並びで 1 つ選んだ（何を選んだかは、上の部品が意味を足す） */
   | { type: "tab/select"; id: string }
+  // 設定（MCP サーバー）
+  | { type: "settings/open" }
+  | { type: "settings/change"; patch: { enabled?: boolean; port?: string } }
+  | { type: "settings/save" }
+  | { type: "settings/copy-url" }
   // 知らせ
   | { type: "toast/undo"; id: number }
   // 窓
@@ -96,6 +102,14 @@ type SystemEvent =
   | { type: "copy/done"; sessionKey: number; key: string; hash: string; label: string }
   | { type: "copy/failed"; message: string }
   | { type: "task/failed"; message: string }
-  | { type: "toast/expire"; id: number };
+  | { type: "toast/expire"; id: number }
+  | { type: "mcp/loaded"; token: number; info: McpInfo }
+  | { type: "mcp/load-failed"; token: number; message: string }
+  | { type: "mcp/saved"; token: number; info: McpInfo }
+  | { type: "mcp/save-failed"; token: number; message: string }
+  /** 終わったことを知らせる（クリップボードにコピーしたなど） */
+  | { type: "notice"; message: string }
+  /** MCP サーバーから頼まれた書き換え。画面の操作と同じ決まりで行う */
+  | { type: "remote/edit"; edit: FieldEvent };
 
 export type AppEvent = ViewEvent | SystemEvent;

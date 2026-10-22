@@ -1,7 +1,7 @@
 import type { SidebarVM } from "../app/viewModels";
 import { useEmit } from "./chain";
 import { Avatar } from "./parts/basics";
-import { IconPlus } from "./parts/icons";
+import { IconPlus, IconSettings } from "./parts/icons";
 
 /** 保存先のフォルダを選び直す（読めなかったときと、一覧の下に置く） */
 function ChooseRootButton() {
@@ -50,7 +50,18 @@ export function Sidebar({ vm }: { vm: SidebarVM }) {
   const emit = useEmit();
   return (
     <aside className="sidebar">
-      <div className="brand">Zetter Forge</div>
+      <div className="brand-row">
+        <div className="brand">Zetter Forge</div>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="設定"
+          title="設定（Ctrl+,）"
+          onClick={() => emit({ type: "settings/open" })}
+        >
+          <IconSettings />
+        </button>
+      </div>
       <button
         type="button"
         className="btn btn-outline btn-block"
@@ -121,6 +132,7 @@ export function Sidebar({ vm }: { vm: SidebarVM }) {
           <span className="library-root-label">保存先</span>
           <span className="library-root-path">{vm.root}</span>
         </span>
+        {vm.mcp ? <p className={`mcp-status is-${vm.mcp.tone}`}>{vm.mcp.text}</p> : null}
         <div className="button-row">
           <ChooseRootButton />
           <button

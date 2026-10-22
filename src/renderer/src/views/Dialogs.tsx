@@ -4,15 +4,19 @@ import type Cropper from "cropperjs";
 import {
   type ReactNode,
   type SyntheticEvent,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
 
-import type { DialogVM } from "../app/viewModels";
+import type { ViewEvent } from "../app/events";
+import type { DialogVM, SettingsDialogVM } from "../app/viewModels";
 import { createCropper } from "../runtime/crop";
-import { useEmit } from "./chain";
+import { type Emit, Link, useEmit } from "./chain";
+import { Toggle } from "./parts/basics";
+import { IconCopy } from "./parts/icons";
 
 function Modal({
   label,
@@ -172,6 +176,111 @@ function CropDialog({ vm }: { vm: Extract<DialogVM, { kind: "crop" }> }) {
   );
 }
 
+const PORT_ID = "settings-port";
+const PORT_HINT_ID = "settings-port-hint";
+
+function SettingsDialog({ vm }: { vm: SettingsDialogVM }) {
+  const emit = useEmit();
+  // トグルのオン・オフを、設定の書き換えとして上へ渡す
+  const enable = useCallback((event: ViewEvent, next: Emit) => {
+    if (event.type !== "check") return false;
+    next({ type: "settings/change", patch: { enabled: event.checked } });
+    return true;
+  }, []);
+  return (
+    <Modal label="設定" className="settings-modal" onCancel={() => emit({ type: "dialog/cancel" })}>
+      <form
+        className="settings-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          emit({ type: "settings/save" });
+        }}
+      >
+        <h2 className="modal-title">設定</h2>
+        <section className="settings-section" aria-labelledby="settings-mcp-title">
+          <h3 id="settings-mcp-title">AI エージェントとの連携（MCP）</h3>
+          <Link handle={enable}>
+            <Toggle vm={vm.enabled} />
+          </Link>
+          <div className="settings-port">
+            <label className="field-label" htmlFor={PORT_ID}>
+              ポート
+            </label>
+            <input
+              id={PORT_ID}
+              className="input input-number"
+              inputMode="numeric"
+              value={vm.port.value}
+              disabled={vm.port.disabled}
+              aria-invalid={vm.port.invalid || undefined}
+              aria-describedby={PORT_HINT_ID}
+              onChange={(event) =>
+                emit({ type: "settings/change", patch: { port: event.target.value } })
+              }
+            />
+            <span className="note" id={PORT_HINT_ID}>
+              {vm.port.hint}。ほかのアプリと重ならない番号にします。
+            </span>
+          </div>
+          <div className="settings-status">
+            <p className={`mcp-status is-${vm.status.tone}`} role="status">
+              {vm.status.text}
+            </p>
+            {vm.status.url ? (
+              <div className="field-row">
+                <input
+                  className="input input-plain"
+                  readOnly
+                  value={vm.status.url}
+                  aria-label="MCP サーバーの URL"
+                  onFocus={(event) => event.target.select()}
+                />
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => emit({ type: "settings/copy-url" })}
+                >
+                  <IconCopy />
+                  コピー
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <p className="note">
+            動いているあいだ、AI エージェントの MCP の設定に上の URL（Streamable
+            HTTP）を足すとつながります。このパソコンの中からだけつながり、つないだ AI
+            は画面での操作と同じように、開いているキャストを書き換えたり保存したりできます。
+          </p>
+        </section>
+        {vm.error ? (
+          <p className="field-error block" role="alert">
+            {vm.error}
+          </p>
+        ) : null}
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn btn-plain"
+            onClick={() => emit({ type: "dialog/cancel" })}
+          >
+            {vm.closeLabel}
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={!vm.canApply}>
+            この設定にする
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export function Dialog({ vm }: { vm: DialogVM }) {
-  return vm.kind === "confirm" ? <ConfirmDialog key={vm.id} vm={vm} /> : <CropDialog vm={vm} />;
+  switch (vm.kind) {
+    case "confirm":
+      return <ConfirmDialog key={vm.id} vm={vm} />;
+    case "crop":
+      return <CropDialog vm={vm} />;
+    case "settings":
+      return <SettingsDialog vm={vm} />;
+  }
 }

@@ -6,6 +6,14 @@ import { type CopyLog, textHash } from "@shared/copyLog";
 import type { CroppedImage } from "@shared/images";
 import type { LoadedCast, SavedCast } from "@shared/ipc";
 import { LIMITS } from "@shared/limits";
+import {
+  DEFAULT_MCP_SETTINGS,
+  MCP_PORT_MAX,
+  MCP_PORT_MIN,
+  type McpInfo,
+  type McpSettings,
+  parsePort,
+} from "@shared/mcp";
 import type { EditorTab } from "@shared/validate";
 
 import {
@@ -43,6 +51,7 @@ import {
   type Intent,
   type Session,
   type SessionUi,
+  type SettingsDialog,
   type Toast,
   type UndoPoint,
   initialUi,
@@ -147,6 +156,11 @@ const NOT_USER_ACTIONS = new Set<AppEvent["type"]>([
   "copy/failed",
   "task/failed",
   "toast/expire",
+  "mcp/loaded",
+  "mcp/load-failed",
+  "mcp/saved",
+  "mcp/save-failed",
+  "notice",
 ]);
 
 export function arbitrate(state: AppState, event: AppEvent, now: number): Transition {
@@ -165,6 +179,7 @@ function handle(step: Step, event: AppEvent): void {
   switch (event.type) {
     case "app/start":
       loadLibrary(step);
+      loadMcp(step);
       return;
     case "clock":
       step.set({ now: event.now });
@@ -174,6 +189,7 @@ function handle(step: Step, event: AppEvent): void {
       if (state.dialog) return;
       if (event.command === "new") request(step, { kind: "new", discard: false });
       else if (event.command === "save") save(step, null);
+      else if (event.command === "settings") openSettings(step);
       else copyNext(step);
       return;
 
@@ -307,7 +323,12 @@ function handle(step: Step, event: AppEvent): void {
       return;
     }
     case "dialog/cancel":
-      if (state.dialog?.kind === "confirm") step.set({ dialog: null });
+      // 設定は、保存の途中では閉じない（保存した結果を見せる）
+      if (
+        state.dialog?.kind === "confirm" ||
+        (state.dialog?.kind === "settings" && !state.dialog.busy)
+      )
+        step.set({ dialog: null });
       return;
     case "image/read":
       withCrop(step, event.token, (dialog) => ({ ...dialog, source: event.source }));
@@ -342,6 +363,54 @@ function handle(step: Step, event: AppEvent): void {
       if (state.dialog?.kind === "crop") step.set({ dialog: null });
       return;
 
+    // 設定（MCP サーバー） --------------------------------------------------
+    case "settings/open":
+      openSettings(step);
+      return;
+    case "settings/change":
+      withSettings(step, (dialog) =>
+        dialog.busy ? dialog : { ...dialog, ...event.patch, error: null },
+      );
+      return;
+    case "settings/save":
+      saveSettings(step);
+      return;
+    case "settings/copy-url":
+      if (state.mcp?.status.state === "running") {
+        step.effect({
+          type: "clipboard/write",
+          text: state.mcp.status.url,
+          message: "MCP サーバーの URL をコピーしました。",
+        });
+      }
+      return;
+    case "mcp/loaded":
+      mcpLoaded(step, event.token, event.info);
+      return;
+    case "mcp/load-failed":
+      if (event.token !== state.mcpToken) return;
+      withSettings(step, (dialog) =>
+        dialog.token === event.token
+          ? { ...dialog, busy: false, error: `設定を読めませんでした: ${event.message}` }
+          : dialog,
+      );
+      return;
+    case "mcp/saved":
+      mcpSaved(step, event.token, event.info);
+      return;
+    case "mcp/save-failed":
+      withSettings(step, (dialog) =>
+        dialog.token === event.token
+          ? { ...dialog, busy: false, error: `保存できませんでした: ${event.message}` }
+          : dialog,
+      );
+      return;
+    case "remote/edit":
+      // MCP サーバーからの書き換えでは、入力欄のフォーカスを動かさない（利用者が書いている欄から離さない）
+      fieldEvent(step, event.edit);
+      step.ui({ focus: null });
+      return;
+
     // 知らせ ----------------------------------------------------------------
     case "toast/expire":
       step.set({ toasts: state.toasts.filter((toast) => toast.id !== event.id) });
@@ -351,6 +420,9 @@ function handle(step: Step, event: AppEvent): void {
       return;
     case "task/failed":
       step.toast(event.message, "error");
+      return;
+    case "notice":
+      step.toast(event.message);
       return;
     case "reveal":
     case "tab/select":
@@ -406,10 +478,12 @@ function sessionFromLoaded(key: number, loaded: LoadedCast): Session {
 
 /**
  * 開いているキャストを替える。前のキャストについて出していたダイアログは閉じる
- * （残すと、消す・切り抜くなどの確かめが、替えたあとのキャストに効いてしまう）。
+ * （残すと、消す・切り抜くなどの確かめが、替えたあとのキャストに効いてしまう）。設定はキャストと
+ * 関わらないので残す。
  */
 function switchSession(step: Step, session: Session | null): void {
-  step.set({ session, dialog: null });
+  const dialog = step.state.dialog?.kind === "settings" ? step.state.dialog : null;
+  step.set({ session, dialog });
 }
 
 /** いま編集しているキャストを、確かめずに離れてよいか */
@@ -995,6 +1069,89 @@ function encoded(step: Step, token: number, image: CroppedImage): void {
     return;
   }
   nextImage(step, dialog, null);
+}
+
+// ---------------------------------------------------------------------------
+// 設定（MCP サーバー）
+
+function loadMcp(step: Step): void {
+  const token = step.next();
+  step.set({ mcpToken: token });
+  step.effect({ type: "mcp/load", token });
+}
+
+/** 入力欄の値（保存した設定から始める） */
+function settingsForm(settings: McpSettings): Pick<SettingsDialog, "enabled" | "port"> {
+  return { enabled: settings.enabled, port: String(settings.port) };
+}
+
+function openSettings(step: Step): void {
+  const { state } = step;
+  if (state.dialog) return;
+  // 起動できたかなど、いまの様子を読み直す
+  loadMcp(step);
+  step.set({
+    dialog: {
+      kind: "settings",
+      token: step.state.mcpToken,
+      ...settingsForm(state.mcp?.settings ?? DEFAULT_MCP_SETTINGS),
+      // 起動したときに読めていなければ、読み終えるまで入力欄を止める
+      busy: state.mcp === null,
+      error: null,
+    },
+  });
+}
+
+function withSettings(step: Step, update: (dialog: SettingsDialog) => SettingsDialog): void {
+  const dialog = step.state.dialog;
+  if (dialog?.kind === "settings") step.set({ dialog: update(dialog) });
+}
+
+function saveSettings(step: Step): void {
+  const dialog = step.state.dialog;
+  if (dialog?.kind !== "settings" || dialog.busy) return;
+  const port = parsePort(dialog.port);
+  if (port === null) {
+    step.set({
+      dialog: {
+        ...dialog,
+        error: `ポートは ${MCP_PORT_MIN}〜${MCP_PORT_MAX} の数にしてください。`,
+      },
+    });
+    return;
+  }
+  const token = step.next();
+  step.set({ mcpToken: token, dialog: { ...dialog, token, busy: true, error: null } });
+  step.effect({ type: "mcp/save", token, settings: { enabled: dialog.enabled, port } });
+}
+
+function mcpLoaded(step: Step, token: number, info: McpInfo): void {
+  const { state } = step;
+  if (token !== state.mcpToken) return;
+  step.set({ mcp: info });
+  withSettings(step, (dialog) =>
+    dialog.token === token && dialog.busy
+      ? { ...dialog, ...settingsForm(info.settings), busy: false }
+      : dialog,
+  );
+  // 起動したときに立てられなかったら知らせる（設定でポートを変えられる）
+  if (state.mcp === null && info.status.state === "failed")
+    step.toast(`MCP サーバーを起動できませんでした: ${info.status.message}`, "error");
+}
+
+function mcpSaved(step: Step, token: number, info: McpInfo): void {
+  step.set({ mcp: info });
+  withSettings(step, (dialog) =>
+    dialog.token === token
+      ? { ...dialog, ...settingsForm(info.settings), busy: false, error: null }
+      : dialog,
+  );
+  step.toast(
+    info.status.state === "failed"
+      ? "設定を保存しました。MCP サーバーは起動できませんでした。"
+      : "設定を保存しました。",
+    info.status.state === "failed" ? "error" : "info",
+  );
 }
 
 // ---------------------------------------------------------------------------

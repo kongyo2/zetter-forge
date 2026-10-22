@@ -1,5 +1,7 @@
 import type { CastDocument, CastImage, CastMode, CastStatus } from "./cast";
 import type { CopyLog } from "./copyLog";
+import type { McpInfo, McpSettings } from "./mcp";
+import type { RemoteReply, RemoteRequest } from "./remote";
 
 /** ライブラリの一覧に出す 1 件 */
 export interface CastSummary {
@@ -79,12 +81,18 @@ export interface ForgeApi {
   copyText(text: string): Promise<void>;
   /** https のページを既定のブラウザで開く */
   openExternal(url: string): Promise<void>;
+  /** MCP サーバーの設定といまの様子 */
+  getMcp(): Promise<McpInfo>;
+  /** MCP サーバーの設定を保存して、立て直したあとの様子を返す */
+  saveMcp(settings: McpSettings): Promise<McpInfo>;
   /** メニューのコマンド。戻り値で登録を外す */
   onCommand(listener: (command: MenuCommand) => void): () => void;
+  /** MCP サーバーから届く頼みを受け持つ。戻り値で登録を外す */
+  onRemote(handler: (request: RemoteRequest) => Promise<RemoteReply>): () => void;
 }
 
-/** 「新しいキャスト」「保存」「次の項目をコピー」 */
-export type MenuCommand = "new" | "save" | "copy-next";
+/** 「新しいキャスト」「保存」「次の項目をコピー」「設定」 */
+export type MenuCommand = "new" | "save" | "copy-next" | "settings";
 
 declare global {
   interface Window {
