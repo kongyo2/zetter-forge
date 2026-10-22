@@ -6,6 +6,7 @@
 [![Release](https://img.shields.io/github/v/release/kongyo2/zetter-forge)](https://github.com/kongyo2/zetter-forge/releases/latest)
 [![License](https://img.shields.io/github/license/kongyo2/zetter-forge)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
+[![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/kongyo2/zetter-forge?labelColor=171717&color=FF570A&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
 Zetter のキャスト設定をパソコンに保存して、手元で書き直すためのデスクトップアプリです。Zetter に載せる前の下書き、載せたあとの控え、手元での改良に使います。
 

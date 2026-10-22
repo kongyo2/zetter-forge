@@ -41,6 +41,7 @@ function Mode({ vm }: { vm: ExperienceTabVM["mode"] }) {
           >
             <input
               type="radio"
+              className="visually-hidden"
               name="cast-mode"
               value={option.value}
               checked={option.selected}
