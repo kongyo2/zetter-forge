@@ -3,6 +3,7 @@ import type { SaveCastRequest } from "@shared/ipc";
 import { LIMITS } from "@shared/limits";
 import { describe, expect, it } from "vitest";
 
+import { isZetterUrl } from "../src/renderer/src/app/machine";
 import {
   castNamed,
   createWorld,
@@ -618,5 +619,21 @@ describe("Zetter へ写す", () => {
     world.dispatch({ type: "copy", path: ["cast", "avatar"] });
     expect(world.pending()).toEqual([]);
     expect(world.mediator.getState().toasts.at(-1)).toMatchObject({ tone: "error" });
+  });
+});
+
+describe("Zetter のページの URL", () => {
+  it("https の z-etter.com と zetter.si のページだけを Zetter のページとみなす", () => {
+    // Zetter が本番として扱うホスト（www.z-etter.com は 2026-10-23 時点で名前が引けない）
+    expect(isZetterUrl("https://z-etter.com/")).toBe(true);
+    expect(isZetterUrl("https://z-etter.com/cast/42")).toBe(true);
+    expect(isZetterUrl("https://zetter.si/cast/42")).toBe(true);
+    // ほかのページ・なりすましは開かない
+    expect(isZetterUrl("http://z-etter.com/cast/42")).toBe(false);
+    expect(isZetterUrl("https://z-etter.com.example.com/cast/42")).toBe(false);
+    expect(isZetterUrl("https://example.com/https://z-etter.com/")).toBe(false);
+    expect(isZetterUrl("https://dev.z-etter.com/cast/42")).toBe(false);
+    expect(isZetterUrl("javascript:alert(1)//https://z-etter.com/")).toBe(false);
+    expect(isZetterUrl("")).toBe(false);
   });
 });
