@@ -11,6 +11,7 @@ import type {
   SaveCastResult,
   SavedCast,
 } from "@shared/ipc";
+import { DEFAULT_MCP_SETTINGS, type McpInfo, type McpSettings, type McpStatus } from "@shared/mcp";
 
 import type { AppEvent } from "../../src/renderer/src/app/events";
 import { Mediator, type Ports } from "../../src/renderer/src/app/mediator";
@@ -76,6 +77,8 @@ export function createWorld(): World {
       writeCopyLog: forge("writeCopyLog"),
       copyText: forge("copyText"),
       openExternal: forge("openExternal"),
+      getMcp: forge("getMcp"),
+      saveMcp: forge("saveMcp"),
     },
     images: { read: call("read"), encode: call("encode") },
     schedule: (ms, task) => timers.push({ at: world.now + ms, task }),
@@ -179,11 +182,23 @@ export const croppedImage: CroppedImage = {
   bytes: 3,
 };
 
-/** 起動して、一覧が読めたところまで進める */
-export async function started(casts: Partial<CastSummary>[] = []): Promise<World> {
+/** MCP サーバーの設定と様子（既定は使っていない） */
+export function mcpInfo(
+  settings: Partial<McpSettings> = {},
+  status: McpStatus = { state: "off" },
+): McpInfo {
+  return { settings: { ...DEFAULT_MCP_SETTINGS, ...settings }, status };
+}
+
+/** 起動して、一覧と MCP サーバーの設定が読めたところまで進める */
+export async function started(
+  casts: Partial<CastSummary>[] = [],
+  mcp: McpInfo = mcpInfo(),
+): Promise<World> {
   const world = createWorld();
   world.dispatch({ type: "app/start" });
   world.take("getLibrary").resolve(listing(casts));
+  world.take("getMcp").resolve(mcp);
   await world.flush();
   return world;
 }

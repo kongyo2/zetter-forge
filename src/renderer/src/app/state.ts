@@ -3,6 +3,7 @@ import type { CastDocument } from "@shared/cast";
 import type { CopyLog } from "@shared/copyLog";
 import type { ImageKind } from "@shared/images";
 import type { LibraryListing, LoadedCast } from "@shared/ipc";
+import type { McpInfo } from "@shared/mcp";
 
 import {
   AFFINITY_DEFAULT,
@@ -137,7 +138,20 @@ export interface CropDialog {
   error: string | null;
 }
 
-type Dialog = ConfirmDialog | CropDialog;
+/** 設定（MCP サーバー）。入力中の値は、「この設定にする」を押すまで保存しない */
+export interface SettingsDialog {
+  kind: "settings";
+  /** 読み込み・保存の頼みの番号 */
+  token: number;
+  enabled: boolean;
+  /** ポートの欄の文字 */
+  port: string;
+  /** 読み込み・保存の途中 */
+  busy: boolean;
+  error: string | null;
+}
+
+type Dialog = ConfirmDialog | CropDialog | SettingsDialog;
 
 export interface Toast {
   id: number;
@@ -166,9 +180,13 @@ export interface AppState {
   query: string;
   session: Session | null;
   task: Task;
-  /** 開いているキャストについてのダイアログ（キャストを替えたら閉じる） */
+  /** ダイアログ。開いているキャストについてのもの（設定のほか）は、キャストを替えたら閉じる */
   dialog: Dialog | null;
   toasts: Toast[];
+  /** MCP サーバーの設定といまの様子。起動して読むまでは null */
+  mcp: McpInfo | null;
+  /** 最後に頼んだ、MCP サーバーの設定の読み込み・保存の番号 */
+  mcpToken: number;
 }
 
 export function initialState(now: number): AppState {
@@ -183,6 +201,8 @@ export function initialState(now: number): AppState {
     task: { kind: "idle" },
     dialog: null,
     toasts: [],
+    mcp: null,
+    mcpToken: 0,
   };
 }
 

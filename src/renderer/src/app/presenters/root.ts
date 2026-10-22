@@ -1,10 +1,11 @@
 // 画面全体に描くもの。仲介役の状態から、部品に渡す値（View Model）を作る。
 import { castDisplayTitle, sendableMembers } from "@shared/cast";
 import { IMAGE_SPECS } from "@shared/images";
+import { MCP_PORT_MAX, MCP_PORT_MIN, type McpInfo, parsePort } from "@shared/mcp";
 import { type CastIssue, type EditorTab, missingRequired } from "@shared/validate";
 
 import { issuesOf } from "../checks";
-import type { AppState, Session } from "../state";
+import type { AppState, Session, SettingsDialog } from "../state";
 import { transferItems, transferStatus } from "../transfer";
 import type { ViewTab } from "../types";
 import type {
@@ -14,12 +15,13 @@ import type {
   IssueVM,
   PanelVM,
   RootVM,
+  SettingsDialogVM,
   SidebarVM,
   ToastVM,
 } from "../viewModels";
 import { presentAffinity } from "./affinity";
 import { presentCharacter } from "./character";
-import { type Context, avatar, makeContext } from "./common";
+import { type Context, avatar, makeContext, toggle } from "./common";
 import { presentExperience } from "./experience";
 import { presentLorebook, presentMemo, presentPublish } from "./others";
 import { presentTransfer } from "./transfer";
@@ -110,7 +112,16 @@ function presentSidebar(state: AppState): SidebarVM {
     errors: listing?.errors ?? [],
     root: listing?.root ?? "…",
     refreshing: library.status === "loading" && !!listing,
+    mcp: presentMcpLine(state.mcp),
   };
+}
+
+/** 一覧の下に出す MCP サーバーの様子。使っていなければ出さない */
+function presentMcpLine(info: McpInfo | null): SidebarVM["mcp"] {
+  if (!info || info.status.state === "off") return null;
+  return info.status.state === "running"
+    ? { tone: "running", text: `MCP サーバー: ポート ${info.settings.port} で待ち受け中` }
+    : { tone: "failed", text: "MCP サーバーを起動できませんでした" };
 }
 
 function presentChecks(issues: CastIssue[], open: boolean): ChecksVM {
@@ -228,9 +239,48 @@ function presentEditor(state: AppState, session: Session): EditorVM {
   };
 }
 
+function presentSettings(state: AppState, dialog: SettingsDialog): SettingsDialogVM {
+  const saved = state.mcp;
+  const port = parsePort(dialog.port);
+  const changed =
+    !saved || dialog.enabled !== saved.settings.enabled || port !== saved.settings.port;
+  const status: SettingsDialogVM["status"] = !saved
+    ? { tone: "loading", text: "読み込み中…", url: null }
+    : dialog.busy
+      ? { tone: "loading", text: "設定を保存しています…", url: null }
+      : saved.status.state === "running"
+        ? { tone: "running", text: "動いています", url: saved.status.url }
+        : saved.status.state === "failed"
+          ? { tone: "failed", text: `起動できませんでした: ${saved.status.message}`, url: null }
+          : { tone: "off", text: "止まっています", url: null };
+  return {
+    kind: "settings",
+    enabled: {
+      ...toggle(
+        ["enabled"],
+        "MCP サーバーを使う",
+        dialog.enabled,
+        "Claude Code や Pi などの AI エージェントから、キャストを読んだり書き換えたり保存したりできるようにします。",
+      ),
+      disabled: dialog.busy,
+    },
+    port: {
+      value: dialog.port,
+      invalid: port === null,
+      disabled: dialog.busy,
+      hint: `${MCP_PORT_MIN}〜${MCP_PORT_MAX}`,
+    },
+    status,
+    error: dialog.error,
+    canApply: !dialog.busy && changed,
+    closeLabel: changed ? "キャンセル" : "閉じる",
+  };
+}
+
 function presentDialog(state: AppState): DialogVM | null {
   const dialog = state.dialog;
   if (!dialog) return null;
+  if (dialog.kind === "settings") return presentSettings(state, dialog);
   if (dialog.kind === "confirm") {
     const danger = dialog.choices.every((choice) => choice.tone === "danger");
     return {

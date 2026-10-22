@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ViewTab } from "../src/renderer/src/app/types";
 import { Root } from "../src/renderer/src/views/Root";
-import { castNamed, opened, started } from "./helpers/world";
+import { castNamed, mcpInfo, opened, started } from "./helpers/world";
 
 const TABS: ViewTab[] = [
   "character",
@@ -108,6 +108,26 @@ describe("画面の部品", () => {
     const html = renderToString(<Root mediator={world.mediator} />);
     expect(html).toContain("<dialog");
     expect(html).toContain("元に戻す");
+  });
+
+  it("設定のダイアログと、一覧の下の MCP サーバーの様子を描ける", async () => {
+    const running = mcpInfo(
+      { enabled: true },
+      { state: "running", url: "http://127.0.0.1:23110/mcp" },
+    );
+    const world = await started([], running);
+    expect(renderToString(<Root mediator={world.mediator} />)).toContain(
+      "MCP サーバー: ポート 23110 で待ち受け中",
+    );
+    world.dispatch({ type: "settings/open" });
+    world.take("getMcp").resolve(running);
+    await world.flush();
+    const html = renderToString(<Root mediator={world.mediator} />);
+    expect(html).toContain("<dialog");
+    expect(html).toContain("MCP サーバーを使う");
+    expect(html).toContain('value="23110"');
+    expect(html).toContain('value="http://127.0.0.1:23110/mcp"');
+    expect(html).toContain("この設定にする");
   });
 
   it("切り抜きのダイアログを描ける", async () => {

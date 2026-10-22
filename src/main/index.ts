@@ -14,8 +14,17 @@ import type {
   SaveCastResult,
 } from "@shared/ipc";
 import {
+  DEFAULT_MCP_SETTINGS,
+  MCP_PORT_MAX,
+  MCP_PORT_MIN,
+  type McpInfo,
+  isMcpSettings,
+} from "@shared/mcp";
+import type { RemoteReply, RemoteRequest } from "@shared/remote";
+import {
   BrowserWindow,
   Menu,
+  type WebContents,
   app,
   clipboard,
   dialog,
@@ -38,10 +47,13 @@ import {
   saveCast,
   writeCopyLog,
 } from "./library";
+import { McpHost, createZetterServer } from "./mcp";
 import { type AppSettings, readSettings, writeSettings } from "./settings";
 
 const APP_NAME = "Zetter Forge";
 const IMAGE_SCHEME = "forge-image";
+/** MCP サーバーからの頼みに、画面が返事をするまで待つ長さ（画面は 20 秒で打ち切って返事をする） */
+const REMOTE_TIMEOUT_MS = 30_000;
 
 protocol.registerSchemesAsPrivileged([
   { scheme: IMAGE_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
@@ -52,6 +64,63 @@ let settings: AppSettings;
 
 function settingsFile(): string {
   return path.join(app.getPath("userData"), "settings.json");
+}
+
+// ---------------------------------------------------------------------------
+// MCP サーバーから画面への頼み。編集中のキャストは画面が持っているので、仲介役に頼んで返事を待つ。
+// 頼みは 1 つずつ順に送る（前の頼みの結果を待ってから、次の操作を始めるように）。
+
+/** 頼みを受け持つと知らせてきた画面 */
+let remoteScreen: WebContents | null = null;
+const remoteWaiting = new Map<number, (reply: RemoteReply) => void>();
+let remoteSeq = 0;
+let remoteQueue: Promise<unknown> = Promise.resolve();
+
+function forgetRemoteScreen(): void {
+  remoteScreen = null;
+  for (const resolve of remoteWaiting.values())
+    resolve({ ok: false, error: "Zetter Forge の窓が閉じられました。" });
+  remoteWaiting.clear();
+}
+
+function askScreen(request: RemoteRequest): Promise<RemoteReply> {
+  const ask = () =>
+    new Promise<RemoteReply>((resolve) => {
+      const screen = remoteScreen;
+      if (!screen || screen.isDestroyed()) {
+        resolve({
+          ok: false,
+          error:
+            "Zetter Forge の窓が開いていません。アプリの窓を開いてから、もう一度試してください。",
+        });
+        return;
+      }
+      const id = (remoteSeq += 1);
+      const timer = setTimeout(() => {
+        if (remoteWaiting.delete(id))
+          resolve({ ok: false, error: "画面から返事がありませんでした。" });
+      }, REMOTE_TIMEOUT_MS);
+      remoteWaiting.set(id, (reply) => {
+        clearTimeout(timer);
+        resolve(reply);
+      });
+      screen.send("remote:request", id, request);
+    });
+  const next = remoteQueue.then(ask, ask);
+  remoteQueue = next;
+  return next;
+}
+
+const mcpHost = new McpHost(() =>
+  createZetterServer({
+    version: app.getVersion(),
+    libraryRoot: () => settings.libraryRoot,
+    remote: askScreen,
+  }),
+);
+
+async function mcpInfo(): Promise<McpInfo> {
+  return { settings: settings.mcp, status: await mcpHost.status() };
 }
 
 /** 画像を表示するための URL。forge-image://cast/<フォルダ>/<相対パス> */
@@ -177,6 +246,26 @@ function registerIpc(): void {
       throw new Error("https で始まる URL だけ開けます。");
     await shell.openExternal(url);
   });
+  handle("mcp:get", () => mcpInfo());
+  handle("mcp:save", async (next: unknown) => {
+    if (!isMcpSettings(next))
+      throw new Error(`ポートは ${MCP_PORT_MIN}〜${MCP_PORT_MAX} の数にしてください。`);
+    // 書けたときだけ覚えて、立て直す（書けなければ、いまの設定とサーバーのまま）
+    const updated: AppSettings = { ...settings, mcp: { enabled: next.enabled, port: next.port } };
+    await writeSettings(settingsFile(), updated);
+    settings = updated;
+    await mcpHost.apply(settings.mcp);
+    return mcpInfo();
+  });
+  ipcMain.on("remote:ready", (event) => {
+    if (event.sender === mainWindow?.webContents) remoteScreen = event.sender;
+  });
+  ipcMain.on("remote:reply", (event, id: unknown, reply: RemoteReply) => {
+    if (event.sender !== remoteScreen || typeof id !== "number") return;
+    const resolve = remoteWaiting.get(id);
+    remoteWaiting.delete(id);
+    resolve?.(reply);
+  });
 }
 
 function registerImageProtocol(): void {
@@ -228,6 +317,8 @@ function buildMenu(): void {
             submenu: [
               { label: `${APP_NAME} について`, role: "about" as const },
               { type: "separator" as const },
+              { label: "設定…", accelerator: "CmdOrCtrl+,", click: () => sendCommand("settings") },
+              { type: "separator" as const },
               { label: "サービス", role: "services" as const },
               { type: "separator" as const },
               { label: `${APP_NAME} を隠す`, role: "hide" as const },
@@ -246,6 +337,13 @@ function buildMenu(): void {
         { label: "保存", accelerator: "CmdOrCtrl+S", click: () => sendCommand("save") },
         { type: "separator" },
         { label: "ライブラリのフォルダを開く", click: openLibrary },
+        // macOS では、設定はアプリの名前のメニューに置く
+        ...(mac
+          ? []
+          : [
+              { type: "separator" as const },
+              { label: "設定…", accelerator: "CmdOrCtrl+,", click: () => sendCommand("settings") },
+            ]),
         { type: "separator" },
         mac ? { label: "ウィンドウを閉じる", role: "close" } : { label: "終了", role: "quit" },
       ],
@@ -311,6 +409,11 @@ function createWindow(): void {
   window.on("ready-to-show", () => window.show());
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
+    forgetRemoteScreen();
+  });
+  // 読み直しているあいだは、MCP サーバーからの頼みを受け持てない（読み終えた画面が知らせ直す）
+  window.webContents.on("did-start-loading", () => {
+    if (remoteScreen === window.webContents) forgetRemoteScreen();
   });
   // 保存していない変更があるときは、閉じる前に確かめる（画面側の beforeunload が合図）。
   window.webContents.on("will-prevent-unload", (event) => {
@@ -340,11 +443,14 @@ function createWindow(): void {
 async function start(): Promise<void> {
   settings = await readSettings(settingsFile(), {
     libraryRoot: path.join(app.getPath("documents"), "ZetterForge"),
+    mcp: DEFAULT_MCP_SETTINGS,
   });
   app.setAboutPanelOptions({ applicationName: APP_NAME, applicationVersion: app.getVersion() });
   registerImageProtocol();
   registerIpc();
   buildMenu();
+  // 立てられなかったときは、画面が様子を読んで知らせる（読むときは、立て終わるのを待つ）
+  mcpHost.apply(settings.mcp).catch((error: unknown) => console.error("[mcp]", error));
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -368,6 +474,7 @@ if (app.requestSingleInstanceLock()) {
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
   });
+  app.on("will-quit", () => void mcpHost.close());
 } else {
   app.quit();
 }

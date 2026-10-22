@@ -104,6 +104,17 @@ export function IconCopy() {
   );
 }
 
+/** 設定 */
+export function IconSettings() {
+  return (
+    <Icon>
+      <path d="M2.5 5h6M11.5 5h2M2.5 11h2M7.5 11h6" />
+      <circle cx="10" cy="5" r="1.5" />
+      <circle cx="6" cy="11" r="1.5" />
+    </Icon>
+  );
+}
+
 /** ファイルをフォルダで見る */
 export function IconFolder() {
   return (

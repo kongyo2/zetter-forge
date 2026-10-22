@@ -3,6 +3,7 @@
 import type { CopyLog } from "@shared/copyLog";
 import type { CropCanvas, ImageKind } from "@shared/images";
 import type { SaveCastRequest } from "@shared/ipc";
+import type { McpSettings } from "@shared/mcp";
 
 import type { PickedFile } from "./types";
 
@@ -37,4 +38,8 @@ export type Effect =
       file: string;
     }
   | { type: "url/open"; url: string }
-  | { type: "toast/expire"; id: number; after: number };
+  | { type: "toast/expire"; id: number; after: number }
+  | { type: "mcp/load"; token: number }
+  | { type: "mcp/save"; token: number; settings: McpSettings }
+  /** 文字をコピーして、終わったら message を知らせる（Zetter へ写す記録には残さない） */
+  | { type: "clipboard/write"; text: string; message: string };

@@ -223,8 +223,16 @@ h3 {
   background: var(--desk);
 }
 
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
 .brand {
-  padding: 0 6px 4px;
+  padding: 0 6px;
   font-family: var(--font-text);
   font-size: 19px;
   font-weight: 700;
@@ -2523,6 +2531,90 @@ h3 {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* ---------- settings ---------- */
+
+.settings-modal {
+  width: min(560px, calc(100vw - 48px));
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+}
+
+.settings-section h3 {
+  font-size: 14px;
+}
+
+.settings-port {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.settings-port .input {
+  width: 8em;
+}
+
+.settings-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* MCP サーバーの様子。点の色で、動いている（緑）・止まっている・起動できなかった（朱）を示す */
+.mcp-status {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.mcp-status::before {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rule-strong);
+  content: "";
+}
+
+.mcp-status.is-running {
+  color: var(--text);
+}
+
+.mcp-status.is-running::before {
+  background: var(--ok);
+}
+
+.mcp-status.is-failed {
+  color: var(--error);
+}
+
+.mcp-status.is-failed::before {
+  background: var(--error);
+}
+
+.library-foot .mcp-status {
+  padding: 0 6px;
+  font-size: 12px;
 }
 
 /* ---------- toasts ---------- */
