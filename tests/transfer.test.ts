@@ -475,7 +475,10 @@ describe("コピーした記録のファイル", () => {
   it("形が違うものは空として読む", () => {
     expect(normalizeCopyLog(null)).toEqual({});
     expect(normalizeCopyLog({ format: "other", items: {} })).toEqual({});
-    expect(normalizeCopyLog({ format: COPY_LOG_FORMAT, items: [] })).toEqual({});
+    // 記録の並びは、中身が記録の形でも読まない
+    expect(normalizeCopyLog({ format: COPY_LOG_FORMAT, items: [{ hash: "1", at: "t" }] })).toEqual(
+      {},
+    );
     expect(
       normalizeCopyLog({
         format: "zetter-forge/copied",

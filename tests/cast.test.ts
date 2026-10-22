@@ -519,6 +519,16 @@ describe("sendableMembers", () => {
     expect(sendableMembers(doc)).toEqual(doc.members.slice(0, 9));
   });
 
+  it("9 人の枠で切ってから空の人を落とす（前に空の人がいても、10 人目は送られない。Zetter と同じ順）", () => {
+    const named = Array.from({ length: 8 }, (_, index) => ({
+      ...createEmptyMember(),
+      name: `人${index + 1}`,
+    }));
+    const tenth = { ...createEmptyMember(), name: "十人目" };
+    const doc = { ...createEmptyCast(), members: [createEmptyMember(), ...named, tenth] };
+    expect(sendableMembers(doc)).toEqual(named);
+  });
+
   it("アイコンだけの人は送られ、空白だけ・パートナー設定だけの人は送られない", () => {
     const avatarOnly = {
       ...createEmptyMember(),
