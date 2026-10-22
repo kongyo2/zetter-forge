@@ -3,12 +3,23 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import type { SaveCastRequest } from "@shared/ipc";
 import { DEFAULT_MCP_SETTINGS, isMcpSettings, normalizeMcpSettings, parsePort } from "@shared/mcp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { readSettings, writeSettings } from "../src/main/settings";
 import type { SettingsDialogVM } from "../src/renderer/src/app/viewModels";
-import { type World, createWorld, listing, mcpInfo, started } from "./helpers/world";
+import {
+  type World,
+  castNamed,
+  createWorld,
+  listing,
+  loadedCast,
+  mcpInfo,
+  opened,
+  savedFrom,
+  started,
+} from "./helpers/world";
 
 let dir: string;
 
@@ -221,5 +232,26 @@ describe("設定の画面", () => {
     world.dispatch({ type: "menu", command: "new" });
     expect(world.session().doc.name).toBe("");
     expect(world.pending()).toEqual(["getMcp"]);
+  });
+
+  it("キャストを開く・保存するあいだは開かない（そのあとに続ける操作が、設定の画面を閉じるため）", async () => {
+    const world = await started([{ name: "A" }, { name: "B" }]);
+    await opened(world, "cast-0", castNamed("A"));
+    world.dispatch({ type: "input", path: ["cast", "name"], value: "A2" });
+    world.dispatch({ type: "library/open", folder: "cast-1" });
+    // 「保存して続ける」: 保存が終わったら B を開く
+    world.dispatch({ type: "dialog/choose", choice: "save" });
+    world.dispatch({ type: "settings/open" });
+    expect(world.vm().dialog).toBeNull();
+    const save = world.take("saveCast");
+    save.resolve(savedFrom(save.args[0] as SaveCastRequest));
+    await world.flush();
+    world.dispatch({ type: "menu", command: "settings" });
+    expect(world.vm().dialog).toBeNull();
+    world.take("loadCast").resolve(loadedCast("cast-1", castNamed("B")));
+    await world.flush();
+    world.dispatch({ type: "menu", command: "settings" });
+    expect(world.vm().dialog?.kind).toBe("settings");
+    expect(world.session().folder).toBe("cast-1");
   });
 });

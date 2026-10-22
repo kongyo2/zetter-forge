@@ -1087,7 +1087,9 @@ function settingsForm(settings: McpSettings): Pick<SettingsDialog, "enabled" | "
 
 function openSettings(step: Step): void {
   const { state } = step;
-  if (state.dialog) return;
+  // キャストを開く・保存するあいだは開かない（そのあとに続ける操作が、ダイアログを閉じたり
+  // 確かめに差し替えたりするので、保存の途中の設定の結果が見えなくなる）
+  if (state.dialog || state.task.kind !== "idle") return;
   // 起動できたかなど、いまの様子を読み直す
   loadMcp(step);
   step.set({

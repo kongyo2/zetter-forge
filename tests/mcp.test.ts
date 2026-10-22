@@ -258,6 +258,8 @@ describe("MCP サーバー", () => {
     const url = await serverUrl();
     expect(await post(url, {})).toBe(200);
     expect(await post(url, { origin: "https://evil.example" })).toBe(403);
+    // サンドボックスの iframe や file: のページは Origin が null になる
+    expect(await post(url, { origin: "null" })).toBe(403);
     expect(await post(url, { host: `evil.example:${url.port}` })).toBe(403);
     expect(await post(url, { "content-type": "text/plain" })).toBe(415);
     expect(await post(url, {}, "/other")).toBe(404);
