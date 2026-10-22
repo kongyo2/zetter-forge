@@ -1,11 +1,9 @@
-import type { ForgeApi, MenuCommand } from "@shared/ipc";
+import type { ForgeApi, InvokeResult, MenuCommand } from "@shared/ipc";
 import { contextBridge, ipcRenderer } from "electron";
-
-type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
 // contextBridge を越えると、エラーは文言しか残らない（印を付けても画面には届かない）
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
-  const result = (await ipcRenderer.invoke(channel, ...args)) as Result<T>;
+  const result = (await ipcRenderer.invoke(channel, ...args)) as InvokeResult<T>;
   if (!result.ok) throw new Error(result.error);
   return result.value;
 }

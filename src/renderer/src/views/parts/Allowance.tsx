@@ -2,12 +2,12 @@
 import type { CSSProperties } from "react";
 
 import type { AllowanceVM } from "../../app/viewModels";
+import { toneClass } from "./basics";
 import { IconError, IconWarning } from "./icons";
 
 export function Allowance({ vm }: { vm: AllowanceVM }) {
-  const tone = vm.tone === "over" ? " is-over" : vm.tone === "near" ? " is-near" : "";
   return (
-    <section className={`allowance${tone}`} aria-label={`${vm.title}の字数`}>
+    <section className={`allowance${toneClass(vm.tone)}`} aria-label={`${vm.title}の字数`}>
       <h3 className="allowance-title">{vm.title}</h3>
       <div className="allowance-bar">
         <div className="meter" role="img" aria-label={vm.meterLabel}>

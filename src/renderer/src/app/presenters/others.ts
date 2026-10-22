@@ -1,12 +1,20 @@
 // 設定集・見た目と公開・メモのタブに描くもの。
 import { castDisplayTitle } from "@shared/cast";
 import { LIMITS } from "@shared/limits";
-import { utf16Length } from "@shared/text";
 
 import { isZetterUrl } from "../machine";
 import { isPendingImage } from "../session";
 import type { LorebookTabVM, MemoTabVM, PublishTabVM } from "../viewModels";
-import { type Context, copyVM, counter, imageField, imageSrc, textField, toggle } from "./common";
+import {
+  type Context,
+  copyVM,
+  imageField,
+  imageSrc,
+  limit,
+  moveVM,
+  textField,
+  toggle,
+} from "./common";
 
 export function presentLorebook(ctx: Context): LorebookTabVM {
   const books = ctx.doc.lorebooks;
@@ -23,8 +31,7 @@ export function presentLorebook(ctx: Context): LorebookTabVM {
           ariaLabel: `設定集${index + 1}の書名`,
           value: book.title,
           placeholder: "Zetter での設定集の書名",
-          maxLength: LIMITS.lorebookTitle,
-          counter: counter(utf16Length(book.title), LIMITS.lorebookTitle),
+          ...limit(book.title, LIMITS.lorebookTitle),
         }),
         note: textField(ctx, scope, ["note"], {
           label: "メモ",
@@ -34,11 +41,7 @@ export function presentLorebook(ctx: Context): LorebookTabVM {
           multiline: true,
           rows: 2,
         }),
-        move: {
-          canUp: index > 0,
-          canDown: index < books.length - 1,
-          removeLabel: "この設定集を外す",
-        },
+        move: moveVM(index, books.length, "この設定集を外す"),
       };
     }),
     canAdd: books.length < LIMITS.lorebooks,
@@ -90,8 +93,7 @@ export function presentPublish(ctx: Context): PublishTabVM {
           labelHidden: true,
           value: tag,
           placeholder: "タグ",
-          maxLength: LIMITS.tag,
-          counter: counter(utf16Length(tag), LIMITS.tag),
+          ...limit(tag, LIMITS.tag),
         }),
       })),
       canAdd: doc.tags.length < LIMITS.tags,
@@ -102,8 +104,7 @@ export function presentPublish(ctx: Context): PublishTabVM {
           value: doc.hook,
           placeholder: "例: 「……で、話って何？」",
           hint: ["一覧カードに表示されます。"],
-          maxLength: LIMITS.hook,
-          counter: counter(utf16Length(doc.hook), LIMITS.hook),
+          ...limit(doc.hook, LIMITS.hook),
         })
       : null,
     background: imageField(ctx, scope, ["background"], doc.background, {

@@ -1,3 +1,4 @@
+import { type JsonObject, isRecord } from "./json";
 import { LIMITS } from "./limits";
 
 // ローカル保存用のキャスト設定。項目名と既定値は Zetter のキャスト作成画面に合わせ、
@@ -300,12 +301,6 @@ export function createEmptyCast(now = new Date()): CastDocument {
 // ---------------------------------------------------------------------------
 // 読み込み時の正規化。欠けた値は既定値で埋め、知らないキーは消さずに残す
 // （新しい版のアプリで書いたファイルを古い版で保存しても情報を落とさないため）。
-
-type JsonObject = Record<string, unknown>;
-
-function isRecord(value: unknown): value is JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function str(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;

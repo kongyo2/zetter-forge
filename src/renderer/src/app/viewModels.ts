@@ -114,6 +114,15 @@ export interface MoveVM {
   removeLabel: string | null;
 }
 
+/** 足したり消したりできる行の並び（口調サンプル・設定集・この会話でのあなた） */
+interface ListVM<Row> {
+  scope: Path;
+  /** 見出しに添える数（「3 / 10件」など） */
+  meta: string;
+  rows: Row[];
+  canAdd: boolean;
+}
+
 export interface TabItemVM<T extends string> {
   id: T;
   domId: string;
@@ -273,12 +282,12 @@ export interface PartnerVM {
   fields: TextFieldVM[];
 }
 
-export interface ToneListVM {
-  scope: Path;
-  meta: string;
-  rows: { index: number; situation: TextFieldVM; example: TextFieldVM; move: MoveVM }[];
-  canAdd: boolean;
-}
+export type ToneListVM = ListVM<{
+  index: number;
+  situation: TextFieldVM;
+  example: TextFieldVM;
+  move: MoveVM;
+}>;
 
 export interface CharacterSheetVM {
   /** できごとの path の前半（["cast"] か ["members", id]） */
@@ -340,7 +349,7 @@ export interface ExperienceTabVM {
   } | null;
   chat: { scope: Path; first: TextFieldVM; hidden: string | null } | null;
   about: TextFieldVM;
-  personas: { scope: Path; meta: string; rows: PersonaVM[]; canAdd: boolean };
+  personas: ListVM<PersonaVM>;
 }
 
 // 好感度 -------------------------------------------------------------------
@@ -405,12 +414,13 @@ export interface AffinityTabVM {
 
 // 設定集・見た目・メモ -----------------------------------------------------
 
-export interface LorebookTabVM {
-  scope: Path;
-  meta: string;
-  rows: { id: string; index: number; title: TextFieldVM; note: TextFieldVM; move: MoveVM }[];
-  canAdd: boolean;
-}
+export type LorebookTabVM = ListVM<{
+  id: string;
+  index: number;
+  title: TextFieldVM;
+  note: TextFieldVM;
+  move: MoveVM;
+}>;
 
 export interface GalleryItemVM {
   id: string;

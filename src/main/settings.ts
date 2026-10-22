@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { isRecord } from "@shared/json";
+
 export interface AppSettings {
   libraryRoot: string;
 }
@@ -8,13 +10,7 @@ export interface AppSettings {
 export async function readSettings(file: string, defaults: AppSettings): Promise<AppSettings> {
   try {
     const raw: unknown = JSON.parse(await fs.readFile(file, "utf8"));
-    if (
-      typeof raw === "object" &&
-      raw !== null &&
-      "libraryRoot" in raw &&
-      typeof raw.libraryRoot === "string" &&
-      raw.libraryRoot
-    ) {
+    if (isRecord(raw) && typeof raw.libraryRoot === "string" && raw.libraryRoot) {
       return { ...defaults, libraryRoot: raw.libraryRoot };
     }
   } catch {

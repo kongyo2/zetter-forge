@@ -117,6 +117,11 @@ function edit(doc: CastDocument, recipe: (draft: CastDocument) => EditResult | v
   return result;
 }
 
+/** 書き換えた文書と、そのあとにフォーカスを移す欄 */
+function focusOn(draft: CastDocument, path: Path, selection: Selection | null = null): EditOutcome {
+  return { doc: draft, focus: { path, selection } };
+}
+
 // ---------------------------------------------------------------------------
 // 文字・数・選択肢
 
@@ -394,13 +399,7 @@ export function applyInsert(
         refused: `パートナー設定は5つの欄の合計で${formatCount(LIMITS.partnerSettingsTotal)}字までなので、これ以上入りません。`,
       };
     slot.target.partnerSettings = { ...settings, [field]: next };
-    return {
-      doc: draft,
-      focus: {
-        path: [...slot.base, "partnerSettings", field],
-        selection: { start: caret, end: caret },
-      },
-    };
+    return focusOn(draft, [...slot.base, "partnerSettings", field], { start: caret, end: caret });
   });
 }
 
@@ -425,7 +424,7 @@ function insertIntroPlaceholder(doc: CastDocument, path: Path, selection: Select
     if (part) part.text = next;
     else draft.introScript.push({ kind: "speech", text: next, speakerId: null });
     const caret = start + USER_PLACEHOLDER.length;
-    return { doc: draft, focus: { path, selection: { start: caret, end: caret } } };
+    return focusOn(draft, path, { start: caret, end: caret });
   });
 }
 
@@ -437,11 +436,10 @@ export function applyAdd(doc: CastDocument, path: Path): EditResult {
   if (head === "members" && path.length === 1) {
     if (doc.mode !== "story" || 1 + doc.members.length >= LIMITS.charactersTotal) return null;
     const member = createEmptyMember();
-    return edit(doc, (draft) => ({
-      doc: { ...draft, members: [...draft.members, member] },
-      ui: { character: member.id },
-      focus: { path: ["members", member.id, "name"], selection: null },
-    }));
+    return edit(doc, (draft) => {
+      draft.members.push(member);
+      return { ...focusOn(draft, ["members", member.id, "name"]), ui: { character: member.id } };
+    });
   }
   if ((head === "cast" || head === "members") && path[path.length - 1] === "toneExamples") {
     return edit(doc, (draft) => {
@@ -450,23 +448,14 @@ export function applyAdd(doc: CastDocument, path: Path): EditResult {
       const list = slot.target.toneExamples;
       if (list.length >= LIMITS.toneItemsPerCharacter) return null;
       list.push({ situation: "", example: "" });
-      return {
-        doc: draft,
-        focus: {
-          path: [...slot.base, "toneExamples", list.length - 1, "situation"],
-          selection: null,
-        },
-      };
+      return focusOn(draft, [...slot.base, "toneExamples", list.length - 1, "situation"]);
     });
   }
   if (head === "intro" && path.length === 1) {
     if (doc.introScript.length >= LIMITS.introParts) return null;
     return edit(doc, (draft) => {
       draft.introScript.push({ kind: "narration", text: "", speakerId: null });
-      return {
-        doc: draft,
-        focus: { path: ["intro", draft.introScript.length - 1, "text"], selection: null },
-      };
+      return focusOn(draft, ["intro", draft.introScript.length - 1, "text"]);
     });
   }
   if (head === "personas" && path.length === 1) {
@@ -474,7 +463,7 @@ export function applyAdd(doc: CastDocument, path: Path): EditResult {
     const persona = createEmptyPersona();
     return edit(doc, (draft) => {
       draft.recommendedPersonas.push(persona);
-      return { doc: draft, focus: { path: ["personas", persona.id, "name"], selection: null } };
+      return focusOn(draft, ["personas", persona.id, "name"]);
     });
   }
   if (head === "lorebooks" && path.length === 1) {
@@ -482,14 +471,14 @@ export function applyAdd(doc: CastDocument, path: Path): EditResult {
     const id = newId();
     return edit(doc, (draft) => {
       draft.lorebooks.push({ id, title: "", note: "" });
-      return { doc: draft, focus: { path: ["lorebooks", id, "title"], selection: null } };
+      return focusOn(draft, ["lorebooks", id, "title"]);
     });
   }
   if (head === "tags" && path.length === 1) {
     if (doc.tags.length >= LIMITS.tags) return null;
     return edit(doc, (draft) => {
       draft.tags.push("");
-      return { doc: draft, focus: { path: ["tags", draft.tags.length - 1], selection: null } };
+      return focusOn(draft, ["tags", draft.tags.length - 1]);
     });
   }
   if (head === "affinity") {
@@ -521,12 +510,8 @@ export function applyAdd(doc: CastDocument, path: Path): EditResult {
         config.stages.push(createEmptyStage(start));
         const opened = config.stages.length - 1;
         return {
-          doc: draft,
+          ...focusOn(draft, ["affinity", key as string, "stages", opened, "startValue"]),
           ui: { stage: opened },
-          focus: {
-            path: ["affinity", key as string, "stages", opened, "startValue"],
-            selection: null,
-          },
         };
       });
     }
@@ -537,64 +522,62 @@ export function applyAdd(doc: CastDocument, path: Path): EditResult {
 // ---------------------------------------------------------------------------
 // 消す・外す（確かめてから消すもの以外。消したものは「元に戻す」で戻せる）
 
+/** remove で draft から消せたら、「元に戻す」の知らせの文言を付けて返す。消せなければ null */
+function removal(
+  doc: CastDocument,
+  message: string,
+  remove: (draft: CastDocument) => boolean,
+): EditResult {
+  return edit(doc, (draft) => (remove(draft) ? { doc: draft, removed: message } : null));
+}
+
+/** 位置 at の要素を外す（items を書き換える）。範囲の外なら false */
+function removeAt(items: unknown[], at: unknown): boolean {
+  const position = index(at, items.length);
+  if (position === null) return false;
+  items.splice(position, 1);
+  return true;
+}
+
+/** id の要素を外す（items を書き換える）。1 つもなければ false */
+function removeById<T extends { id: string }>(items: T[], id: unknown): boolean {
+  const kept = items.filter((item) => item.id !== id);
+  if (kept.length === items.length) return false;
+  items.splice(0, items.length, ...kept);
+  return true;
+}
+
 export function applyRemove(doc: CastDocument, path: Path, ui: { stage: number }): EditResult {
   const [head, key, field, at] = path;
-  if (head === "gallery" && path.length === 2) {
-    return edit(doc, (draft) => {
-      const before = draft.gallery.length;
-      draft.gallery = draft.gallery.filter((image) => image.id !== key);
-      if (draft.gallery.length === before) return null;
-      return { doc: draft, removed: "ギャラリー画像を外しました。" };
-    });
-  }
+  if (head === "gallery" && path.length === 2)
+    return removal(doc, "ギャラリー画像を外しました。", (draft) => removeById(draft.gallery, key));
   if (isImagePath(path)) {
-    return edit(doc, (draft) => {
-      if (!readImage(draft, path)) return null;
-      return writeImage(draft, path, null) ? { doc: draft, removed: "画像を外しました。" } : null;
-    });
+    return removal(
+      doc,
+      "画像を外しました。",
+      (draft) => !!readImage(draft, path) && writeImage(draft, path, null),
+    );
   }
   if ((head === "cast" || head === "members") && path[path.length - 2] === "toneExamples") {
-    return edit(doc, (draft) => {
+    return removal(doc, "口調サンプルを削除しました。", (draft) => {
       const slot = characterSlot(draft, path);
-      if (!slot || slot.rest.length !== 2) return null;
-      const position = index(slot.rest[1], slot.target.toneExamples.length);
-      if (position === null) return null;
-      slot.target.toneExamples.splice(position, 1);
-      return { doc: draft, removed: "口調サンプルを削除しました。" };
+      return !!slot && slot.rest.length === 2 && removeAt(slot.target.toneExamples, slot.rest[1]);
     });
   }
   if (head === "intro" && path.length === 2 && typeof key === "number") {
-    return edit(doc, (draft) => {
-      const position = index(key, draft.introScript.length);
-      if (position === null) return null;
-      draft.introScript.splice(position, 1);
-      return { doc: draft, removed: "イントロのパートを削除しました。" };
-    });
+    return removal(doc, "イントロのパートを削除しました。", (draft) =>
+      removeAt(draft.introScript, key),
+    );
   }
   if (head === "personas" && path.length === 2) {
-    return edit(doc, (draft) => {
-      const before = draft.recommendedPersonas.length;
-      draft.recommendedPersonas = draft.recommendedPersonas.filter((persona) => persona.id !== key);
-      if (draft.recommendedPersonas.length === before) return null;
-      return { doc: draft, removed: "ペルソナを削除しました。" };
-    });
+    return removal(doc, "ペルソナを削除しました。", (draft) =>
+      removeById(draft.recommendedPersonas, key),
+    );
   }
-  if (head === "lorebooks" && path.length === 2) {
-    return edit(doc, (draft) => {
-      const before = draft.lorebooks.length;
-      draft.lorebooks = draft.lorebooks.filter((book) => book.id !== key);
-      if (draft.lorebooks.length === before) return null;
-      return { doc: draft, removed: "設定集を外しました。" };
-    });
-  }
-  if (head === "tags" && path.length === 2) {
-    return edit(doc, (draft) => {
-      const position = index(key, draft.tags.length);
-      if (position === null) return null;
-      draft.tags.splice(position, 1);
-      return { doc: draft, removed: "タグを外しました。" };
-    });
-  }
+  if (head === "lorebooks" && path.length === 2)
+    return removal(doc, "設定集を外しました。", (draft) => removeById(draft.lorebooks, key));
+  if (head === "tags" && path.length === 2)
+    return removal(doc, "タグを外しました。", (draft) => removeAt(draft.tags, key));
   if (
     head === "affinity" &&
     path.length === 2 &&
@@ -602,10 +585,10 @@ export function applyRemove(doc: CastDocument, path: Path, ui: { stage: number }
     key !== AFFINITY_DEFAULT
   ) {
     // 個別設定をやめて共通設定に戻す
-    return edit(doc, (draft) => {
-      if (!draft.affinity?.overrides[key]) return null;
+    return removal(doc, "個別設定をやめて、共通設定に戻しました。", (draft) => {
+      if (!draft.affinity?.overrides[key]) return false;
       delete draft.affinity.overrides[key];
-      return { doc: draft, removed: "個別設定をやめて、共通設定に戻しました。" };
+      return true;
     });
   }
   if (head === "affinity" && field === "stages" && path.length === 4) {
@@ -678,19 +661,13 @@ export function applyMove(doc: CastDocument, path: Path, offset: -1 | 1): EditRe
       const position = slot ? index(slot.rest[1], slot.target.toneExamples.length) : null;
       if (!slot || position === null) return null;
       if (!moveItem(slot.target.toneExamples, position, position + offset)) return null;
-      return {
-        doc: draft,
-        focus: {
-          path: [...slot.base, "toneExamples", position + offset, "situation"],
-          selection: null,
-        },
-      };
+      return focusOn(draft, [...slot.base, "toneExamples", position + offset, "situation"]);
     }
     if (head === "intro" && path.length === 2) {
       const position = index(key, draft.introScript.length);
       if (position === null || !moveItem(draft.introScript, position, position + offset))
         return null;
-      return { doc: draft, focus: { path: ["intro", position + offset, "text"], selection: null } };
+      return focusOn(draft, ["intro", position + offset, "text"]);
     }
     if (head === "lorebooks" && path.length === 2) {
       const position = draft.lorebooks.findIndex((book) => book.id === key);

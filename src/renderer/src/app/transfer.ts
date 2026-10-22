@@ -21,6 +21,7 @@ import { LIMITS } from "@shared/limits";
 import { codePointLength, formatCount, utf16Length } from "@shared/text";
 import type { EditorTab } from "@shared/validate";
 
+import { perDocument } from "./memo";
 import { isPendingImage } from "./session";
 import { AFFINITY_DEFAULT, type Path, pathKey } from "./types";
 
@@ -167,6 +168,17 @@ class Builder {
 
 const onOff = (value: boolean) => (value ? "オン" : "オフ");
 
+/** 本人のアイコン（Zetter では、ストーリーはキャラクター、雑談は見た目・公開のタブにある） */
+function avatarItems(builder: Builder, doc: CastDocument): void {
+  builder.image(["cast", "avatar"], "アイコン", doc.avatar);
+  builder.setting(
+    ["cast", "avatarBlurred"],
+    "アイコンをぼかして表示する",
+    onOff(doc.avatarBlurred),
+    doc.avatarBlurred === DEFAULTS.avatarBlurred,
+  );
+}
+
 function partnerItems(builder: Builder, base: Path, settings: PartnerSettings): void {
   for (const field of PARTNER_SETTINGS_FIELDS) {
     builder.text(
@@ -293,15 +305,7 @@ function build(doc: CastDocument): TransferGroup[] {
   builder.group("キャラクター", "character");
   builder.sectionOf("本人");
   builder.text(["cast", "name"], "名前", doc.name, { max: LIMITS.name });
-  if (story) {
-    builder.image(["cast", "avatar"], "アイコン", doc.avatar);
-    builder.setting(
-      ["cast", "avatarBlurred"],
-      "アイコンをぼかして表示する",
-      onOff(doc.avatarBlurred),
-      doc.avatarBlurred === DEFAULTS.avatarBlurred,
-    );
-  }
+  if (story) avatarItems(builder, doc);
   builder.text(["cast", "persona"], "性格・設定", doc.persona, { max: LIMITS.settingsTotal });
   partnerItems(builder, ["cast"], doc.partnerSettings);
   toneItems(builder, ["cast"], doc.toneExamples);
@@ -420,15 +424,7 @@ function build(doc: CastDocument): TransferGroup[] {
     onOff(doc.coverBlurred),
     doc.coverBlurred === DEFAULTS.coverBlurred,
   );
-  if (!story) {
-    builder.image(["cast", "avatar"], "アイコン", doc.avatar);
-    builder.setting(
-      ["cast", "avatarBlurred"],
-      "アイコンをぼかして表示する",
-      onOff(doc.avatarBlurred),
-      doc.avatarBlurred === DEFAULTS.avatarBlurred,
-    );
-  }
+  if (!story) avatarItems(builder, doc);
   doc.tags.forEach((tag, index) =>
     builder.text(["tags", index], `タグ${index + 1}`, tag, { max: LIMITS.tag }),
   );
@@ -484,17 +480,8 @@ function build(doc: CastDocument): TransferGroup[] {
   return builder.groups.filter((group) => group.items.length > 0);
 }
 
-const cache = new WeakMap<CastDocument, TransferGroup[]>();
-
-/** Zetter の作成画面の順に並べた、写す項目 */
-export function transferGroups(doc: CastDocument): TransferGroup[] {
-  let groups = cache.get(doc);
-  if (!groups) {
-    groups = build(doc);
-    cache.set(doc, groups);
-  }
-  return groups;
-}
+/** Zetter の作成画面の順に並べた、写す項目（同じ文書なら一度だけ並べる） */
+export const transferGroups = perDocument(build);
 
 export function transferItems(doc: CastDocument): TransferItem[] {
   return transferGroups(doc).flatMap((group) => group.items);

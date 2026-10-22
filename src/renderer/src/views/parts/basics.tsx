@@ -11,9 +11,17 @@ import {
 
 import type { ViewEvent } from "../../app/events";
 import type { Path } from "../../app/types";
-import type { AvatarVM, CopyVM, CounterVM, MoveVM, SelectVM, ToggleVM } from "../../app/viewModels";
+import type {
+  AvatarVM,
+  CopyVM,
+  CounterVM,
+  MoveVM,
+  SelectVM,
+  TabItemVM,
+  ToggleVM,
+} from "../../app/viewModels";
 import { Link, useEmit } from "../chain";
-import { IconCheck, IconCopy, IconDown, IconRemove, IconUp } from "./icons";
+import { IconCheck, IconCopy, IconDown, IconPlus, IconRemove, IconUp } from "./icons";
 
 /** タブの中のひとまとまり。まとまりどうしは罫線で区切る。 */
 export function Section({
@@ -46,10 +54,14 @@ export function Section({
   );
 }
 
+/** 字数の具合（上限が近い・超えた）を表すクラス */
+export function toneClass(tone: CounterVM["tone"]): string {
+  return tone === "over" ? " is-over" : tone === "near" ? " is-near" : "";
+}
+
 export function Counter({ vm }: { vm: CounterVM }) {
-  const tone = vm.tone === "over" ? " is-over" : vm.tone === "near" ? " is-near" : "";
   return (
-    <span className={`counter${tone}`}>
+    <span className={`counter${toneClass(vm.tone)}`}>
       {vm.text}
       {vm.aside ? <span className="counter-aside">{vm.aside}</span> : null}
     </span>
@@ -201,6 +213,67 @@ export function MoveButtons({ vm }: { vm: MoveVM }) {
   );
 }
 
+/** 並べ替えられるリストの 1 行。頭に番号と、並べ替え・削除のボタンを置く */
+export function SortableRow({
+  index,
+  move,
+  className,
+  children,
+}: {
+  index: number;
+  move: MoveVM;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <li className={className ? `row ${className}` : "row"}>
+      <div className="row-head">
+        <span className="row-index">{index + 1}</span>
+        <MoveButtons vm={move} />
+      </div>
+      {children}
+    </li>
+  );
+}
+
+/** リストに 1 つ足すボタン。どこに足すかは、上の部品（Link）が path に足す */
+export function AddButton({
+  path = [],
+  disabled,
+  children,
+}: {
+  path?: Path;
+  disabled: boolean;
+  children: ReactNode;
+}) {
+  const emit = useEmit();
+  return (
+    <button
+      type="button"
+      className="btn btn-outline"
+      disabled={disabled}
+      onClick={() => emit({ type: "add", path })}
+    >
+      <IconPlus />
+      {children}
+    </button>
+  );
+}
+
+/** 文字で「〜を削除」と書いたボタン。何を消すかは、上の部品（Link）が path に足す */
+export function RemoveButton({ children }: { children: ReactNode }) {
+  const emit = useEmit();
+  return (
+    <button
+      type="button"
+      className="btn btn-plain btn-small btn-danger"
+      onClick={() => emit({ type: "remove", path: [] })}
+    >
+      {children}
+    </button>
+  );
+}
+
 const FLASH_MS = 1600;
 
 /** Zetter に貼るためのコピー。コピーした直後だけ「コピーしました」と描く */
@@ -305,6 +378,37 @@ export function TabList<T extends { id: string; domId: string; selected: boolean
         </button>
       ))}
     </div>
+  );
+}
+
+/** 人を選ぶタブの並び（アイコンと名前）。何を選んだかは、上の部品（TabMeaning）が意味を足す */
+export function CastTabs({
+  items,
+  label,
+  controls,
+}: {
+  items: readonly TabItemVM<string>[];
+  label: string;
+  controls?: string;
+}) {
+  return (
+    <TabList
+      items={items}
+      label={label}
+      className="cast-tabs"
+      controls={controls}
+      itemClass={(item) => (item.selected ? "cast-tab is-selected" : "cast-tab")}
+    >
+      {(item) => (
+        <>
+          {item.avatar ? <Avatar vm={item.avatar} size="small" /> : null}
+          <span className="cast-tab-text">
+            <span className="cast-tab-name">{item.label}</span>
+            <small>{item.sub}</small>
+          </span>
+        </>
+      )}
+    </TabList>
   );
 }
 

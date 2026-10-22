@@ -11,6 +11,7 @@ import {
 } from "@shared/cast";
 import { type CopyLog, copyLogFile, normalizeCopyLog } from "@shared/copyLog";
 import { type ImageKind, imageSlotName } from "@shared/images";
+import type { SaveCastRequest } from "@shared/ipc";
 
 // ライブラリの中身:
 //   <root>/<キャストのフォルダ>/cast.json        設定
@@ -245,22 +246,14 @@ function imageSlots(doc: CastDocument): ImageSlot[] {
       },
     });
   });
-  doc.members.forEach((member, index) => {
-    slots.push({
-      kind: "member",
-      index,
-      get: () => member.avatar,
-      set: (image) => (member.avatar = image),
+  // 登場人物とペルソナのアイコン
+  const avatars = (kind: ImageKind, owners: readonly { avatar: CastImage | null }[]) => {
+    owners.forEach((owner, index) => {
+      slots.push({ kind, index, get: () => owner.avatar, set: (image) => (owner.avatar = image) });
     });
-  });
-  doc.recommendedPersonas.forEach((persona, index) => {
-    slots.push({
-      kind: "persona",
-      index,
-      get: () => persona.avatar,
-      set: (image) => (persona.avatar = image),
-    });
-  });
+  };
+  avatars("member", doc.members);
+  avatars("persona", doc.recommendedPersonas);
   return slots;
 }
 
@@ -271,10 +264,7 @@ export function referencedImages(doc: CastDocument): string[] {
     .filter((file): file is string => !!file && !file.startsWith("pending:"));
 }
 
-export interface SaveCastInput {
-  folder: string | null;
-  doc: CastDocument;
-  pendingImages: Record<string, string>;
+export interface SaveCastInput extends SaveCastRequest {
   now?: Date;
 }
 
