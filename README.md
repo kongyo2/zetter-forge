@@ -21,3 +21,12 @@ Zetter のキャスト作成画面と同じ項目・同じ上限で書けます�
 ![暗い色で表示したキャラクターの編集画面](docs/screenshots/editor-dark.png)
 
 パソコンの設定に合わせて、暗い色の画面にもなります。
+
+## 貢献してくださった方
+
+不具合の報告やプルリクエストなどで、Zetter Forge に関わってくださった方です。ありがとうございます。
+
+<!-- contrib.rocks はコミットした人しか出ないので、Issue を出した人も載せられるよう手で書く。
+README では CSS が効かないので、アイコンは wsrv.nl で丸く切り抜いている。足すときは 1 行コピーして、ユーザー名を 4 か所とも書き換える -->
+<a href="https://github.com/kongyo2"><img src="https://wsrv.nl/?url=github.com/kongyo2.png&w=128&h=128&mask=circle&maxage=7d" alt="kongyo2" title="kongyo2" width="64" height="64"></a>
+<a href="https://github.com/Hachieda"><img src="https://wsrv.nl/?url=github.com/Hachieda.png&w=128&h=128&mask=circle&maxage=7d" alt="Hachieda" title="Hachieda" width="64" height="64"></a>
