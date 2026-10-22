@@ -66,6 +66,7 @@ export function Toggle({ vm }: { vm: ToggleVM }) {
       </span>
       <input
         type="checkbox"
+        className="visually-hidden"
         checked={vm.checked}
         disabled={vm.disabled}
         onChange={(event) => emit({ type: "check", path: vm.name, checked: event.target.checked })}
