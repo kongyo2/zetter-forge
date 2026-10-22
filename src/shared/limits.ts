@@ -1,4 +1,4 @@
-// Zetter のキャスト作成画面と同じ上限（2026-10-21 時点の z-etter.com/cast/create で確認）。
+// Zetter のキャスト作成画面と同じ上限（2026-10-23 時点の z-etter.com/cast/create、app.js?v=04fa86f0e7a9 で確認）。
 // 文字数の数え方は 2 通りある。HTML の maxlength と同じ UTF-16 単位で数える欄と、
 // 好感度・パートナー設定のように Array.from で数える（コードポイント単位）欄。
 export const LIMITS = {

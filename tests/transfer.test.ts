@@ -1,16 +1,20 @@
 import {
   AFFINITY_BASE_SUBJECT,
+  type CastDocument,
+  type CastImage,
   createDefaultAffinityConfig,
   createEmptyCast,
   createEmptyMember,
-  type CastDocument,
+  createEmptyPersona,
+  createEmptyStage,
 } from "@shared/cast";
-import { normalizeCopyLog, textHash } from "@shared/copyLog";
+import { COPY_LOG_FORMAT, copyLogFile, normalizeCopyLog, textHash } from "@shared/copyLog";
 import { describe, expect, it } from "vitest";
 
 import { allowance } from "../src/renderer/src/app/presenters/allowance";
 import {
   findTransferItem,
+  isCopyable,
   nextTransferItem,
   transferGroups,
   transferItems,
@@ -26,6 +30,22 @@ function cast(patch: Partial<CastDocument> = {}): CastDocument {
     ...patch,
   };
 }
+
+const saved = (file: string): CastImage => ({ file, width: 400, height: 400, bytes: 1 });
+const partnerKeys = (base: string) =>
+  ["dailyRoutine", "messageHabits", "proactiveMessages", "distanceWhenApart", "freeform"].map(
+    (field) => `${base}/partnerSettings/${field}`,
+  );
+const publishOptions = [
+  "cast/personaVisible",
+  "cast/toneExamplesVisible",
+  "cast/situationVisible",
+  "cast/authorVisible",
+  "cast/showFavoriteCount",
+  "cast/showTalkCount",
+];
+const itemOf = (doc: CastDocument, key: string) =>
+  transferItems(doc).find((item) => item.key === key);
 
 describe("写す項目", () => {
   it("Zetter の作成画面のタブの順に並べる", () => {
@@ -47,6 +67,158 @@ describe("写す項目", () => {
     expect(labels.slice(0, 3)).toEqual(["名前", "性格・設定", "キャッチコピー"]);
   });
 
+  it("ストーリーモードは、Zetter の作成画面の欄と同じ順に並べる", () => {
+    const member = {
+      ...createEmptyMember(),
+      name: "葵",
+      profile: "妹",
+      toneExamples: [{ situation: "朝", example: "おはよう" }],
+    };
+    const persona = { ...createEmptyPersona(), name: "アキ" };
+    const doc = cast({
+      avatar: saved("images/avatar.jpg"),
+      toneExamples: [{ situation: "雨の日", example: "いらっしゃい" }],
+      members: [member],
+      situation: "雨の古書店",
+      introScript: [
+        { kind: "narration", text: "雨が降っている。", speakerId: null },
+        { kind: "speech", text: "いらっしゃい。", speakerId: null },
+        { kind: "speech", text: "お姉ちゃん？", speakerId: member.id },
+      ],
+      aboutText: "紹介",
+      recommendedPersonas: [persona],
+      lorebooks: [{ id: "b1", title: "", note: "" }],
+      cover: saved("images/cover.jpg"),
+      tags: ["古書店"],
+      hook: "……で？",
+      background: saved("images/background.jpg"),
+      gallery: [{ ...saved("images/gallery-01.jpg"), id: "g1", blurred: false }],
+    });
+    const m = `members/${member.id}`;
+    const p = `personas/${persona.id}`;
+    expect(
+      transferGroups(doc).map((group) => [group.title, group.items.map((item) => item.key)]),
+    ).toEqual([
+      [
+        "キャラクター",
+        [
+          "cast/name",
+          "cast/avatar",
+          "cast/avatarBlurred",
+          "cast/persona",
+          ...partnerKeys("cast"),
+          "cast/toneExamples/0/situation",
+          "cast/toneExamples/0/example",
+          `${m}/name`,
+          `${m}/avatar`,
+          `${m}/profile`,
+          ...partnerKeys(m),
+          `${m}/toneExamples/0/situation`,
+          `${m}/toneExamples/0/example`,
+        ],
+      ],
+      [
+        "体験設定",
+        [
+          "cast/mode",
+          "cast/tagline",
+          "cast/situation",
+          "intro/0/text",
+          "intro/1/text",
+          "intro/2/text",
+          "cast/aboutText",
+          `${p}/avatar`,
+          `${p}/useViewerName`,
+          `${p}/name`,
+          `${p}/tagline`,
+          `${p}/note`,
+        ],
+      ],
+      ["設定集", ["lorebooks/b1/title"]],
+      [
+        "見た目・公開",
+        [
+          "cast/public",
+          "cast/cover",
+          "cast/coverBlurred",
+          "tags/0",
+          "cast/hook",
+          "cast/background",
+          "gallery/g1",
+          "gallery/g1/blurred",
+          ...publishOptions,
+        ],
+      ],
+    ]);
+    // セリフには話者を添え、登場人物はまとまりの見出しに何人目かを出す
+    expect(
+      ["intro/0/text", "intro/1/text", "intro/2/text"].map((key) => {
+        const item = itemOf(doc, key);
+        return [item?.section, item?.label];
+      }),
+    ).toEqual([
+      ["イントロ", "パート1（ナレーション）"],
+      ["イントロ", "パート2（セリフ（灯里））"],
+      ["イントロ", "パート3（セリフ（葵））"],
+    ]);
+    expect(itemOf(doc, `${m}/name`)).toMatchObject({
+      section: "2人目「葵」",
+      notes: ["Zetter の「登場人物を追加」で人数分の枠を足してから写します。"],
+    });
+    expect(itemOf(doc, "lorebooks/b1/title")).toMatchObject({
+      kind: "setting",
+      label: "連動する設定集1",
+      value: "（書名なし）",
+      skip: null,
+      notes: ["Zetter の設定集の一覧から選びます。"],
+    });
+  });
+
+  it("雑談モードは、アイコンを見た目・公開に、イントロを「最初のひとこと」にする", () => {
+    const doc = cast({
+      mode: "chat",
+      avatar: saved("images/avatar.jpg"),
+      members: [{ ...createEmptyMember(), name: "葵" }],
+      introScript: [
+        { kind: "speech", text: "やあ", speakerId: null },
+        { kind: "speech", text: "またね", speakerId: null },
+      ],
+      situation: "雨の古書店",
+      hook: "……で？",
+    });
+    expect(
+      transferGroups(doc).map((group) => [group.title, group.items.map((item) => item.key)]),
+    ).toEqual([
+      ["キャラクター", ["cast/name", "cast/persona", ...partnerKeys("cast")]],
+      ["体験設定", ["cast/mode", "intro/first/text", "cast/aboutText"]],
+      [
+        "見た目・公開",
+        [
+          "cast/public",
+          "cast/cover",
+          "cast/coverBlurred",
+          "cast/avatar",
+          "cast/avatarBlurred",
+          "cast/background",
+          ...publishOptions,
+        ],
+      ],
+    ]);
+    expect(itemOf(doc, "intro/first/text")).toMatchObject({
+      label: "最初のひとこと",
+      value: "やあ",
+    });
+    expect(itemOf(doc, "cast/mode")).toMatchObject({ value: "雑談", skip: null });
+  });
+
+  it("好感度・設定集のまとまりは、設定がなければ出さない", () => {
+    expect(transferGroups(cast()).map((group) => group.title)).toEqual([
+      "キャラクター",
+      "体験設定",
+      "見た目・公開",
+    ]);
+  });
+
   it("空の欄と Zetter の既定のままの設定は、何もしない項目にする", () => {
     const doc = cast({ affinity: { default: createDefaultAffinityConfig(), overrides: {} } });
     const item = (key: string) => transferItems(doc).find((candidate) => candidate.key === key);
@@ -58,6 +230,40 @@ describe("写す項目", () => {
       transferItems(structuredClone(doc)).find((candidate) => candidate.key === "cast/public")
         ?.skip,
     ).toBeNull();
+  });
+
+  it("見た目・公開の切り替えは、Zetter の新規作成の既定と違うものだけを写す", () => {
+    const defaults = cast();
+    expect(
+      ["cast/avatarBlurred", "cast/coverBlurred", ...publishOptions].map(
+        (key) => itemOf(defaults, key)?.skip,
+      ),
+    ).toEqual(Array(8).fill("default"));
+    const changed = cast({
+      avatarBlurred: true,
+      coverBlurred: true,
+      personaHidden: false,
+      toneExamplesHidden: false,
+      situationHidden: false,
+      authorHidden: true,
+      showFavoriteCount: false,
+      showTalkCount: false,
+    });
+    expect(
+      ["cast/avatarBlurred", "cast/coverBlurred", ...publishOptions].map((key) => {
+        const item = itemOf(changed, key);
+        return [item?.skip, item?.value];
+      }),
+    ).toEqual([
+      [null, "オン"],
+      [null, "オン"],
+      [null, "オン"],
+      [null, "オン"],
+      [null, "オン"],
+      [null, "オフ"],
+      [null, "オフ"],
+      [null, "オフ"],
+    ]);
   });
 
   it("好感度の個別設定は、ひな形とも共通設定とも同じ欄だけを、何もしない項目にする", () => {
@@ -79,6 +285,80 @@ describe("写す項目", () => {
     expect(skip(`${base}/stages/1/startValue`)).toBe("default");
   });
 
+  it("好感度は共通設定、本体、送られる登場人物の順。使わない人は 1 項目だけ", () => {
+    const member = { ...createEmptyMember(), name: "葵" };
+    const hidden = createEmptyMember();
+    const doc = cast({
+      members: [member, hidden],
+      affinity: {
+        default: createDefaultAffinityConfig(),
+        overrides: {
+          [AFFINITY_BASE_SUBJECT]: { ...createDefaultAffinityConfig(), enabled: false },
+          [member.id]: createDefaultAffinityConfig(),
+          [hidden.id]: createDefaultAffinityConfig(),
+        },
+      },
+    });
+    const items = transferGroups(doc).find((group) => group.title === "好感度")?.items ?? [];
+    expect([...new Set(items.map((item) => item.section))]).toEqual([
+      "共通設定",
+      "灯里の個別設定",
+      "葵の個別設定",
+    ]);
+    expect(items.filter((item) => item.section === "灯里の個別設定")).toEqual([
+      expect.objectContaining({
+        key: `affinity/${AFFINITY_BASE_SUBJECT}/disabled`,
+        kind: "setting",
+        label: "このキャラは好感度を使わない",
+        value: "オン",
+        skip: null,
+      }),
+    ]);
+    expect(
+      items
+        .filter((item) => item.section === "共通設定")
+        .slice(0, 8)
+        .map((item) => [item.key, item.label]),
+    ).toEqual([
+      ["affinity/default/itemName", "項目名"],
+      ["affinity/default/minValue", "最小値"],
+      ["affinity/default/maxValue", "最大値"],
+      ["affinity/default/initialValue", "初期値"],
+      ["affinity/default/pace", "変化の速さ"],
+      ["affinity/default/showInChat", "チャットに好感度を表示する"],
+      ["affinity/default/stages/0/startValue", "段階1の開始値"],
+      ["affinity/default/stages/0/callText", "段階1の呼び方"],
+    ]);
+  });
+
+  it("ひな形より多い段階には、Zetter で段階を足してから写すと添える。1 段階目の開始値は写さない", () => {
+    const config = createDefaultAffinityConfig();
+    config.pace = "rapid";
+    config.stages.push({ ...createEmptyStage(90), freeText: "とても親しい" });
+    const doc = cast({ affinity: { default: config, overrides: {} } });
+    expect(itemOf(doc, "affinity/default/pace")).toMatchObject({ value: "急接近", skip: null });
+    expect(itemOf(doc, "affinity/default/stages/4/startValue")).toMatchObject({
+      value: "90",
+      skip: null,
+      notes: ["Zetter で「段階を追加」してから写します。"],
+    });
+    expect(itemOf(doc, "affinity/default/stages/4/freeText")).toMatchObject({
+      value: "とても親しい",
+      skip: null,
+      notes: [],
+    });
+    expect(itemOf(doc, "affinity/default/stages/4/callText")?.skip).toBe("empty");
+    expect(itemOf(doc, "affinity/default/stages/0/startValue")?.skip).toBe("default");
+  });
+
+  it("好感度の項目名の上限超えは、コードポイントで数えて添える", () => {
+    const config = { ...createDefaultAffinityConfig(), itemName: "🌙".repeat(21) };
+    expect(
+      itemOf(cast({ affinity: { default: config, overrides: {} } }), "affinity/default/itemName")
+        ?.notes,
+    ).toEqual(["上限の20字を1字超えています。このまま貼ると Zetter では入りきりません。"]);
+  });
+
   it("雑談モードでは、送られない登場人物・キャッチコピー・好感度を出さない", () => {
     const doc = cast({
       mode: "chat",
@@ -93,9 +373,68 @@ describe("写す項目", () => {
     expect(keys.some((key) => key.startsWith("affinity/"))).toBe(false);
   });
 
+  it("「遊ぶ人の名前を使う」なら名前の欄は写さず、その切り替えを写す。名前が空なら保存されないと添える", () => {
+    const viewer = { ...createEmptyPersona(), useViewerName: true };
+    const unnamed = createEmptyPersona();
+    const doc = cast({ recommendedPersonas: [viewer, unnamed] });
+    expect(transferItems(doc).map((item) => item.key)).not.toContain(`personas/${viewer.id}/name`);
+    expect(itemOf(doc, `personas/${viewer.id}/useViewerName`)).toMatchObject({
+      kind: "setting",
+      section: "この会話でのあなた1",
+      value: "オン",
+      skip: null,
+    });
+    expect(itemOf(doc, `personas/${unnamed.id}/useViewerName`)).toMatchObject({
+      section: "この会話でのあなた2",
+      value: "オフ",
+      skip: "default",
+    });
+    expect(itemOf(doc, `personas/${unnamed.id}/name`)).toMatchObject({
+      skip: "empty",
+      notes: ["名前が空なので、Zetter では保存されません。"],
+    });
+  });
+
+  it("片方だけの口調サンプルには、保存されないことを添える", () => {
+    const doc = cast({ toneExamples: [{ situation: "雨の日", example: "" }] });
+    expect(
+      transferItems(doc)
+        .filter((item) => item.key.startsWith("cast/toneExamples/0/"))
+        .map((item) => [item.label, item.skip, item.notes]),
+    ).toEqual([
+      ["口調サンプル1の状況", null, ["状況と発話例の片方が空なので、Zetter では保存されません。"]],
+      [
+        "口調サンプル1の発話例",
+        "empty",
+        ["状況と発話例の片方が空なので、Zetter では保存されません。"],
+      ],
+    ]);
+  });
+
   it("上限を超えている欄には、入りきらないことを添える", () => {
     const item = findTransferItem(cast({ name: "あ".repeat(11) }), ["cast", "name"]);
     expect(item?.notes[0]).toContain("上限の10字を1字超えています");
+  });
+
+  it("コピーできるのは、中身のある文字と保存した画像だけ（選ぶ欄は Zetter の画面で選ぶ）", () => {
+    const doc = cast({ avatar: saved("images/avatar.jpg"), cover: saved("pending:cover") });
+    const item = (key: string) => {
+      const found = itemOf(doc, key);
+      if (!found) throw new Error(`${key} がありません`);
+      return found;
+    };
+    expect(isCopyable(item("cast/name"))).toBe(true);
+    expect(isCopyable(item("cast/situation"))).toBe(false);
+    expect(isCopyable(item("cast/avatar"))).toBe(true);
+    expect(item("cast/avatar").value).toBe("images/avatar.jpg");
+    expect(isCopyable(item("cast/cover"))).toBe(false);
+    expect(item("cast/cover").notes).toEqual(["保存すると、ファイルの場所をコピーできます。"]);
+    expect(isCopyable(item("cast/background"))).toBe(false);
+    expect(isCopyable(item("cast/public"))).toBe(false);
+    expect(transferStatus(item("cast/mode"), {})).toBe("skip");
+    expect(
+      transferStatus(item("cast/situation"), { "cast/situation": { hash: textHash(""), at: "" } }),
+    ).toBe("skip");
   });
 
   it("コピーした値と今の値を比べて、済み・書き換えありを決める", () => {
@@ -115,12 +454,28 @@ describe("写す項目", () => {
     const log = { "cast/name": { hash: textHash("灯里"), at: "" } };
     expect(nextTransferItem(doc, log)?.key).toBe("cast/persona");
   });
+
+  it("すべてコピーしたら次の項目はなく、どれかを書き換えたらそこに戻る", () => {
+    const doc = cast({ avatar: saved("images/avatar.jpg") });
+    const log = Object.fromEntries(
+      transferItems(doc)
+        .filter(isCopyable)
+        .map((item) => [item.key, { hash: textHash(item.value), at: "" }]),
+    );
+    expect(nextTransferItem(doc, log)).toBeNull();
+    expect(nextTransferItem({ ...doc, tagline: "晴れの日も開く" }, log)?.key).toBe("cast/tagline");
+  });
+
+  it("見つからない場所は null", () => {
+    expect(findTransferItem(cast(), ["cast", "memo"])).toBeNull();
+  });
 });
 
 describe("コピーした記録のファイル", () => {
   it("形が違うものは空として読む", () => {
     expect(normalizeCopyLog(null)).toEqual({});
     expect(normalizeCopyLog({ format: "other", items: {} })).toEqual({});
+    expect(normalizeCopyLog({ format: COPY_LOG_FORMAT, items: [] })).toEqual({});
     expect(
       normalizeCopyLog({
         format: "zetter-forge/copied",
@@ -129,10 +484,22 @@ describe("コピーした記録のファイル", () => {
     ).toEqual({ "cast/name": { hash: "1", at: "t" } });
   });
 
+  it("書き出した形を読み直すと、同じ記録になる", () => {
+    const log = { "cast/name": { hash: textHash("灯里"), at: "2026-10-23T00:00:00.000Z" } };
+    expect(copyLogFile(log)).toEqual({ format: "zetter-forge/copied", items: log });
+    expect(normalizeCopyLog(JSON.parse(JSON.stringify(copyLogFile(log))))).toEqual(log);
+  });
+
   it("ハッシュは同じ文字なら同じ、違えば違う", () => {
     expect(textHash("灯里")).toBe(textHash("灯里"));
     expect(textHash("灯里")).not.toBe(textHash("灯"));
     expect(textHash("")).toMatch(/^[0-9a-f]{8}$/u);
+  });
+
+  it("ハッシュは FNV-1a（32 bit）の 16 進 8 桁", () => {
+    expect(textHash("")).toBe("811c9dc5");
+    expect(textHash("a")).toBe("e40c292c");
+    expect(textHash("foobar")).toBe("bf9cf968");
   });
 });
 
