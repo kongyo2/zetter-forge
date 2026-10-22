@@ -2634,4 +2634,22 @@ h3 {
   .script-line.is-speech .script-role {
     forced-color-adjust: none;
   }
+
+  /* トグルは背景色だけで描いているので、システムの色で枠とオン・オフを描き直す */
+  .toggle-track {
+    border: 1px solid CanvasText;
+  }
+
+  .toggle-thumb {
+    background: CanvasText;
+  }
+
+  .toggle input:checked + .toggle-track {
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  .toggle input:checked + .toggle-track .toggle-thumb {
+    background: HighlightText;
+  }
 }
