@@ -60,6 +60,8 @@ const TOAST_MS = { info: 3200, error: 7000, undo: 8000 } as const;
 const LIBRARY_REFRESH_MS = 3000;
 const MAX_TOASTS = 4;
 
+type Task = AppState["task"];
+
 /** 1 回の判断のあいだの書き換えをまとめる */
 class Step {
   readonly effects: Effect[] = [];
@@ -81,6 +83,20 @@ class Step {
 
   effect(effect: Effect): void {
     this.effects.push(effect);
+  }
+
+  /**
+   * 届いた結果が、いま進めている kind の処理（token）のものなら、その処理を終えて返す。
+   * 先に頼んだものが後から届いたときなど、いまの処理のものでなければ null。
+   */
+  finish<K extends Exclude<Task["kind"], "idle">>(
+    kind: K,
+    token: number,
+  ): Extract<Task, { kind: K }> | null {
+    const task = this.state.task;
+    if (task.kind === "idle" || task.kind !== kind || task.token !== token) return null;
+    this.set({ task: { kind: "idle" } });
+    return task as Extract<Task, { kind: K }>;
   }
 
   session(update: (session: Session) => Session): void {
@@ -197,8 +213,7 @@ function handle(step: Step, event: AppEvent): void {
         loadLibrary(step);
       return;
     case "root/chosen":
-      if (state.task.kind !== "choosing-root" || state.task.token !== event.token) return;
-      step.set({ task: { kind: "idle" } });
+      if (!step.finish("choosing-root", event.token)) return;
       if (event.listing) {
         step.set({
           library: { status: "ready", listing: event.listing },
@@ -209,8 +224,7 @@ function handle(step: Step, event: AppEvent): void {
       }
       return;
     case "root/failed":
-      if (state.task.kind !== "choosing-root" || state.task.token !== event.token) return;
-      step.set({ task: { kind: "idle" } });
+      if (!step.finish("choosing-root", event.token)) return;
       step.toast(`保存先を変えられませんでした: ${event.message}`, "error");
       return;
 
@@ -219,8 +233,7 @@ function handle(step: Step, event: AppEvent): void {
       castLoaded(step, event.token, event.loaded);
       return;
     case "cast/load-failed":
-      if (state.task.kind !== "opening" || state.task.token !== event.token) return;
-      step.set({ task: { kind: "idle" } });
+      if (!step.finish("opening", event.token)) return;
       step.toast(`開けませんでした: ${event.message}`, "error");
       loadLibrary(step);
       return;
@@ -550,10 +563,9 @@ function perform(step: Step, intent: Intent): void {
 
 function castLoaded(step: Step, token: number, cast: LoadedCast): void {
   const { state } = step;
-  const task = state.task;
   // 先に頼んだ読み込みが後から届いたときなどは捨てる
-  if (task.kind !== "opening" || task.token !== token) return;
-  step.set({ task: { kind: "idle" } });
+  const task = step.finish("opening", token);
+  if (!task) return;
   const session = state.session;
   if (
     session &&
@@ -634,12 +646,11 @@ function save(step: Step, then: Intent | null): void {
 
 function saved(step: Step, token: number, result: SavedCast): void {
   const { state } = step;
-  const task = state.task;
-  if (task.kind !== "saving" || task.token !== token) {
+  const task = step.finish("saving", token);
+  if (!task) {
     loadLibrary(step);
     return;
   }
-  step.set({ task: { kind: "idle" } });
   const session = state.session;
   if (!session || session.key !== task.sessionKey) {
     loadLibrary(step);
@@ -705,10 +716,8 @@ function keepChanges(intent: Intent): Intent {
 
 function saveFailed(step: Step, token: number, message: string, missing: boolean): void {
   const { state } = step;
-  const task = state.task;
-  if (task.kind !== "saving" || task.token !== token) return;
   // 保存できなかったら、続けるはずだった操作はしない（変更が失われるので）
-  step.set({ task: { kind: "idle" } });
+  if (!step.finish("saving", token)) return;
   loadLibrary(step);
   // 保存のあいだに出したダイアログ（画像の切り抜きなど）は残す。もう一度保存すれば、ここでまた勧める
   if (missing && state.session?.folder && !state.dialog) {

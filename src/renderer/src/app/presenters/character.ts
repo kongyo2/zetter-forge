@@ -29,7 +29,17 @@ import type {
   ToneListVM,
 } from "../viewModels";
 import { type AllowancePart, CHARS_PER_CELL, allowance } from "./allowance";
-import { type Context, avatar, counter, imageField, imageSrc, textField, toggle } from "./common";
+import {
+  type Context,
+  avatar,
+  imageField,
+  imageSrc,
+  limit,
+  moveVM,
+  required,
+  textField,
+  toggle,
+} from "./common";
 
 function partner(ctx: Context, base: Path, settings: PartnerSettings): PartnerVM {
   const scope = [...base, "partnerSettings"];
@@ -87,8 +97,7 @@ function tones(ctx: Context, base: Path, list: readonly ToneExample[]): ToneList
           ariaLabel: `口調サンプル${index + 1}の状況`,
           value: item.situation,
           placeholder: "例: 元気がないと相談された",
-          maxLength: LIMITS.toneSituation,
-          counter: counter(utf16Length(item.situation), LIMITS.toneSituation),
+          ...limit(item.situation, LIMITS.toneSituation),
         }),
         example: textField(ctx, row, ["example"], {
           label: "発話例",
@@ -97,15 +106,10 @@ function tones(ctx: Context, base: Path, list: readonly ToneExample[]): ToneList
           placeholder: "そのときどう返すか",
           multiline: true,
           rows: 2,
-          maxLength: LIMITS.toneExample,
-          counter: counter(utf16Length(item.example), LIMITS.toneExample),
+          ...limit(item.example, LIMITS.toneExample),
           warning: half ? "状況と発話例の両方を書くと保存されます" : null,
         }),
-        move: {
-          canUp: index > 0,
-          canDown: index < list.length - 1,
-          removeLabel: "この話し方の例を削除",
-        },
+        move: moveVM(index, list.length, "この話し方の例を削除"),
       };
     }),
     canAdd: list.length < LIMITS.toneItemsPerCharacter,
@@ -233,20 +237,15 @@ function mainSheet(ctx: Context, settingsCounter: (length: number) => CounterVM)
       label: "名前",
       value: doc.name,
       placeholder: "キャストの名前",
-      required: true,
-      invalid: !doc.name.trim(),
-      error: doc.name.trim() ? null : "名前を入力してください",
-      maxLength: LIMITS.name,
-      counter: counter(utf16Length(doc.name), LIMITS.name),
+      ...required(!doc.name.trim(), "名前を入力してください"),
+      ...limit(doc.name, LIMITS.name),
     }),
     avatarBlurred: toggle(["avatarBlurred"], "この画像をぼかして表示する", doc.avatarBlurred),
     profile: textField(ctx, scope, ["persona"], {
       label: "性格・設定",
       value: doc.persona,
       placeholder: "性格・話し方・背景など",
-      required: true,
-      invalid: !doc.persona.trim(),
-      error: doc.persona.trim() ? null : "性格・設定を入力してください",
+      ...required(!doc.persona.trim(), "性格・設定を入力してください"),
       hint: [
         "形容詞より、行動の癖で書くと生きます。「優しい」より「お礼が言えず『……置いといて』と言いながら必ず飲む」。",
       ],
@@ -283,11 +282,8 @@ function memberSheet(
       ariaLabel: `${index + 2}人目の名前`,
       value: member.name,
       placeholder: "この人の名前",
-      required: true,
-      invalid: missingName,
-      error: missingName ? "名前を入力してください" : null,
-      maxLength: LIMITS.memberName,
-      counter: counter(utf16Length(member.name), LIMITS.memberName),
+      ...required(missingName, "名前を入力してください"),
+      ...limit(member.name, LIMITS.memberName),
     }),
     avatarBlurred: null,
     profile: textField(ctx, scope, ["profile"], {

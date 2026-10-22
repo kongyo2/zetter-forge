@@ -1,8 +1,31 @@
 import type { AffinityConfigVM, AffinityTabVM, RulerVM, StageVM } from "../../app/viewModels";
 import { Link, useEmit } from "../chain";
-import { Avatar, Counter, Section, Select, TabList, TabMeaning, Toggle } from "../parts/basics";
-import { IconError, IconPlus } from "../parts/icons";
+import {
+  AddButton,
+  CastTabs,
+  Counter,
+  RemoveButton,
+  Section,
+  Select,
+  TabMeaning,
+  Toggle,
+} from "../parts/basics";
+import { IconError } from "../parts/icons";
 import { TextField } from "../parts/TextField";
+
+/** 個別設定をやめて、共通設定に戻すボタン（個別設定の場所の中に置く） */
+function ResetToCommon() {
+  const emit = useEmit();
+  return (
+    <button
+      type="button"
+      className="btn btn-plain"
+      onClick={() => emit({ type: "remove", path: [] })}
+    >
+      共通設定に戻す
+    </button>
+  );
+}
 
 function Ruler({ vm }: { vm: RulerVM }) {
   const emit = useEmit();
@@ -67,7 +90,6 @@ function Stage({ vm }: { vm: StageVM }) {
 
 /** 開いている段階の中身（["stages", 位置] の中に置く） */
 function StageBody({ vm }: { vm: StageVM }) {
-  const emit = useEmit();
   return (
     <div className="stage-body">
       <div className="stage-start">
@@ -81,17 +103,7 @@ function StageBody({ vm }: { vm: StageVM }) {
         <TextField key={field.name.join("/")} vm={field} />
       ))}
       <div className="field-foot">
-        {vm.canRemove ? (
-          <button
-            type="button"
-            className="btn btn-plain btn-small btn-danger"
-            onClick={() => emit({ type: "remove", path: [] })}
-          >
-            この段階を削除
-          </button>
-        ) : (
-          <span />
-        )}
+        {vm.canRemove ? <RemoveButton>この段階を削除</RemoveButton> : <span />}
         <Counter vm={vm.counter} />
       </div>
     </div>
@@ -99,7 +111,6 @@ function StageBody({ vm }: { vm: StageVM }) {
 }
 
 function Config({ vm }: { vm: AffinityConfigVM }) {
-  const emit = useEmit();
   return (
     <>
       <div className="affinity-grid">
@@ -129,25 +140,11 @@ function Config({ vm }: { vm: AffinityConfigVM }) {
         ))}
       </ol>
       <div className="button-row">
-        <button
-          type="button"
-          className="btn btn-outline"
-          disabled={!vm.canAddStage}
-          onClick={() => emit({ type: "add", path: ["stages"] })}
-        >
-          <IconPlus />
+        <AddButton path={["stages"]} disabled={!vm.canAddStage}>
           段階を追加
           <span className="btn-count">{vm.stageCount}</span>
-        </button>
-        {vm.canReset ? (
-          <button
-            type="button"
-            className="btn btn-plain"
-            onClick={() => emit({ type: "remove", path: [] })}
-          >
-            共通設定に戻す
-          </button>
-        ) : null}
+        </AddButton>
+        {vm.canReset ? <ResetToCommon /> : null}
       </div>
     </>
   );
@@ -197,23 +194,11 @@ function Affinity({ vm }: { vm: AffinityTabVM }) {
           </Section>
           <div className="cast-desk">
             <TabMeaning to={(key) => ({ type: "editor/subject", key })}>
-              <TabList
+              <CastTabs
                 items={vm.setup.subjects}
                 label="好感度の設定対象"
-                className="cast-tabs"
                 controls="affinity-panel"
-                itemClass={(item) => (item.selected ? "cast-tab is-selected" : "cast-tab")}
-              >
-                {(item) => (
-                  <>
-                    {item.avatar ? <Avatar vm={item.avatar} size="small" /> : null}
-                    <span className="cast-tab-text">
-                      <span className="cast-tab-name">{item.label}</span>
-                      <small>{item.sub}</small>
-                    </span>
-                  </>
-                )}
-              </TabList>
+              />
             </TabMeaning>
             <div className="cast-sheet" role="tabpanel" id="affinity-panel">
               <Link scope={vm.setup.subject}>
@@ -222,13 +207,7 @@ function Affinity({ vm }: { vm: AffinityTabVM }) {
             </div>
           </div>
           <div>
-            <button
-              type="button"
-              className="btn btn-plain btn-small btn-danger"
-              onClick={() => emit({ type: "remove", path: [] })}
-            >
-              好感度設定を削除
-            </button>
+            <RemoveButton>好感度設定を削除</RemoveButton>
           </div>
         </>
       )}
@@ -251,13 +230,7 @@ function Subject({ sheet }: { sheet: NonNullable<AffinityTabVM["setup"]>["sheet"
           </p>
         ) : null}
         <div>
-          <button
-            type="button"
-            className="btn btn-plain"
-            onClick={() => emit({ type: "remove", path: [] })}
-          >
-            共通設定に戻す
-          </button>
+          <ResetToCommon />
         </div>
       </>
     );

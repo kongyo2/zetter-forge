@@ -4,12 +4,13 @@ import type { CharacterSheetVM, CharacterTabVM, PartnerVM, ToneListVM } from "..
 import { Link, useEmit } from "../chain";
 import { Allowance } from "../parts/Allowance";
 import {
-  Avatar,
+  AddButton,
+  CastTabs,
   Counter,
   Disclosure,
-  MoveButtons,
+  RemoveButton,
   Section,
-  TabList,
+  SortableRow,
   TabMeaning,
   Toggle,
 } from "../parts/basics";
@@ -36,7 +37,6 @@ function Partner({ vm }: { vm: PartnerVM }) {
 }
 
 function Tones({ vm }: { vm: ToneListVM }) {
-  const emit = useEmit();
   return (
     <div className="subsection">
       <div className="subhead">
@@ -50,44 +50,25 @@ function Tones({ vm }: { vm: ToneListVM }) {
         <ol className="rows">
           {vm.rows.map((row) => (
             <Link key={row.index} scope={[row.index]}>
-              <li className="row tone-row">
-                <div className="row-head">
-                  <span className="row-index">{row.index + 1}</span>
-                  <MoveButtons vm={row.move} />
-                </div>
+              <SortableRow index={row.index} move={row.move} className="tone-row">
                 <TextField vm={row.situation} />
                 <TextField vm={row.example} />
-              </li>
+              </SortableRow>
             </Link>
           ))}
         </ol>
       )}
-      <button
-        type="button"
-        className="btn btn-outline"
-        disabled={!vm.canAdd}
-        onClick={() => emit({ type: "add", path: [] })}
-      >
-        <IconPlus />
-        口調サンプルを追加
-      </button>
+      <AddButton disabled={!vm.canAdd}>口調サンプルを追加</AddButton>
     </div>
   );
 }
 
 function Sheet({ vm }: { vm: CharacterSheetVM }) {
-  const emit = useEmit();
   return (
     <>
       {vm.removeLabel ? (
         <div className="cast-sheet-actions">
-          <button
-            type="button"
-            className="btn btn-plain btn-small btn-danger"
-            onClick={() => emit({ type: "remove", path: [] })}
-          >
-            {vm.removeLabel}
-          </button>
+          <RemoveButton>{vm.removeLabel}</RemoveButton>
         </div>
       ) : null}
       <div className="identity">
@@ -138,22 +119,7 @@ export function CharacterTab({ vm }: { vm: CharacterTabVM }) {
         {vm.castTabs ? (
           <div className="cast-bar">
             <TabMeaning to={(id) => ({ type: "editor/character", id })}>
-              <TabList
-                items={vm.castTabs.items}
-                label="編集するキャラクター"
-                className="cast-tabs"
-                itemClass={(item) => (item.selected ? "cast-tab is-selected" : "cast-tab")}
-              >
-                {(item) => (
-                  <>
-                    {item.avatar ? <Avatar vm={item.avatar} size="small" /> : null}
-                    <span className="cast-tab-text">
-                      <span className="cast-tab-name">{item.label}</span>
-                      <small>{item.sub}</small>
-                    </span>
-                  </>
-                )}
-              </TabList>
+              <CastTabs items={vm.castTabs.items} label="編集するキャラクター" />
             </TabMeaning>
             <button
               type="button"

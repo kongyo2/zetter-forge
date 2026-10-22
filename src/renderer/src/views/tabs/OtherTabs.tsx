@@ -1,6 +1,6 @@
 import type { GalleryItemVM, LorebookTabVM, MemoTabVM, PublishTabVM } from "../../app/viewModels";
 import { Link, useEmit } from "../chain";
-import { CopyButton, Disclosure, MoveButtons, Section, Toggle } from "../parts/basics";
+import { AddButton, CopyButton, Disclosure, Section, SortableRow, Toggle } from "../parts/basics";
 import { IconFolder, IconPlus, IconRemove } from "../parts/icons";
 import { FilePicker, ImageField } from "../parts/ImageField";
 import { TextField } from "../parts/TextField";
@@ -9,7 +9,6 @@ import { TextField } from "../parts/TextField";
 
 /** 設定集の一覧（["lorebooks"] の中に置く） */
 function Lorebooks({ vm }: { vm: LorebookTabVM }) {
-  const emit = useEmit();
   return (
     <>
       {vm.rows.length === 0 ? (
@@ -18,28 +17,16 @@ function Lorebooks({ vm }: { vm: LorebookTabVM }) {
         <ol className="rows">
           {vm.rows.map((row) => (
             <Link key={row.id} scope={[row.id]}>
-              <li className="row">
-                <div className="row-head">
-                  <span className="row-index">{row.index + 1}</span>
-                  <MoveButtons vm={row.move} />
-                </div>
+              <SortableRow index={row.index} move={row.move}>
                 <TextField vm={row.title} />
                 <TextField vm={row.note} />
-              </li>
+              </SortableRow>
             </Link>
           ))}
         </ol>
       )}
       <div>
-        <button
-          type="button"
-          className="btn btn-outline"
-          disabled={!vm.canAdd}
-          onClick={() => emit({ type: "add", path: [] })}
-        >
-          <IconPlus />
-          設定集を追加
-        </button>
+        <AddButton disabled={!vm.canAdd}>設定集を追加</AddButton>
       </div>
     </>
   );
@@ -137,15 +124,7 @@ function Tags({ vm }: { vm: PublishTabVM["tags"] }) {
         </ul>
       ) : null}
       <div>
-        <button
-          type="button"
-          className="btn btn-outline"
-          disabled={!vm.canAdd}
-          onClick={() => emit({ type: "add", path: [] })}
-        >
-          <IconPlus />
-          タグを追加
-        </button>
+        <AddButton disabled={!vm.canAdd}>タグを追加</AddButton>
       </div>
     </>
   );

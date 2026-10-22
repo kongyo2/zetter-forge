@@ -6,7 +6,16 @@ import { utf16Length } from "@shared/text";
 import { USER_PLACEHOLDER, introRoleValue } from "../edits";
 import { castInk } from "../ink";
 import type { ChipsVM, ExperienceTabVM, IntroPartVM, PersonaVM, SelectVM } from "../viewModels";
-import { type Context, counter, imageField, textField, toggle } from "./common";
+import {
+  type Context,
+  counter,
+  imageField,
+  limit,
+  moveVM,
+  required,
+  textField,
+  toggle,
+} from "./common";
 
 const MODE_OPTIONS = [
   { value: "story", title: "ストーリー", text: "地の文とセリフで、じっくり物語を進めます。" },
@@ -66,11 +75,10 @@ function intro(ctx: Context): IntroPartVM[] {
         placeholder: speech ? "セリフを入力" : "地の文を入力",
         multiline: true,
         rows: 2,
-        maxLength: LIMITS.introPart,
-        counter: counter(utf16Length(part.text), LIMITS.introPart),
+        ...limit(part.text, LIMITS.introPart),
         chips: USER_CHIP,
       }),
-      move: { canUp: index > 0, canDown: index < count - 1, removeLabel: "このパートを削除" },
+      move: moveVM(index, count, "このパートを削除"),
     };
   });
 }
@@ -99,8 +107,7 @@ function personas(ctx: Context): PersonaVM[] {
         labelHidden: true,
         value: persona.tagline,
         placeholder: "紹介文（例: 密かに片想いしている同級生）",
-        maxLength: LIMITS.personaTagline,
-        counter: counter(utf16Length(persona.tagline), LIMITS.personaTagline),
+        ...limit(persona.tagline, LIMITS.personaTagline),
       }),
       useViewerName: toggle(["useViewerName"], "遊ぶ人の名前を使う", persona.useViewerName),
       note: textField(ctx, scope, ["note"], {
@@ -110,8 +117,7 @@ function personas(ctx: Context): PersonaVM[] {
         placeholder: "例: 18歳。クールな印象でいつもジャージ姿",
         multiline: true,
         rows: 3,
-        maxLength: LIMITS.personaNote,
-        counter: counter(utf16Length(persona.note), LIMITS.personaNote),
+        ...limit(persona.note, LIMITS.personaNote),
         warning:
           !persona.name.trim() && !persona.useViewerName
             ? "名前が空のペルソナは保存されません"
@@ -139,11 +145,8 @@ export function presentExperience(ctx: Context): ExperienceTabVM {
             label: "キャッチコピー",
             value: doc.tagline,
             placeholder: "一言で紹介すると？",
-            required: true,
-            invalid: !doc.tagline.trim(),
-            error: doc.tagline.trim() ? null : "キャッチコピーを入力してください",
-            maxLength: LIMITS.tagline,
-            counter: counter(utf16Length(doc.tagline), LIMITS.tagline),
+            ...required(!doc.tagline.trim(), "キャッチコピーを入力してください"),
+            ...limit(doc.tagline, LIMITS.tagline),
           }),
           situation: textField(ctx, scope, ["situation"], {
             label: "いまの状況",
@@ -156,8 +159,7 @@ export function presentExperience(ctx: Context): ExperienceTabVM {
             ],
             multiline: true,
             rows: 5,
-            maxLength: LIMITS.situation,
-            counter: counter(utf16Length(doc.situation), LIMITS.situation),
+            ...limit(doc.situation, LIMITS.situation),
           }),
           intro: {
             scope: ["intro"],
@@ -177,8 +179,7 @@ export function presentExperience(ctx: Context): ExperienceTabVM {
             placeholder: "キャストからの最初のメッセージ",
             multiline: true,
             rows: 2,
-            maxLength: LIMITS.introPart,
-            counter: counter(utf16Length(first?.text ?? ""), LIMITS.introPart),
+            ...limit(first?.text ?? "", LIMITS.introPart),
             chips: USER_CHIP,
           }),
           hidden:
@@ -195,8 +196,7 @@ export function presentExperience(ctx: Context): ExperienceTabVM {
       ],
       multiline: true,
       rows: 3,
-      maxLength: LIMITS.aboutText,
-      counter: counter(utf16Length(doc.aboutText), LIMITS.aboutText),
+      ...limit(doc.aboutText, LIMITS.aboutText),
     }),
     personas: {
       scope: ["personas"],

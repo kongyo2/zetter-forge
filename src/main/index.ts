@@ -6,6 +6,7 @@ import type { CastDocument } from "@shared/cast";
 import type { CopyLog } from "@shared/copyLog";
 import type {
   CastSummary,
+  InvokeResult,
   LibraryListing,
   LoadedCast,
   MenuCommand,
@@ -79,11 +80,9 @@ async function listing(): Promise<LibraryListing> {
   return { root: settings.libraryRoot, casts: summaries, errors };
 }
 
-type Result<T> = { ok: true; value: T } | { ok: false; error: string };
-
 /** 例外の文言を Electron の前置き（Error invoking remote method…）なしで画面に届ける。 */
 function handle<A extends unknown[], T>(channel: string, task: (...args: A) => Promise<T>): void {
-  ipcMain.handle(channel, async (_event, ...args: unknown[]): Promise<Result<T>> => {
+  ipcMain.handle(channel, async (_event, ...args: unknown[]): Promise<InvokeResult<T>> => {
     try {
       return { ok: true, value: await task(...(args as A)) };
     } catch (error) {

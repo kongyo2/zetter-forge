@@ -23,37 +23,23 @@ function Hint({ parts }: { parts: HintPart[] }) {
 }
 
 function Chips({ vm, onChip }: { vm: ChipsVM; onChip: (text: string) => void }) {
-  if (vm.style === "button") {
-    return (
-      <span className="field-tools">
-        {vm.items.map((item) => (
-          <button
-            key={item.text}
-            type="button"
-            className="btn btn-plain btn-small"
-            // 押してもカーソルの位置を失わないよう、フォーカスを欄に残す
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => onChip(item.text)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </span>
-    );
-  }
-  return (
+  const buttons = vm.items.map((item) => (
+    <button
+      key={item.text}
+      type="button"
+      className={vm.style === "button" ? "btn btn-plain btn-small" : "chip"}
+      // 押してもカーソルの位置を失わないよう、フォーカスを欄に残す
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => onChip(item.text)}
+    >
+      {item.label}
+    </button>
+  ));
+  return vm.style === "button" ? (
+    <span className="field-tools">{buttons}</span>
+  ) : (
     <div className="chips" role="group" aria-label={vm.label}>
-      {vm.items.map((item) => (
-        <button
-          key={item.text}
-          type="button"
-          className="chip"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => onChip(item.text)}
-        >
-          {item.label}
-        </button>
-      ))}
+      {buttons}
     </div>
   );
 }

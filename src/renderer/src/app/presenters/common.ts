@@ -1,6 +1,6 @@
 // Presenter で共通に使う、描画用の値の作り方。
 import type { CastDocument, CastImage } from "@shared/cast";
-import { formatCount } from "@shared/text";
+import { formatCount, utf16Length } from "@shared/text";
 
 import { isPendingImage } from "../session";
 import type { AppState, Session } from "../state";
@@ -12,6 +12,7 @@ import type {
   CounterVM,
   FocusVM,
   ImageFieldVM,
+  MoveVM,
   TextFieldVM,
   ToggleVM,
 } from "../viewModels";
@@ -35,6 +36,24 @@ export function counter(length: number, max: number, unit = ""): CounterVM {
     tone: length > max ? "over" : length >= max * 0.9 ? "near" : "normal",
     aside: null,
   };
+}
+
+/** 字数に上限のある欄の maxlength とカウンタ（HTML の maxlength と同じ UTF-16 で数える） */
+export function limit(value: string, max: number): Pick<TextFieldVM, "maxLength" | "counter"> {
+  return { maxLength: max, counter: counter(utf16Length(value), max) };
+}
+
+/** 必須の欄。空のあいだは message を出す */
+export function required(
+  missing: boolean,
+  message: string,
+): Pick<TextFieldVM, "required" | "invalid" | "error"> {
+  return { required: true, invalid: missing, error: missing ? message : null };
+}
+
+/** 並べ替えと削除のボタン（length 個のうちの index 番目） */
+export function moveVM(index: number, length: number, removeLabel: string | null): MoveVM {
+  return { canUp: index > 0, canDown: index < length - 1, removeLabel };
 }
 
 /** Zetter へ写すためのコピーのボタン。写す項目でないか、空ならボタンを出さない */

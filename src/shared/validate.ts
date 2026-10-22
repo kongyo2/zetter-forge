@@ -4,6 +4,7 @@ import {
   type AffinityConfig,
   type AffinityStage,
   type CastDocument,
+  type CastMember,
   type PartnerSettings,
   type ToneExample,
   sendableMembers,
@@ -54,15 +55,21 @@ function countedMembers(doc: CastDocument) {
   return doc.mode === "chat" ? [] : doc.members;
 }
 
+/** 合計の内訳（本人、登場人物の順）。own は本人の字数、ofMember は登場人物ひとりの字数 */
+function sharesOf(
+  doc: CastDocument,
+  own: number,
+  ofMember: (member: CastMember) => number,
+): UsageShare[] {
+  return [
+    { memberId: null, length: own },
+    ...countedMembers(doc).map((member) => ({ memberId: member.id, length: ofMember(member) })),
+  ];
+}
+
 /** 「キャラクター設定の合計」の内訳（本人、登場人物の順）。入力中の値をそのまま数える。 */
 export function settingsShares(doc: CastDocument): UsageShare[] {
-  return [
-    { memberId: null, length: utf16Length(doc.persona) },
-    ...countedMembers(doc).map((member) => ({
-      memberId: member.id,
-      length: utf16Length(member.profile),
-    })),
-  ];
+  return sharesOf(doc, utf16Length(doc.persona), (member) => utf16Length(member.profile));
 }
 
 /** 「キャラクター設定の合計」。 */
@@ -79,13 +86,9 @@ function toneExamplesLength(list: readonly ToneExample[]): number {
 
 /** 「口調サンプルの使用量（全員合計）」の内訳（本人、登場人物の順）。 */
 export function toneShares(doc: CastDocument): UsageShare[] {
-  return [
-    { memberId: null, length: toneExamplesLength(doc.toneExamples) },
-    ...countedMembers(doc).map((member) => ({
-      memberId: member.id,
-      length: toneExamplesLength(member.toneExamples),
-    })),
-  ];
+  return sharesOf(doc, toneExamplesLength(doc.toneExamples), (member) =>
+    toneExamplesLength(member.toneExamples),
+  );
 }
 
 /** 「口調サンプルの使用量（全員合計）」。 */
@@ -205,6 +208,16 @@ function overLimit(value: string, max: number): boolean {
   return utf16Length(value) > max;
 }
 
+/** 確認の 1 件。直す場所が 1 つに決まらないものは path を持たせない */
+function issue(
+  level: CastIssue["level"],
+  tab: EditorTab,
+  message: string,
+  path?: FieldPath,
+): CastIssue {
+  return path ? { level, tab, message, path } : { level, tab, message };
+}
+
 function toneIssues(
   owner: string,
   base: FieldPath,
@@ -212,41 +225,26 @@ function toneIssues(
   issues: CastIssue[],
 ): void {
   if (list.length > LIMITS.toneItemsPerCharacter) {
-    issues.push({
-      level: "error",
-      tab: "character",
-      message: `${owner}の口調サンプルは10件までです。`,
-      path: [...base, "toneExamples", LIMITS.toneItemsPerCharacter, "situation"],
-    });
+    const overflow = [...base, "toneExamples", LIMITS.toneItemsPerCharacter, "situation"];
+    issues.push(issue("error", "character", `${owner}の口調サンプルは10件までです。`, overflow));
   }
   list.forEach((tone, index) => {
     const label = `${owner}の口調サンプル${index + 1}`;
     const row = [...base, "toneExamples", index];
     if (overLimit(tone.situation, LIMITS.toneSituation)) {
-      issues.push({
-        level: "error",
-        tab: "character",
-        message: `${label}の状況は250文字までです。`,
-        path: [...row, "situation"],
-      });
+      const message = `${label}の状況は250文字までです。`;
+      issues.push(issue("error", "character", message, [...row, "situation"]));
     }
     if (overLimit(tone.example, LIMITS.toneExample)) {
-      issues.push({
-        level: "error",
-        tab: "character",
-        message: `${label}の発話例は3500文字までです。`,
-        path: [...row, "example"],
-      });
+      const message = `${label}の発話例は3500文字までです。`;
+      issues.push(issue("error", "character", message, [...row, "example"]));
     }
     const hasSituation = !!tone.situation.trim();
     const hasExample = !!tone.example.trim();
     if (hasSituation !== hasExample) {
-      issues.push({
-        level: "warning",
-        tab: "character",
-        message: `${label}は状況と発話例の片方が空なので、Zetter では保存されません。`,
-        path: [...row, hasSituation ? "example" : "situation"],
-      });
+      const message = `${label}は状況と発話例の片方が空なので、Zetter では保存されません。`;
+      const empty = [...row, hasSituation ? "example" : "situation"];
+      issues.push(issue("warning", "character", message, empty));
     }
   });
 }
@@ -259,12 +257,8 @@ function partnerIssues(
 ): void {
   const total = partnerSettingsLength(settings);
   if (total > LIMITS.partnerSettingsTotal) {
-    issues.push({
-      level: "error",
-      tab: "character",
-      message: `${owner}のパートナー設定は合計${formatCount(LIMITS.partnerSettingsTotal)}字までです（いまは${formatCount(total)}字）。`,
-      path: [...base, "partnerSettings", "dailyRoutine"],
-    });
+    const message = `${owner}のパートナー設定は合計${formatCount(LIMITS.partnerSettingsTotal)}字までです（いまは${formatCount(total)}字）。`;
+    issues.push(issue("error", "character", message, [...base, "partnerSettings", "dailyRoutine"]));
   }
 }
 
@@ -276,62 +270,30 @@ export function validateCast(doc: CastDocument): CastIssue[] {
 
   // キャラクター
   if (!doc.name.trim())
-    issues.push({
-      level: "error",
-      tab: "character",
-      message: "名前を入力してください。",
-      path: ["cast", "name"],
-    });
+    issues.push(issue("error", "character", "名前を入力してください。", ["cast", "name"]));
   if (overLimit(doc.name, LIMITS.name))
-    issues.push({
-      level: "error",
-      tab: "character",
-      message: "名前は10文字までです。",
-      path: ["cast", "name"],
-    });
+    issues.push(issue("error", "character", "名前は10文字までです。", ["cast", "name"]));
   if (!doc.persona.trim())
-    issues.push({
-      level: "error",
-      tab: "character",
-      message: "性格・設定を入力してください。",
-      path: ["cast", "persona"],
-    });
-  if (story && doc.members.length > LIMITS.members) {
-    issues.push({
-      level: "error",
-      tab: "character",
-      message: "登場人物は本人を含めて10人までです。",
-    });
-  }
+    issues.push(issue("error", "character", "性格・設定を入力してください。", ["cast", "persona"]));
+  if (story && doc.members.length > LIMITS.members)
+    issues.push(issue("error", "character", "登場人物は本人を含めて10人までです。"));
   const unnamed = members.find((member) => !member.name.trim());
   if (unnamed) {
-    issues.push({
-      level: "error",
-      tab: "character",
-      message: "登場人物の名前を入力してください。",
-      path: ["members", unnamed.id, "name"],
-    });
+    const message = "登場人物の名前を入力してください。";
+    issues.push(issue("error", "character", message, ["members", unnamed.id, "name"]));
   }
   for (const member of members) {
     if (overLimit(member.name, LIMITS.memberName)) {
-      issues.push({
-        level: "error",
-        tab: "character",
-        message: `登場人物「${member.name}」の名前は10文字までです。`,
-        path: ["members", member.id, "name"],
-      });
+      const message = `登場人物「${member.name}」の名前は10文字までです。`;
+      issues.push(issue("error", "character", message, ["members", member.id, "name"]));
     }
   }
   if (story) {
     for (const member of doc.members) {
       if (!members.includes(member) && partnerSettingsLength(member.partnerSettings) > 0) {
-        issues.push({
-          level: "warning",
-          tab: "character",
-          message:
-            "名前も性格・設定もない登場人物は、パートナー設定だけ書いても Zetter では保存されません。",
-          path: ["members", member.id, "name"],
-        });
+        const message =
+          "名前も性格・設定もない登場人物は、パートナー設定だけ書いても Zetter では保存されません。";
+        issues.push(issue("warning", "character", message, ["members", member.id, "name"]));
       }
     }
   }
@@ -343,12 +305,8 @@ export function validateCast(doc: CastDocument): CastIssue[] {
   );
   if (settingsTotal > LIMITS.settingsTotal) {
     const over = settingsTotal - LIMITS.settingsTotal;
-    issues.push({
-      level: "error",
-      tab: "character",
-      message: `キャラクター設定（本人の性格・設定と登場人物のプロフィール）は合わせて${formatCount(LIMITS.settingsTotal)}字までです。いまは${formatCount(settingsTotal)}字で、${formatCount(over)}字ぶん超えています。誰の設定を削るかはお任せします（「いまの状況」は別枠です）。`,
-      path: ["cast", "persona"],
-    });
+    const message = `キャラクター設定（本人の性格・設定と登場人物のプロフィール）は合わせて${formatCount(LIMITS.settingsTotal)}字までです。いまは${formatCount(settingsTotal)}字で、${formatCount(over)}字ぶん超えています。誰の設定を削るかはお任せします（「いまの状況」は別枠です）。`;
+    issues.push(issue("error", "character", message, ["cast", "persona"]));
   }
   const sentTone = (list: readonly ToneExample[]) =>
     list
@@ -360,11 +318,8 @@ export function validateCast(doc: CastDocument): CastIssue[] {
   );
   if (toneTotal > LIMITS.toneTotal) {
     const over = toneTotal - LIMITS.toneTotal;
-    issues.push({
-      level: "error",
-      tab: "character",
-      message: `口調サンプルは全員の合計で${formatCount(LIMITS.toneTotal)}字までです。いまは${formatCount(toneTotal)}字で、${formatCount(over)}字ぶん超えています。誰の口調サンプルを削るかはお任せします。`,
-    });
+    const message = `口調サンプルは全員の合計で${formatCount(LIMITS.toneTotal)}字までです。いまは${formatCount(toneTotal)}字で、${formatCount(over)}字ぶん超えています。誰の口調サンプルを削るかはお任せします。`;
+    issues.push(issue("error", "character", message));
   }
   toneIssues("本人", ["cast"], doc.toneExamples, issues);
   partnerIssues("本人", ["cast"], doc.partnerSettings, issues);
@@ -376,204 +331,123 @@ export function validateCast(doc: CastDocument): CastIssue[] {
 
   // 体験設定
   if (story) {
-    if (!doc.tagline.trim())
-      issues.push({
-        level: "error",
-        tab: "experience",
-        message: "キャッチコピーを入力してください。",
-        path: ["cast", "tagline"],
-      });
+    if (!doc.tagline.trim()) {
+      const message = "キャッチコピーを入力してください。";
+      issues.push(issue("error", "experience", message, ["cast", "tagline"]));
+    }
     if (overLimit(doc.tagline, LIMITS.tagline)) {
-      issues.push({
-        level: "error",
-        tab: "experience",
-        message: "キャッチコピーは40文字までです。",
-        path: ["cast", "tagline"],
-      });
+      const message = "キャッチコピーは40文字までです。";
+      issues.push(issue("error", "experience", message, ["cast", "tagline"]));
     }
     if (overLimit(doc.situation, LIMITS.situation)) {
-      issues.push({
-        level: "error",
-        tab: "experience",
-        message: "いまの状況は20,000文字までです。",
-        path: ["cast", "situation"],
-      });
+      const message = "いまの状況は20,000文字までです。";
+      issues.push(issue("error", "experience", message, ["cast", "situation"]));
     }
   }
-  if (doc.introScript.length > LIMITS.introParts) {
-    issues.push({ level: "error", tab: "experience", message: "イントロは12パートまでです。" });
-  }
+  if (doc.introScript.length > LIMITS.introParts)
+    issues.push(issue("error", "experience", "イントロは12パートまでです。"));
   // 雑談モードでは 1 つ目のパートが「最初のひとこと」の欄になる
   const introPath = (index: number): FieldPath =>
     !story && index === 0 ? ["intro", "first", "text"] : ["intro", index, "text"];
   doc.introScript.forEach((part, index) => {
     if (overLimit(part.text, LIMITS.introPart)) {
-      issues.push({
-        level: "error",
-        tab: "experience",
-        message: `イントロのパート${index + 1}は4000文字までです。`,
-        path: introPath(index),
-      });
+      const message = `イントロのパート${index + 1}は4000文字までです。`;
+      issues.push(issue("error", "experience", message, introPath(index)));
     }
   });
   const emptyParts = doc.introScript.filter((part) => !part.text.trim()).length;
   if (emptyParts > 0) {
     const firstEmpty = doc.introScript.findIndex((part) => !part.text.trim());
-    issues.push({
-      level: "warning",
-      tab: "experience",
-      message: `中身が空のイントロのパートが${emptyParts}件あります。Zetter では保存されません。`,
-      path: introPath(firstEmpty),
-    });
+    const message = `中身が空のイントロのパートが${emptyParts}件あります。Zetter では保存されません。`;
+    issues.push(issue("warning", "experience", message, introPath(firstEmpty)));
   }
   // 登場人物がいるときの話者の選び方（2026-10-21 に Zetter の作成画面で確かめた手順）
   const spokenParts = story
     ? doc.introScript.filter((part) => part.kind === "speech" && part.text.trim())
     : [];
   if (members.length > 0 && spokenParts.length > 0) {
-    issues.push({
-      level: "info",
-      tab: "experience",
-      message:
+    issues.push(
+      issue(
+        "info",
+        "experience",
         "Zetter では、登場人物がいるキャストのセリフのパートは、話者（本体を含む）を1つずつ選ばないと完成できません。",
-    });
+      ),
+    );
     if (spokenParts.some((part) => part.speakerId)) {
-      issues.push({
-        level: "info",
-        tab: "experience",
-        message:
+      issues.push(
+        issue(
+          "info",
+          "experience",
           "Zetter では、新しく足した登場人物は一度完成するまで話者に選べません。新しく作るときは、いったん話者を本体にして完成し、編集し直して話者を変えてください。",
-      });
+        ),
+      );
     }
   }
   if (overLimit(doc.aboutText, LIMITS.aboutText)) {
-    issues.push({
-      level: "error",
-      tab: "experience",
-      message: "このキャストについては3000文字までです。",
-      path: ["cast", "aboutText"],
-    });
+    const message = "このキャストについては3000文字までです。";
+    issues.push(issue("error", "experience", message, ["cast", "aboutText"]));
   }
-  if (doc.recommendedPersonas.length > LIMITS.personas) {
-    issues.push({
-      level: "error",
-      tab: "experience",
-      message: "この会話でのあなたは5件までです。",
-    });
-  }
+  if (doc.recommendedPersonas.length > LIMITS.personas)
+    issues.push(issue("error", "experience", "この会話でのあなたは5件までです。"));
   doc.recommendedPersonas.forEach((persona, index) => {
     const label = `この会話でのあなた${index + 1}`;
     const base = ["personas", persona.id];
     // 「遊ぶ人の名前を使う」のときは名前の欄を使わない
     if (!persona.useViewerName && overLimit(persona.name, LIMITS.personaName)) {
-      issues.push({
-        level: "error",
-        tab: "experience",
-        message: `${label}の名前は20文字までです。`,
-        path: [...base, "name"],
-      });
+      const message = `${label}の名前は20文字までです。`;
+      issues.push(issue("error", "experience", message, [...base, "name"]));
     }
     if (overLimit(persona.tagline, LIMITS.personaTagline)) {
-      issues.push({
-        level: "error",
-        tab: "experience",
-        message: `${label}の紹介文は50文字までです。`,
-        path: [...base, "tagline"],
-      });
+      const message = `${label}の紹介文は50文字までです。`;
+      issues.push(issue("error", "experience", message, [...base, "tagline"]));
     }
     if (overLimit(persona.note, LIMITS.personaNote)) {
-      issues.push({
-        level: "error",
-        tab: "experience",
-        message: `${label}のキャストに伝わるものは2000文字までです。`,
-        path: [...base, "note"],
-      });
+      const message = `${label}のキャストに伝わるものは2000文字までです。`;
+      issues.push(issue("error", "experience", message, [...base, "note"]));
     }
     if (!persona.name.trim() && !persona.useViewerName) {
-      issues.push({
-        level: "warning",
-        tab: "experience",
-        message: `${label}は名前が空なので、Zetter では保存されません（「遊ぶ人の名前を使う」をオンにすれば名前なしでも保存されます）。`,
-        path: [...base, "name"],
-      });
+      const message = `${label}は名前が空なので、Zetter では保存されません（「遊ぶ人の名前を使う」をオンにすれば名前なしでも保存されます）。`;
+      issues.push(issue("warning", "experience", message, [...base, "name"]));
     }
   });
 
-  // 好感度
+  // 好感度（共通設定、本体と登場人物の個別設定の順）
   if (doc.affinity) {
+    const { overrides } = doc.affinity;
     const suffix = doc.mode === "story" ? "" : "（雑談モードでは効きません）";
-    const defaultError = validateAffinityConfig(doc.affinity.default);
-    if (defaultError)
-      issues.push({
-        level: "error",
-        tab: "affinity",
-        message: `${defaultError}${suffix}`,
-        path: ["affinity", "default"],
-      });
-    const base = doc.affinity.overrides[AFFINITY_BASE_SUBJECT];
-    const baseError = base ? validateAffinityConfig(base) : "";
-    if (baseError)
-      issues.push({
-        level: "error",
-        tab: "affinity",
-        message: `本体の個別設定: ${baseError}${suffix}`,
-        path: ["affinity", AFFINITY_BASE_SUBJECT],
-      });
-    for (const member of members) {
-      const config = doc.affinity.overrides[member.id];
+    const checkConfig = (key: string, config: AffinityConfig | undefined, prefix: string) => {
       const error = config ? validateAffinityConfig(config) : "";
-      if (error) {
-        issues.push({
-          level: "error",
-          tab: "affinity",
-          message: `${member.name.trim() || "登場人物"}の個別設定: ${error}${suffix}`,
-          path: ["affinity", member.id],
-        });
-      }
+      if (error)
+        issues.push(issue("error", "affinity", `${prefix}${error}${suffix}`, ["affinity", key]));
+    };
+    checkConfig("default", doc.affinity.default, "");
+    checkConfig(AFFINITY_BASE_SUBJECT, overrides[AFFINITY_BASE_SUBJECT], "本体の個別設定: ");
+    for (const member of members) {
+      const prefix = `${member.name.trim() || "登場人物"}の個別設定: `;
+      checkConfig(member.id, overrides[member.id], prefix);
     }
   }
 
   // 設定集
-  if (doc.lorebooks.length > LIMITS.lorebooks) {
-    issues.push({ level: "error", tab: "lorebook", message: "連動できる設定集は10冊までです。" });
-  }
+  if (doc.lorebooks.length > LIMITS.lorebooks)
+    issues.push(issue("error", "lorebook", "連動できる設定集は10冊までです。"));
 
   // 見た目・公開
-  if (doc.tags.length > LIMITS.tags)
-    issues.push({ level: "error", tab: "publish", message: "タグは5個までです。" });
+  if (doc.tags.length > LIMITS.tags) issues.push(issue("error", "publish", "タグは5個までです。"));
   doc.tags.forEach((tag, index) => {
     if (overLimit(tag, LIMITS.tag))
-      issues.push({
-        level: "error",
-        tab: "publish",
-        message: `タグ${index + 1}は20文字までです。`,
-        path: ["tags", index],
-      });
+      issues.push(issue("error", "publish", `タグ${index + 1}は20文字までです。`, ["tags", index]));
   });
   const emptyTags = doc.tags.filter((tag) => !tag.trim()).length;
   if (emptyTags > 0) {
-    issues.push({
-      level: "warning",
-      tab: "publish",
-      message: `空のタグが${emptyTags}個あります。Zetter では保存されません。`,
-      path: ["tags", doc.tags.findIndex((tag) => !tag.trim())],
-    });
+    const firstEmpty = doc.tags.findIndex((tag) => !tag.trim());
+    const message = `空のタグが${emptyTags}個あります。Zetter では保存されません。`;
+    issues.push(issue("warning", "publish", message, ["tags", firstEmpty]));
   }
-  if (story && overLimit(doc.hook, LIMITS.hook)) {
-    issues.push({
-      level: "error",
-      tab: "publish",
-      message: "一言セリフは40文字までです。",
-      path: ["cast", "hook"],
-    });
-  }
-  if (doc.gallery.length > LIMITS.gallery) {
-    issues.push({
-      level: "error",
-      tab: "publish",
-      message: "ギャラリー画像は10枚まで登録できます。",
-    });
-  }
+  if (story && overLimit(doc.hook, LIMITS.hook))
+    issues.push(issue("error", "publish", "一言セリフは40文字までです。", ["cast", "hook"]));
+  if (doc.gallery.length > LIMITS.gallery)
+    issues.push(issue("error", "publish", "ギャラリー画像は10枚まで登録できます。"));
   return issues;
 }
 

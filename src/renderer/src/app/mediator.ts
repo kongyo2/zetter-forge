@@ -30,6 +30,18 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** 頼んだ処理が失敗したことを知らせるできごと（どの頼みのものかは token で見分ける） */
+type FailureType =
+  | "library/failed"
+  | "root/failed"
+  | "cast/load-failed"
+  | "image/read-failed"
+  | "image/encode-failed";
+
+function toFailure(type: FailureType, token: number): (error: unknown) => AppEvent {
+  return (error) => ({ type, token, message: messageOf(error) });
+}
+
 export class Mediator {
   private state: AppState;
   private readonly listeners = new Set<() => void>();
@@ -94,14 +106,14 @@ export class Mediator {
         this.settle(
           forge.getLibrary(),
           (listing) => ({ type: "library/loaded", token: effect.token, listing }),
-          (error) => ({ type: "library/failed", token: effect.token, message: messageOf(error) }),
+          toFailure("library/failed", effect.token),
         );
         return;
       case "library/choose":
         this.settle(
           forge.chooseLibraryRoot(),
           (listing) => ({ type: "root/chosen", token: effect.token, listing }),
-          (error) => ({ type: "root/failed", token: effect.token, message: messageOf(error) }),
+          toFailure("root/failed", effect.token),
         );
         return;
       case "library/open-folder":
@@ -111,7 +123,7 @@ export class Mediator {
         this.settle(
           forge.loadCast(effect.folder),
           (loaded) => ({ type: "cast/loaded", token: effect.token, loaded }),
-          (error) => ({ type: "cast/load-failed", token: effect.token, message: messageOf(error) }),
+          toFailure("cast/load-failed", effect.token),
         );
         return;
       case "cast/save":
@@ -144,22 +156,14 @@ export class Mediator {
         this.settle(
           images.read(effect.file),
           (source) => ({ type: "image/read", token: effect.token, source }),
-          (error) => ({
-            type: "image/read-failed",
-            token: effect.token,
-            message: messageOf(error),
-          }),
+          toFailure("image/read-failed", effect.token),
         );
         return;
       case "image/encode":
         this.settle(
           images.encode(effect.canvas, effect.image),
           (image) => ({ type: "image/encoded", token: effect.token, image }),
-          (error) => ({
-            type: "image/encode-failed",
-            token: effect.token,
-            message: messageOf(error),
-          }),
+          toFailure("image/encode-failed", effect.token),
         );
         return;
       case "image/show":

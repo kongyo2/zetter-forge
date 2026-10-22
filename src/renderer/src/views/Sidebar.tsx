@@ -3,6 +3,20 @@ import { useEmit } from "./chain";
 import { Avatar } from "./parts/basics";
 import { IconPlus } from "./parts/icons";
 
+/** 保存先のフォルダを選び直す（読めなかったときと、一覧の下に置く） */
+function ChooseRootButton() {
+  const emit = useEmit();
+  return (
+    <button
+      type="button"
+      className="btn btn-plain btn-small"
+      onClick={() => emit({ type: "library/choose-root" })}
+    >
+      保存先を変える
+    </button>
+  );
+}
+
 function Status({ vm }: { vm: NonNullable<SidebarVM["status"]> }) {
   const emit = useEmit();
   switch (vm.kind) {
@@ -25,13 +39,7 @@ function Status({ vm }: { vm: NonNullable<SidebarVM["status"]> }) {
             >
               読み直す
             </button>
-            <button
-              type="button"
-              className="btn btn-plain btn-small"
-              onClick={() => emit({ type: "library/choose-root" })}
-            >
-              保存先を変える
-            </button>
+            <ChooseRootButton />
           </div>
         </div>
       );
@@ -114,13 +122,7 @@ export function Sidebar({ vm }: { vm: SidebarVM }) {
           <span className="library-root-path">{vm.root}</span>
         </span>
         <div className="button-row">
-          <button
-            type="button"
-            className="btn btn-plain btn-small"
-            onClick={() => emit({ type: "library/choose-root" })}
-          >
-            保存先を変える
-          </button>
+          <ChooseRootButton />
           <button
             type="button"
             className="btn btn-plain btn-small"

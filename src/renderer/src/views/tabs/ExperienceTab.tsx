@@ -2,8 +2,15 @@ import type { CSSProperties } from "react";
 
 import type { ExperienceTabVM, IntroPartVM, PersonaVM } from "../../app/viewModels";
 import { Link, useEmit } from "../chain";
-import { Disclosure, MoveButtons, Section, Select, Toggle } from "../parts/basics";
-import { IconPlus } from "../parts/icons";
+import {
+  AddButton,
+  Disclosure,
+  MoveButtons,
+  RemoveButton,
+  Section,
+  Select,
+  Toggle,
+} from "../parts/basics";
 import { ImageField } from "../parts/ImageField";
 import { TextField } from "../parts/TextField";
 
@@ -80,7 +87,6 @@ function IntroLine({ vm }: { vm: IntroPartVM }) {
 }
 
 function StoryIntro({ vm }: { vm: NonNullable<ExperienceTabVM["story"]>["intro"] }) {
-  const emit = useEmit();
   return (
     <Section
       title="イントロ"
@@ -101,15 +107,7 @@ function StoryIntro({ vm }: { vm: NonNullable<ExperienceTabVM["story"]>["intro"]
         </ol>
       )}
       <div>
-        <button
-          type="button"
-          className="btn btn-outline"
-          disabled={!vm.canAdd}
-          onClick={() => emit({ type: "add", path: [] })}
-        >
-          <IconPlus />
-          パートを追加
-        </button>
+        <AddButton disabled={!vm.canAdd}>パートを追加</AddButton>
       </div>
     </Section>
   );
@@ -137,18 +135,11 @@ function ChatIntro({ vm }: { vm: NonNullable<ExperienceTabVM["chat"]> }) {
 }
 
 function Persona({ vm }: { vm: PersonaVM }) {
-  const emit = useEmit();
   return (
     <li className="row persona-row">
       <div className="row-head">
         <span className="row-index">{vm.index + 1}</span>
-        <button
-          type="button"
-          className="btn btn-plain btn-small btn-danger"
-          onClick={() => emit({ type: "remove", path: [] })}
-        >
-          このペルソナを削除
-        </button>
+        <RemoveButton>このペルソナを削除</RemoveButton>
       </div>
       <p className="layer-label">遊ぶ人に見えるもの</p>
       <div className="identity">
@@ -166,7 +157,6 @@ function Persona({ vm }: { vm: PersonaVM }) {
 }
 
 function Personas({ vm }: { vm: ExperienceTabVM["personas"] }) {
-  const emit = useEmit();
   return (
     <div className="subsection">
       <div className="subhead">
@@ -189,15 +179,7 @@ function Personas({ vm }: { vm: ExperienceTabVM["personas"] }) {
           ))}
         </ol>
       )}
-      <button
-        type="button"
-        className="btn btn-outline"
-        disabled={!vm.canAdd}
-        onClick={() => emit({ type: "add", path: [] })}
-      >
-        <IconPlus />
-        ペルソナを追加
-      </button>
+      <AddButton disabled={!vm.canAdd}>ペルソナを追加</AddButton>
     </div>
   );
 }

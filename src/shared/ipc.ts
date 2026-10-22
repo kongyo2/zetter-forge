@@ -58,6 +58,12 @@ export type SaveCastResult =
   | { kind: "saved"; cast: SavedCast }
   | { kind: "missing"; message: string };
 
+/**
+ * メインプロセスの返事。例外のままでは、文言に Electron の前置き（Error invoking remote method…）が
+ * 付いて画面に届くので、成否を値で返して preload で投げ直す。
+ */
+export type InvokeResult<T> = { ok: true; value: T } | { ok: false; error: string };
+
 export interface ForgeApi {
   getLibrary(): Promise<LibraryListing>;
   chooseLibraryRoot(): Promise<LibraryListing | null>;
