@@ -416,6 +416,103 @@ describe("写す項目", () => {
     expect(item?.notes[0]).toContain("上限の10字を1字超えています");
   });
 
+  it("イントロの合計が上限を超えるときは、超えるパートにそのことを添える", () => {
+    const part = (text: string) => ({ kind: "narration" as const, text, speakerId: null });
+    const doc = cast({
+      introScript: [part("あ".repeat(4000)), part("あ".repeat(4000)), part("あ".repeat(4000))],
+    });
+    expect(transferItems(doc).flatMap((item) => item.notes)).toEqual([]);
+    doc.introScript.push(part("雨"), part("雨"));
+    expect(
+      transferItems(structuredClone(doc))
+        .filter((item) => item.notes.length > 0)
+        .map((item) => [item.key, item.notes]),
+    ).toEqual([
+      [
+        "intro/3/text",
+        [
+          "イントロは全部のパートを合わせて12,000字までです（いまは12,002字）。このパートで上限を超えます。",
+        ],
+      ],
+    ]);
+  });
+
+  it("遊び方シートは、何か書いたときだけ、イントロの下（オプション設定の前）に写す", () => {
+    const keysOf = (doc: CastDocument) =>
+      transferGroups(doc)
+        .find((group) => group.title === "体験設定")
+        ?.items.map((item) => item.key);
+    const textKeys = ["summary", "world", "role", "start", "first", "hint", "gimmick"].map(
+      (key) => `playGuide/${key}/text`,
+    );
+    // 空白だけなら書いていないのと同じ
+    const blank = cast();
+    blank.playGuide.world.text = " \n";
+    expect(keysOf(blank)?.some((key) => key.startsWith("playGuide/"))).toBe(false);
+    const story = cast({
+      introScript: [{ kind: "narration", text: "雨。", speakerId: null }],
+    });
+    story.playGuide.world.text = "海辺の町";
+    expect(keysOf(story)).toEqual([
+      "cast/mode",
+      "cast/tagline",
+      "cast/situation",
+      "intro/0/text",
+      ...textKeys.slice(0, 2),
+      "playGuide/world/hidden",
+      ...textKeys.slice(2),
+      "cast/aboutText",
+    ]);
+    // 雑談モードでも写す（Zetter はどちらのモードでも送る）
+    const chat = structuredClone({ ...story, mode: "chat" as const });
+    expect(keysOf(chat)).toEqual([
+      "cast/mode",
+      "intro/first/text",
+      ...textKeys.slice(0, 2),
+      "playGuide/world/hidden",
+      ...textKeys.slice(2),
+      "cast/aboutText",
+    ]);
+    expect(
+      transferItems(story)
+        .filter((item) => item.key.startsWith("playGuide/"))
+        .map((item) => [item.section, item.label, item.kind, item.skip]),
+    ).toEqual([
+      ["遊び方シート", "あらすじ", "text", "empty"],
+      ["遊び方シート", "世界観", "text", null],
+      ["遊び方シート", "世界観の「隠しておく」", "setting", "default"],
+      ["遊び方シート", "あなたの役割", "text", "empty"],
+      ["遊び方シート", "始まりの状況", "text", "empty"],
+      ["遊び方シート", "最初にできること（1行に1つ）", "text", "empty"],
+      ["遊び方シート", "迷ったときのヒント", "text", "empty"],
+      ["遊び方シート", "隠しギミック", "text", "empty"],
+    ]);
+  });
+
+  it("遊び方シートの「隠しておく」は、欄ごとの既定（隠しギミックだけオン）と違うときに写す", () => {
+    const doc = cast();
+    doc.playGuide.summary = { text: "雨の古書店で、", hidden: true };
+    doc.playGuide.gimmick = { text: "合言葉がある", hidden: false };
+    doc.playGuide.hint = { text: "", hidden: true };
+    expect(
+      transferItems(doc)
+        .filter((item) => item.key.endsWith("/hidden"))
+        .map((item) => [item.key, item.value, item.skip]),
+    ).toEqual([
+      ["playGuide/summary/hidden", "オン", null],
+      ["playGuide/gimmick/hidden", "オフ", null],
+    ]);
+    const item = findTransferItem(doc, ["playGuide", "summary", "text"]);
+    expect(item).toMatchObject({ tab: "experience", group: "体験設定", value: "雨の古書店で、" });
+    expect(isCopyable(item as NonNullable<typeof item>)).toBe(true);
+    // 上限を超えていれば、入りきらないことを添える
+    const over = structuredClone(doc);
+    over.playGuide.role.text = "あ".repeat(201);
+    expect(findTransferItem(over, ["playGuide", "role", "text"])?.notes[0]).toContain(
+      "上限の200字を1字超えています",
+    );
+  });
+
   it("コピーできるのは、中身のある文字と保存した画像だけ（選ぶ欄は Zetter の画面で選ぶ）", () => {
     const doc = cast({ avatar: saved("images/avatar.jpg"), cover: saved("pending:cover") });
     const item = (key: string) => {

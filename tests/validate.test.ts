@@ -11,6 +11,7 @@ import {
 import {
   affinityStageTextLength,
   duplicateStageIndexes,
+  introUsage,
   limitPartnerSettingsValue,
   missingRequired,
   partnerSettingsLength,
@@ -445,6 +446,83 @@ describe("validateCast", () => {
       level: "error",
       path: ["intro", 1, "text"],
     });
+  });
+
+  it("イントロは全部のパートを合わせて 12,000 字まで。合計が上限を超えるパートへ飛べる", () => {
+    const part = (text: string) => ({ kind: "narration" as const, text, speakerId: null });
+    const doc = validCast();
+    doc.introScript = [part("あ".repeat(4000)), part("あ".repeat(4000)), part("あ".repeat(4000))];
+    expect(messages(doc)).toEqual([]);
+    doc.introScript.push(part("雨"), part("雨"));
+    expect(validateCast(doc)).toEqual([
+      {
+        level: "error",
+        tab: "experience",
+        message:
+          "イントロは全部のパートを合わせて12,000字までです。いまは12,002字で、2字ぶん超えています。どのパートを削るかはお任せします。",
+        path: ["intro", 3, "text"],
+      },
+    ]);
+    expect(introUsage(doc)).toEqual({ total: 12002, remaining: 0, over: 2, crossing: 3 });
+  });
+
+  it("イントロの合計は送られる分（前後の空白を除いた、空でないパート）で数える", () => {
+    const part = (text: string) => ({ kind: "speech" as const, text, speakerId: null });
+    const doc = validCast();
+    doc.introScript = [
+      part(`  ${"あ".repeat(4000)}\n`),
+      part(" \n　"),
+      part("🌙".repeat(2000)),
+      part(`${"あ".repeat(4000)}　`),
+    ];
+    expect(introUsage(doc)).toEqual({ total: 12000, remaining: 0, over: 0, crossing: null });
+    expect(messages(doc).filter((message) => message.startsWith("イントロは全部"))).toEqual([]);
+    // 絵文字は UTF-16 で 2 字に数える
+    (doc.introScript[2] as { text: string }).text = `${"🌙".repeat(2000)}a`;
+    expect(introUsage(doc)).toMatchObject({ total: 12001, crossing: 3 });
+  });
+
+  it("雑談モードでは、イントロの合計を確かめない（Zetter へは最初のひとことしか写さない）", () => {
+    const part = (text: string) => ({ kind: "speech" as const, text, speakerId: null });
+    const doc = {
+      ...validCast(),
+      mode: "chat" as const,
+      introScript: Array.from({ length: 4 }, () => part("あ".repeat(4000))),
+    };
+    expect(messages(doc).filter((message) => message.startsWith("イントロは全部"))).toEqual([]);
+  });
+
+  it("遊び方シートは欄ごとの上限まで（UTF-16 で数える）。直す欄へ飛べる", () => {
+    const fields = [
+      ["summary", "あらすじ", 400],
+      ["world", "世界観", 600],
+      ["role", "あなたの役割", 200],
+      ["start", "始まりの状況", 300],
+      ["first", "最初にできること（1行に1つ）", 300],
+      ["hint", "迷ったときのヒント", 400],
+      ["gimmick", "隠しギミック", 400],
+    ] as const;
+    for (const [key, label, max] of fields) {
+      const message = `遊び方シートの「${label}」は${max}文字までです。`;
+      expect(
+        overLimit((doc, value) => void (doc.playGuide[key].text = value), max, message),
+      ).toEqual({ level: "error", tab: "experience", message, path: ["playGuide", key, "text"] });
+    }
+    const doc = validCast();
+    doc.playGuide.role.text = "🌙".repeat(100);
+    expect(messages(doc)).toEqual([]);
+    doc.playGuide.role.text = `${"🌙".repeat(100)}a`;
+    expect(messages(doc)).toEqual(["遊び方シートの「あなたの役割」は200文字までです。"]);
+  });
+
+  it("遊び方シートは前後の空白も数え、どちらのモードでも確かめる（Zetter は切らずに、どちらのモードでも送る）", () => {
+    const message = "遊び方シートの「あらすじ」は400文字までです。";
+    const story = validCast();
+    story.playGuide.summary.text = ` ${"あ".repeat(400)}`;
+    expect(messages(story)).toEqual([message]);
+    const chat = { ...validCast(), mode: "chat" as const };
+    chat.playGuide.summary.text = `${"あ".repeat(400)}\n`;
+    expect(messages(chat)).toEqual([message]);
   });
 
   it("空のパートの警告は数を出し、最初の空のパートへ飛べる。雑談モードの 1 つ目は「最初のひとこと」の欄", () => {

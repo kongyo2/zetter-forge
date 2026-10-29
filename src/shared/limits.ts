@@ -1,4 +1,4 @@
-// Zetter のキャスト作成画面と同じ上限（2026-10-23 時点の z-etter.com/cast/create、app.js?v=04fa86f0e7a9 で確認）。
+// Zetter のキャスト作成画面と同じ上限（2026-10-29 時点の z-etter.com/cast/create、app.js?v=13f314ca5840 で確認）。
 // 文字数の数え方は 2 通りある。HTML の maxlength と同じ UTF-16 単位で数える欄と、
 // 好感度・パートナー設定のように Array.from で数える（コードポイント単位）欄。
 export const LIMITS = {
@@ -10,6 +10,11 @@ export const LIMITS = {
   aboutText: 3000,
   introPart: 4000,
   introParts: 12,
+  /**
+   * イントロの全部のパートの合計（UTF-16 単位）。Zetter の画面では数えないが、Zetter の「作り方」の
+   * 依頼文に「全部合わせて12000文字まで」とあり、コードの注記ではサーバーの上限と合わせてある
+   */
+  introTotal: 12000,
   tag: 20,
   tags: 5,
   toneSituation: 250,
@@ -35,4 +40,14 @@ export const LIMITS = {
   gallery: 10,
   lorebooks: 10,
   lorebookTitle: 20,
+  /** 遊び方シートの欄ごとの上限（UTF-16 単位。Zetter の CAST_PLAY_GUIDE_FIELDS） */
+  playGuide: {
+    summary: 400,
+    world: 600,
+    role: 200,
+    start: 300,
+    first: 300,
+    hint: 400,
+    gimmick: 400,
+  },
 } as const;

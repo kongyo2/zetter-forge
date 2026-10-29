@@ -65,6 +65,18 @@ export interface RecommendedPersona {
   avatar: CastImage | null;
 }
 
+/** 遊び方シートの欄（Zetter と同じキー） */
+export type PlayGuideKey = "summary" | "world" | "role" | "start" | "first" | "hint" | "gimmick";
+
+interface PlayGuideEntry {
+  text: string;
+  /** 「隠しておく」（遊ぶ人がタップしたときだけ見える） */
+  hidden: boolean;
+}
+
+/** 遊び方シート（遊ぶ人がチャットで開ける案内。AI には渡らない） */
+export type PlayGuide = Record<PlayGuideKey, PlayGuideEntry>;
+
 export interface AffinityStage {
   startValue: number | null;
   callText: string;
@@ -121,6 +133,7 @@ export interface CastDocument {
   situation: string;
   introScript: IntroPart[];
   aboutText: string;
+  playGuide: PlayGuide;
   recommendedPersonas: RecommendedPersona[];
   // 好感度・設定集
   affinity: CastAffinity | null;
@@ -177,6 +190,17 @@ export const PARTNER_HABIT_CHIPS = [
   "絵文字は使わない",
 ] as const;
 
+/** 遊び方シートの欄（Zetter の作成画面と同じ順・見出し・「隠しておく」の既定） */
+export const PLAY_GUIDE_FIELDS = [
+  { key: "summary", label: "あらすじ", hiddenByDefault: false },
+  { key: "world", label: "世界観", hiddenByDefault: false },
+  { key: "role", label: "あなたの役割", hiddenByDefault: false },
+  { key: "start", label: "始まりの状況", hiddenByDefault: false },
+  { key: "first", label: "最初にできること（1行に1つ）", hiddenByDefault: false },
+  { key: "hint", label: "迷ったときのヒント", hiddenByDefault: false },
+  { key: "gimmick", label: "隠しギミック", hiddenByDefault: true },
+] as const satisfies readonly { key: PlayGuideKey; label: string; hiddenByDefault: boolean }[];
+
 export const AFFINITY_STAGE_FIELDS = [
   { key: "callText", label: "呼び方", multiline: false },
   { key: "speechText", label: "話し方", multiline: true },
@@ -219,6 +243,13 @@ export function createEmptyMember(): CastMember {
 
 export function createEmptyPersona(): RecommendedPersona {
   return { id: newId(), name: "", useViewerName: false, tagline: "", note: "", avatar: null };
+}
+
+/** 何も書いていない遊び方シート（「隠しておく」は欄ごとの既定。Zetter と同じ） */
+export function createEmptyPlayGuide(): PlayGuide {
+  return Object.fromEntries(
+    PLAY_GUIDE_FIELDS.map((field) => [field.key, { text: "", hidden: field.hiddenByDefault }]),
+  ) as PlayGuide;
 }
 
 export function createEmptyStage(startValue: number | null): AffinityStage {
@@ -278,6 +309,7 @@ export function createEmptyCast(now = new Date()): CastDocument {
     situation: "",
     introScript: [],
     aboutText: "",
+    playGuide: createEmptyPlayGuide(),
     recommendedPersonas: [],
     affinity: null,
     lorebooks: [],
@@ -402,6 +434,24 @@ function normalizeIntroPart(raw: unknown): IntroPart {
   });
 }
 
+/**
+ * Zetter の normalizeCastPlayGuide と同じ既定値の補い方（欄が欠けていれば空、「隠しておく」が
+ * 真偽値でなければ欄ごとの既定）。遊び方シートのない前の版のファイルも、何も書いていないシートになる。
+ */
+function normalizePlayGuide(raw: unknown): PlayGuide {
+  const source = isRecord(raw) ? raw : {};
+  const guide = createEmptyPlayGuide();
+  for (const field of PLAY_GUIDE_FIELDS) {
+    const entry = source[field.key];
+    if (!isRecord(entry)) continue;
+    guide[field.key] = keepExtras(entry, {
+      text: str(entry.text),
+      hidden: bool(entry.hidden, field.hiddenByDefault),
+    });
+  }
+  return keepExtras(raw, guide);
+}
+
 function normalizeStage(raw: unknown): AffinityStage {
   const source = isRecord(raw) ? raw : {};
   return keepExtras(raw, {
@@ -502,6 +552,7 @@ export function normalizeCastDocument(raw: unknown, options: NormalizeOptions = 
     situation: str(raw.situation),
     introScript,
     aboutText: str(raw.aboutText),
+    playGuide: normalizePlayGuide(raw.playGuide),
     recommendedPersonas: list(raw.recommendedPersonas).map((persona) =>
       normalizePersona(persona, keep),
     ),
@@ -555,6 +606,11 @@ export function castDisplayTitle(doc: Pick<CastDocument, "mode" | "tagline" | "n
   const name = doc.name.trim();
   if (doc.mode === "story" && tagline) return { title: tagline, sub: name };
   return { title: name, sub: "" };
+}
+
+/** 遊び方シートの、何か書いてある欄（Zetter の castPlayGuideHasContent と同じく、空白だけの欄は数えない）。 */
+export function filledPlayGuideFields(guide: PlayGuide): (typeof PLAY_GUIDE_FIELDS)[number][] {
+  return PLAY_GUIDE_FIELDS.filter((field) => guide[field.key].text.trim());
 }
 
 /** 好感度の段階を開始値の小さい順に並べ直す（1 段階目は動かさない。Zetter と同じ）。 */

@@ -13,7 +13,9 @@ import {
   PARTNER_HABIT_CHIPS,
   PARTNER_SETTINGS_FIELDS,
   PARTNER_TIME_CHIPS,
+  PLAY_GUIDE_FIELDS,
   type PartnerSettings,
+  type PlayGuideKey,
   type ToneExample,
   createDefaultAffinityConfig,
   createEmptyMember,
@@ -97,6 +99,10 @@ function isStageField(key: unknown): key is (typeof AFFINITY_STAGE_FIELDS)[numbe
   return AFFINITY_STAGE_FIELDS.some((field) => field.key === key);
 }
 
+function isPlayGuideKey(key: unknown): key is PlayGuideKey {
+  return PLAY_GUIDE_FIELDS.some((field) => field.key === key);
+}
+
 /** 空なら null、数でなければ null（Zetter の欄と同じく、整数かどうかは確認で見る） */
 function parseNumber(value: string): number | null {
   if (value.trim() === "") return null;
@@ -153,6 +159,11 @@ export function applyInput(doc: CastDocument, path: Path, value: string): EditRe
   }
   if (head === "cast" || head === "members") return inputCharacter(doc, path, value);
   if (head === "intro") return inputIntro(doc, path, value);
+  if (head === "playGuide") {
+    const [, key, field] = path;
+    if (path.length !== 3 || !isPlayGuideKey(key) || field !== "text") return null;
+    return edit(doc, (draft) => void (draft.playGuide[key].text = value));
+  }
   if (head === "personas") {
     const [, id, field] = path;
     if (field !== "name" && field !== "tagline" && field !== "note") return null;
@@ -307,6 +318,8 @@ export function applyCheck(doc: CastDocument, path: Path, checked: boolean): Edi
     const apply = CAST_SWITCHES[key];
     return apply ? edit(doc, (draft) => apply(draft, checked)) : null;
   }
+  if (head === "playGuide" && path.length === 3 && field === "hidden" && isPlayGuideKey(key))
+    return edit(doc, (draft) => void (draft.playGuide[key].hidden = checked));
   if (head === "personas" && field === "useViewerName") {
     return edit(doc, (draft) => {
       const persona = draft.recommendedPersonas.find((candidate) => candidate.id === key);

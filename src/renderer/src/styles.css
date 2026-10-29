@@ -727,6 +727,11 @@ h3 {
   white-space: nowrap;
 }
 
+/* 見出しの数に添える字数（イントロの合計など） */
+.section-meta .counter {
+  margin-left: 12px;
+}
+
 .section-head .note {
   max-width: 44em;
 }

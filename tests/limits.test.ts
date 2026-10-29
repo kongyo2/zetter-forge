@@ -1,4 +1,4 @@
-// 上限の値と字数の数え方。値は 2026-10-23 に z-etter.com/cast/create（app.js?v=04fa86f0e7a9）の
+// 上限の値と字数の数え方。値は 2026-10-29 に z-etter.com/cast/create（app.js?v=13f314ca5840）の
 // 定数・入力欄の maxlength・保存前の確認と突き合わせたもの。Zetter で上限が変わったら、ここも変える。
 import { LIMITS } from "@shared/limits";
 import { codePointLength, formatCount, utf16Length } from "@shared/text";
@@ -15,9 +15,11 @@ describe("LIMITS", () => {
       hook: 40,
       situation: 20000,
       aboutText: 3000,
-      // イントロ（パートの maxlength と「パートを追加 n/12」）
+      // イントロ（パートの maxlength と「パートを追加 n/12」。合計は「作り方」の依頼文の
+      // 「1パート4000文字・全部合わせて12000文字まで」）
       introPart: 4000,
       introParts: 12,
+      introTotal: 12000,
       // タグ（「最大5個・各20文字まで」）
       tag: 20,
       tags: 5,
@@ -46,7 +48,23 @@ describe("LIMITS", () => {
       gallery: 10,
       lorebooks: 10,
       lorebookTitle: 20,
+      // 遊び方シート（CAST_PLAY_GUIDE_FIELDS と、各欄の maxlength）
+      playGuide: {
+        summary: 400,
+        world: 600,
+        role: 200,
+        start: 300,
+        first: 300,
+        hint: 400,
+        gimmick: 400,
+      },
     });
+  });
+
+  it("イントロの合計は、1 パートの上限より大きく、全部のパートの上限の和より小さい", () => {
+    // 12 パートを上限まで書くと合計を超える（パートごとの上限だけでは足りない）
+    expect(LIMITS.introTotal).toBeGreaterThan(LIMITS.introPart);
+    expect(LIMITS.introTotal).toBeLessThan(LIMITS.introPart * LIMITS.introParts);
   });
 
   it("登場人物は本人を含めた人数から本人を引いた数", () => {

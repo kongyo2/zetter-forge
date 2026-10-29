@@ -1,11 +1,19 @@
 // 体験設定のタブに描くもの。
-import { sendableMembers } from "@shared/cast";
+import { PLAY_GUIDE_FIELDS, filledPlayGuideFields, sendableMembers } from "@shared/cast";
 import { LIMITS } from "@shared/limits";
-import { utf16Length } from "@shared/text";
+import { formatCount, utf16Length } from "@shared/text";
+import { introUsage } from "@shared/validate";
 
 import { USER_PLACEHOLDER, introRoleValue } from "../edits";
 import { castInk } from "../ink";
-import type { ChipsVM, ExperienceTabVM, IntroPartVM, PersonaVM, SelectVM } from "../viewModels";
+import type {
+  ChipsVM,
+  ExperienceTabVM,
+  IntroPartVM,
+  PersonaVM,
+  PlayGuideVM,
+  SelectVM,
+} from "../viewModels";
 import {
   type Context,
   counter,
@@ -83,6 +91,34 @@ function intro(ctx: Context): IntroPartVM[] {
   });
 }
 
+function playGuide(ctx: Context): PlayGuideVM {
+  const guide = ctx.doc.playGuide;
+  const filled = filledPlayGuideFields(guide).length;
+  return {
+    scope: ["playGuide"],
+    summary: filled > 0 ? `${filled}項目` : "未設定",
+    fields: PLAY_GUIDE_FIELDS.map((field) => {
+      const entry = guide[field.key];
+      return {
+        key: field.key,
+        text: textField(ctx, ["playGuide", field.key], ["text"], {
+          label: field.label,
+          value: entry.text,
+          multiline: true,
+          rows: 3,
+          ...limit(entry.text, LIMITS.playGuide[field.key]),
+        }),
+        hidden: toggle(
+          ["hidden"],
+          "隠しておく",
+          entry.hidden,
+          "遊ぶ人がタップしたときだけ見えます。",
+        ),
+      };
+    }),
+  };
+}
+
 function personas(ctx: Context): PersonaVM[] {
   return ctx.doc.recommendedPersonas.map((persona, index) => {
     const scope = ["personas", persona.id];
@@ -133,6 +169,7 @@ export function presentExperience(ctx: Context): ExperienceTabVM {
   const scope = ["cast"];
   const first = doc.introScript[0];
   const hidden = Math.max(0, doc.introScript.length - 1);
+  const introTotal = introUsage(doc).total;
   return {
     scope,
     mode: {
@@ -164,6 +201,16 @@ export function presentExperience(ctx: Context): ExperienceTabVM {
           intro: {
             scope: ["intro"],
             meta: `${doc.introScript.length} / ${LIMITS.introParts}パート`,
+            total: {
+              text: `合計 ${formatCount(introTotal)}/${formatCount(LIMITS.introTotal)}字`,
+              tone:
+                introTotal > LIMITS.introTotal
+                  ? "over"
+                  : introTotal >= LIMITS.introTotal * 0.9
+                    ? "near"
+                    : "normal",
+              aside: null,
+            },
             parts: intro(ctx),
             canAdd: doc.introScript.length < LIMITS.introParts,
           },
@@ -187,6 +234,7 @@ export function presentExperience(ctx: Context): ExperienceTabVM {
               ? `ストーリーモードで書いたイントロのパートが、ほかに${hidden}件残っています。`
               : null,
         },
+    playGuide: playGuide(ctx),
     about: textField(ctx, scope, ["aboutText"], {
       label: "このキャストについて",
       value: doc.aboutText,

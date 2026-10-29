@@ -16,6 +16,7 @@ import {
   McpServer,
   createMcpHandler,
 } from "@modelcontextprotocol/server";
+import { PLAY_GUIDE_FIELDS } from "@shared/cast";
 import type { JsonObject } from "@shared/json";
 import { LIMITS } from "@shared/limits";
 import { type McpSettings, type McpStatus, mcpUrl } from "@shared/mcp";
@@ -62,6 +63,7 @@ path は / でつなぐ。<id> は read_cast の cast にある id、<i> は 0 �
 - 本人: cast/name, cast/persona（性格・設定）, cast/partnerSettings/<dailyRoutine|messageHabits|proactiveMessages|distanceWhenApart|freeform>, cast/toneExamples（add）, cast/toneExamples/<i>（remove・move）, cast/toneExamples/<i>/<situation|example>, cast/avatarBlurred（switch）
 - 登場人物（ストーリーモードだけ）: members（add）, members/<id>（remove）, members/<id>/<name|profile>, members/<id>/partnerSettings/…, members/<id>/toneExamples/…（本人と同じ）
 - 体験設定: cast/mode（story・chat）, cast/tagline（キャッチコピー）, cast/situation（いまの状況）, cast/aboutText（このキャストについて）, intro（add）, intro/<i>（remove・move）, intro/<i>/text, intro/<i>/role（narration・speech:（本体のセリフ）・speech:<登場人物の id>）, intro/first/text（雑談モードの最初のひとこと）, intro/rest（remove で、雑談モードでは見えない 2 つ目以降をまとめて消す）
+- 遊び方シート（遊ぶ人に見せる案内。AI には伝わらない）: playGuide/<summary|world|role|start|first|hint|gimmick>/text（あらすじ・世界観・あなたの役割・始まりの状況・最初にできること（1 行に 1 つ）・迷ったときのヒント・隠しギミック）, playGuide/<…>/hidden（switch。オンで「隠しておく」。gimmick だけ既定がオン）
 - この会話でのあなた: personas（add）, personas/<id>（remove）, personas/<id>/<name|tagline|note>, personas/<id>/useViewerName（switch）
 - 好感度: affinity（add で 4 段階のひな形を作る、remove で全部消す）。<対象> は default（共通設定）、__cast_base__（本体）か登場人物の id。affinity/<対象>（add で個別設定を作る、remove で共通設定に戻す）, affinity/<対象>/<itemName|minValue|maxValue|initialValue|pace>（pace は gentle・normal・rapid）, affinity/<対象>/showInChat（switch）, affinity/<対象>/disabled（switch。オンでそのキャラは好感度を使わない。default にはない）, affinity/<対象>/stages（add）, affinity/<対象>/stages/<i>（remove）, affinity/<対象>/stages/<i>/<startValue|callText|speechText|distanceText|agencyText|avoidText|freeText>（1 段階目の startValue は最小値で決まる）
 - 設定集: lorebooks（add）, lorebooks/<id>（remove・move）, lorebooks/<id>/<title|note>
@@ -69,7 +71,7 @@ path は / でつなぐ。<id> は read_cast の cast にある id、<i> は 0 �
 - メモ（Zetter には送られない）: cast/zetterUrl, cast/memo
 - 画像は外す（remove）ことだけできる: cast/avatar, cast/cover, cast/background, members/<id>/avatar, personas/<id>/avatar, gallery/<id>
 
-Zetter の上限（超えても書けるが、read_cast の issues に出る）: 名前 ${n(LIMITS.name)} 字、キャッチコピーと一言セリフ ${n(LIMITS.tagline)} 字、性格・設定と登場人物のプロフィールは合わせて ${n(LIMITS.settingsTotal)} 字、口調サンプルは 1 人 ${n(LIMITS.toneItemsPerCharacter)} 件・状況 ${n(LIMITS.toneSituation)} 字・発話例 ${n(LIMITS.toneExample)} 字・全員で ${n(LIMITS.toneTotal)} 字、パートナー設定は 1 人 5 欄で ${n(LIMITS.partnerSettingsTotal)} 字（超える分は切り詰める）、いまの状況 ${n(LIMITS.situation)} 字、イントロは ${n(LIMITS.introParts)} パート・1 パート ${n(LIMITS.introPart)} 字、このキャストについて ${n(LIMITS.aboutText)} 字、登場人物は本人を含めて ${n(LIMITS.charactersTotal)} 人、この会話でのあなた ${n(LIMITS.personas)} 件（名前 ${n(LIMITS.personaName)} 字・紹介文 ${n(LIMITS.personaTagline)} 字・キャストに伝わるもの ${n(LIMITS.personaNote)} 字）、タグ ${n(LIMITS.tags)} 個（${n(LIMITS.tag)} 字）、好感度の段階 ${n(LIMITS.affinityStages)} 個（1 段階の 6 欄で ${n(LIMITS.affinityStageText)} 字）、設定集 ${n(LIMITS.lorebooks)} 冊。`;
+Zetter の上限（超えても書けるが、read_cast の issues に出る）: 名前 ${n(LIMITS.name)} 字、キャッチコピーと一言セリフ ${n(LIMITS.tagline)} 字、性格・設定と登場人物のプロフィールは合わせて ${n(LIMITS.settingsTotal)} 字、口調サンプルは 1 人 ${n(LIMITS.toneItemsPerCharacter)} 件・状況 ${n(LIMITS.toneSituation)} 字・発話例 ${n(LIMITS.toneExample)} 字・全員で ${n(LIMITS.toneTotal)} 字、パートナー設定は 1 人 5 欄で ${n(LIMITS.partnerSettingsTotal)} 字（超える分は切り詰める）、いまの状況 ${n(LIMITS.situation)} 字、イントロは ${n(LIMITS.introParts)} パート・1 パート ${n(LIMITS.introPart)} 字・全部で ${n(LIMITS.introTotal)} 字（ストーリーモード）、遊び方シートは ${PLAY_GUIDE_FIELDS.map((field) => `${field.key} ${n(LIMITS.playGuide[field.key])} 字`).join("・")}、このキャストについて ${n(LIMITS.aboutText)} 字、登場人物は本人を含めて ${n(LIMITS.charactersTotal)} 人、この会話でのあなた ${n(LIMITS.personas)} 件（名前 ${n(LIMITS.personaName)} 字・紹介文 ${n(LIMITS.personaTagline)} 字・キャストに伝わるもの ${n(LIMITS.personaNote)} 字）、タグ ${n(LIMITS.tags)} 個（${n(LIMITS.tag)} 字）、好感度の段階 ${n(LIMITS.affinityStages)} 個（1 段階の 6 欄で ${n(LIMITS.affinityStageText)} 字）、設定集 ${n(LIMITS.lorebooks)} 冊。`;
 
 const noInput = z.object({});
 

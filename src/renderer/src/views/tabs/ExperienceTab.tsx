@@ -1,9 +1,10 @@
 import type { CSSProperties } from "react";
 
-import type { ExperienceTabVM, IntroPartVM, PersonaVM } from "../../app/viewModels";
+import type { ExperienceTabVM, IntroPartVM, PersonaVM, PlayGuideVM } from "../../app/viewModels";
 import { Link, useEmit } from "../chain";
 import {
   AddButton,
+  Counter,
   Disclosure,
   MoveButtons,
   RemoveButton,
@@ -90,7 +91,12 @@ function StoryIntro({ vm }: { vm: NonNullable<ExperienceTabVM["story"]>["intro"]
   return (
     <Section
       title="イントロ"
-      meta={vm.meta}
+      meta={
+        <>
+          {vm.meta}
+          <Counter vm={vm.total} />
+        </>
+      }
       description="会話が始まったとき、相手に最初に見せる一幕です。情景のナレーション→第一声、が鉄板。"
     >
       {vm.parts.length === 0 ? (
@@ -131,6 +137,25 @@ function ChatIntro({ vm }: { vm: NonNullable<ExperienceTabVM["chat"]> }) {
         </div>
       ) : null}
     </Section>
+  );
+}
+
+function PlayGuide({ vm }: { vm: PlayGuideVM }) {
+  return (
+    <Disclosure summary="遊び方シート" hint={vm.summary}>
+      <p className="note">
+        遊ぶ人がチャットで開ける案内です。カバー画像と題名は、キャストの設定から入ります。AI
+        には伝わりません。
+      </p>
+      {vm.fields.map((field) => (
+        <Link key={field.key} scope={[field.key]}>
+          <div className="subsection">
+            <TextField vm={field.text} />
+            <Toggle vm={field.hidden} />
+          </div>
+        </Link>
+      ))}
+    </Disclosure>
   );
 }
 
@@ -213,6 +238,9 @@ export function ExperienceTab({ vm }: { vm: ExperienceTabVM }) {
           <ChatIntro vm={vm.chat} />
         </Link>
       ) : null}
+      <Link scope={vm.playGuide.scope}>
+        <PlayGuide vm={vm.playGuide} />
+      </Link>
       <Disclosure summary="オプション設定" hint="このキャストについて・この会話でのあなた">
         <div className="subsection">
           <details className="format-guide">
