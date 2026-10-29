@@ -35,6 +35,7 @@ type FailureType =
   | "library/failed"
   | "root/failed"
   | "cast/load-failed"
+  | "cast/delete-failed"
   | "image/read-failed"
   | "image/encode-failed"
   | "mcp/load-failed"
@@ -146,6 +147,17 @@ export class Mediator {
             message: messageOf(error),
             missing: false,
           }),
+        );
+        return;
+      case "cast/delete":
+        this.settle(
+          forge.deleteCast(effect.folder),
+          (result) => ({
+            type: "cast/deleted",
+            token: effect.token,
+            missing: result.kind === "missing",
+          }),
+          toFailure("cast/delete-failed", effect.token),
         );
         return;
       case "cast/open-folder":

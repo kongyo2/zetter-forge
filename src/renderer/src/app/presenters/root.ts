@@ -175,6 +175,7 @@ function presentEditor(state: AppState, session: Session): EditorVM {
   const { title, sub } = castDisplayTitle(doc);
   const people = 1 + sendableMembers(doc).length;
   const saving = state.task.kind === "saving" && state.task.sessionKey === session.key;
+  const deleting = state.task.kind === "deleting" && state.task.folder === session.folder;
   const count = (tab: EditorTab, level: "error" | "warning") =>
     issues.filter((issue) => issue.tab === tab && issue.level === level).length;
   // 一度でも写したキャストでは、まだ写していない・写し直す項目の数を出す
@@ -194,15 +195,19 @@ function presentEditor(state: AppState, session: Session): EditorVM {
       people > 1 ? `登場人物${people}人` : "",
       doc.status === "public" ? "公開する" : "非公開",
     ].filter(Boolean),
-    saveState: saving
-      ? { text: "保存中…", tone: "is-busy" }
-      : session.folder === null
-        ? { text: "まだ保存していません", tone: "is-new" }
-        : session.dirty
-          ? { text: "保存していない変更があります", tone: "is-dirty" }
-          : { text: "保存済み", tone: "is-saved" },
+    saveState: deleting
+      ? { text: "削除中…", tone: "is-busy" }
+      : saving
+        ? { text: "保存中…", tone: "is-busy" }
+        : session.folder === null
+          ? { text: "まだ保存していません", tone: "is-new" }
+          : session.dirty
+            ? { text: "保存していない変更があります", tone: "is-dirty" }
+            : { text: "保存済み", tone: "is-saved" },
     saving,
     canOpenFolder: !!session.folder,
+    // 保存・読み込みなどのあいだは押せない（押しても始めない）
+    deletion: session.folder ? { disabled: state.task.kind !== "idle" } : null,
     notices: session.notices,
     tabs: TABS.map((tab) => {
       const unfilled =

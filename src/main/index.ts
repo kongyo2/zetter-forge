@@ -6,6 +6,7 @@ import type { CastDocument } from "@shared/cast";
 import type { CopyLog } from "@shared/copyLog";
 import type {
   CastSummary,
+  DeleteCastResult,
   InvokeResult,
   LibraryListing,
   LoadedCast,
@@ -40,6 +41,7 @@ import {
   castDir,
   castFilePath,
   castImagePath,
+  deleteCast,
   isCastMissing,
   listCasts,
   loadCast,
@@ -220,6 +222,16 @@ function registerIpc(): void {
       };
     } catch (error) {
       if (isCastMissing(error)) return { kind: "missing", message: error.message };
+      throw error;
+    }
+  });
+  handle("cast:delete", async (folder: string): Promise<DeleteCastResult> => {
+    try {
+      // 消したあとでも戻せるよう、ゴミ箱へ移す（移せなければエラーにして、消しはしない）
+      await deleteCast(settings.libraryRoot, folder, (dir) => shell.trashItem(dir));
+      return { kind: "trashed" };
+    } catch (error) {
+      if (isCastMissing(error)) return { kind: "missing" };
       throw error;
     }
   });

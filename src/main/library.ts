@@ -179,6 +179,21 @@ export function writeCopyLog(root: string, folder: string, log: CopyLog): Promis
   return next;
 }
 
+/**
+ * キャストをフォルダごと削除する（設定・画像・前の版・コピーした記録をまとめて trash に渡す。
+ * アプリはゴミ箱へ移すので、あとから戻せる）。cast.json のないフォルダは、キャストのものとは
+ * 限らないので渡さずにエラー（フォルダが移動・削除されていたとき）。
+ */
+export async function deleteCast(
+  root: string,
+  folder: string,
+  trash: (dir: string) => Promise<void>,
+): Promise<void> {
+  const dir = castDir(root, folder);
+  if (!(await exists(path.join(dir, CAST_FILE)))) throw castMissing();
+  await trash(dir);
+}
+
 /** キャストの画像ファイルの絶対パス。images の外やない画像はエラー。 */
 export async function castImagePath(root: string, folder: string, file: string): Promise<string> {
   const full = castFilePath(root, folder, file);

@@ -46,6 +46,8 @@ export type ViewEvent =
   | { type: "library/query"; value: string }
   // 編集画面
   | { type: "editor/save" }
+  /** 開いているキャストを削除する（確かめてから、フォルダごとゴミ箱へ） */
+  | { type: "editor/delete" }
   | { type: "editor/open-folder" }
   | { type: "editor/tab"; tab: ViewTab }
   | { type: "editor/checks"; open: boolean }
@@ -95,6 +97,9 @@ type SystemEvent =
   | { type: "cast/load-failed"; token: number; message: string }
   | { type: "cast/saved"; token: number; saved: SavedCast }
   | { type: "cast/save-failed"; token: number; message: string; missing: boolean }
+  /** missing はフォルダがもうなかった（ゴミ箱へは何も移していない） */
+  | { type: "cast/deleted"; token: number; missing: boolean }
+  | { type: "cast/delete-failed"; token: number; message: string }
   | { type: "image/read"; token: number; source: string }
   | { type: "image/read-failed"; token: number; message: string }
   | { type: "image/encoded"; token: number; image: CroppedImage }

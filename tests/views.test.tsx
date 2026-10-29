@@ -135,6 +135,19 @@ describe("画面の部品", () => {
     expect(html).toContain("元に戻す");
   });
 
+  it("保存したキャストにだけ削除のボタンを描き、確かめのダイアログも描ける", async () => {
+    const world = await started([{ name: "灯里" }]);
+    const button = "このキャストを、フォルダごとゴミ箱に移します";
+    world.dispatch({ type: "library/new" });
+    expect(renderToString(<Root mediator={world.mediator} />)).not.toContain(button);
+    await opened(world, "cast-0", castNamed("灯里"));
+    expect(renderToString(<Root mediator={world.mediator} />)).toContain(button);
+    world.dispatch({ type: "editor/delete" });
+    const html = renderToString(<Root mediator={world.mediator} />);
+    expect(html).toContain("「灯里」を削除しますか？");
+    expect(html).toContain("ゴミ箱に移す");
+  });
+
   it("設定のダイアログと、一覧の下の MCP サーバーの様子を描ける", async () => {
     const running = mcpInfo(
       { enabled: true },

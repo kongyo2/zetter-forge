@@ -218,6 +218,29 @@ describe("MCP サーバーからの頼み: 書き換える", () => {
       error: expect.stringContaining("答えられません"),
     });
   });
+
+  it("利用者が始めたキャストの削除には答えず、削除しているあいだは書き換えない", async () => {
+    const world = await started([{ name: "灯里" }]);
+    const remote = remoteOf(world);
+    await opened(world, "cast-0", castNamed("灯里"));
+    const change: RemoteEdit = { action: "set", path: "cast/name", value: "灯" };
+    world.dispatch({ type: "editor/delete" });
+    expect(await remote.handle({ kind: "edit", edits: [change] })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("利用者が答えるまで待ってください"),
+    });
+    const refused = { ok: false, error: "キャストの削除の確かめには、利用者が画面で答えます。" };
+    expect(await remote.handle({ kind: "answer", choice: "delete" })).toMatchObject(refused);
+    expect(await remote.handle({ kind: "answer", choice: "cancel" })).toMatchObject(refused);
+    expect(world.mediator.getState().dialog).toMatchObject({ kind: "confirm" });
+    world.dispatch({ type: "dialog/choose", choice: "delete" });
+    expect(await remote.handle({ kind: "edit", edits: [change] })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("削除しているところです"),
+      detail: { busy: "deleting" },
+    });
+    expect(world.session().doc.name).toBe("灯里");
+  });
 });
 
 describe("MCP サーバーからの頼み: 開く・作る・保存する", () => {

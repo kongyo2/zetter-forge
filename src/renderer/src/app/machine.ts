@@ -148,6 +148,8 @@ const NOT_USER_ACTIONS = new Set<AppEvent["type"]>([
   "cast/load-failed",
   "cast/saved",
   "cast/save-failed",
+  "cast/deleted",
+  "cast/delete-failed",
   "image/read",
   "image/read-failed",
   "image/encoded",
@@ -244,7 +246,7 @@ function handle(step: Step, event: AppEvent): void {
       step.toast(`保存先を変えられませんでした: ${event.message}`, "error");
       return;
 
-    // 開く・保存する --------------------------------------------------------
+    // 開く・保存する・削除する ----------------------------------------------
     case "cast/loaded":
       castLoaded(step, event.token, event.loaded);
       return;
@@ -259,10 +261,20 @@ function handle(step: Step, event: AppEvent): void {
     case "cast/save-failed":
       saveFailed(step, event.token, event.message, event.missing);
       return;
+    case "cast/deleted":
+      deleted(step, event.token, event.missing);
+      return;
+    case "cast/delete-failed":
+      if (!step.finish("deleting", event.token)) return;
+      step.toast(`削除できませんでした: ${event.message}`, "error");
+      return;
 
     // 編集画面 --------------------------------------------------------------
     case "editor/save":
       if (!state.dialog) save(step, null);
+      return;
+    case "editor/delete":
+      confirmDelete(step);
       return;
     case "editor/open-folder":
       if (state.session?.folder)
@@ -517,6 +529,8 @@ function request(step: Step, intent: Intent): void {
   }
   // 保存先を選ぶ画面を出しているあいだは、ほかのキャストへ切り替えない（選んだ結果を捨てないため）
   if (state.task.kind === "choosing-root") return;
+  // 削除しているあいだも切り替えない（終わったら、削除したキャストを閉じるので）
+  if (state.task.kind === "deleting") return;
   if (intent.kind === "open") {
     if (state.session?.folder === intent.folder) {
       // 開いているものをもう一度選んだら、別のキャストの読み込みはやめる
@@ -632,6 +646,14 @@ function perform(step: Step, intent: Intent): void {
     case "reset-copy-log":
       updateCopyLog(step, () => ({}));
       return;
+    case "delete": {
+      // 確かめているあいだに、ほかの処理が始まっていたら行わない
+      if (state.task.kind !== "idle") return;
+      const token = step.next();
+      step.set({ task: { kind: "deleting", token, folder: intent.folder, title: intent.title } });
+      step.effect({ type: "cast/delete", token, folder: intent.folder });
+      return;
+    }
   }
 }
 
@@ -684,8 +706,8 @@ function save(step: Step, then: Intent | null): void {
     step.set({ task: { ...task, again: true, then: then ?? task.then } });
     return;
   }
-  // 保存先を選ぶ画面を出しているあいだは、どこへ保存するかが決まらない
-  if (task.kind === "choosing-root") return;
+  // 保存先を選ぶ画面を出しているあいだは、どこへ保存するかが決まらない。削除しているキャストは保存しない
+  if (task.kind === "choosing-root" || task.kind === "deleting") return;
   if (session.folder && !session.dirty) {
     if (then) perform(step, then);
     else step.toast("変更はありません。");
@@ -811,6 +833,48 @@ function saveFailed(step: Step, token: number, message: string, missing: boolean
     return;
   }
   step.toast(`保存できませんでした: ${message}`, "error");
+}
+
+// ---------------------------------------------------------------------------
+// 削除する（フォルダごとゴミ箱へ）
+
+function confirmDelete(step: Step): void {
+  const { state } = step;
+  const session = state.session;
+  // まだ保存していない（フォルダのない）キャストと、保存・読み込みなどのあいだは削除しない
+  if (!session?.folder || state.dialog || state.task.kind !== "idle") return;
+  const folder = session.folder;
+  const title = castTitle(state, folder);
+  showConfirm(step, {
+    title: `「${title}」を削除しますか？`,
+    message: `設定・画像・前の版を、フォルダごとゴミ箱に移します。${session.dirty ? "保存していない変更は失われます。" : ""}`,
+    choices: [
+      {
+        id: "delete",
+        label: "ゴミ箱に移す",
+        tone: "danger",
+        intent: { kind: "delete", folder, title },
+      },
+    ],
+  });
+}
+
+function deleted(step: Step, token: number, missing: boolean): void {
+  const task = step.finish("deleting", token);
+  if (!task) return;
+  // 開いていれば閉じ、一覧からも読み直しを待たずに外す
+  if (step.state.session?.folder === task.folder) switchSession(step, null);
+  const { library } = step.state;
+  if (library.listing) {
+    const casts = library.listing.casts.filter((cast) => cast.folder !== task.folder);
+    step.set({ library: { ...library, listing: { ...library.listing, casts } } });
+  }
+  step.toast(
+    missing
+      ? `「${task.title}」のフォルダはもうなかったので、一覧から外しました。`
+      : `「${task.title}」をゴミ箱に移しました。`,
+  );
+  loadLibrary(step);
 }
 
 // ---------------------------------------------------------------------------

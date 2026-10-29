@@ -14,6 +14,7 @@ const api: ForgeApi = {
   chooseLibraryRoot: () => invoke("library:choose"),
   loadCast: (folder) => invoke("cast:load", folder),
   saveCast: (request) => invoke("cast:save", request),
+  deleteCast: (folder) => invoke("cast:delete", folder),
   openCastFolder: (folder) => invoke("cast:open-folder", folder),
   openLibraryFolder: () => invoke("library:open-folder"),
   showImage: (folder, file) => invoke("cast:show-image", folder, file),

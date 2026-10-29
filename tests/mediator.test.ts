@@ -398,6 +398,114 @@ describe("開く・作る", () => {
   });
 });
 
+describe("削除", () => {
+  it("確かめてから、フォルダごとゴミ箱へ移し、閉じて一覧から外す", async () => {
+    const world = await started([{ name: "A" }, { name: "B" }]);
+    await opened(world, "cast-0", castNamed("A"));
+    world.dispatch({ type: "editor/delete" });
+    expect(world.pending()).toEqual([]);
+    // 消すだけの確かめなので、はじめは「キャンセル」にフォーカスを置く
+    expect(world.vm().dialog).toMatchObject({
+      kind: "confirm",
+      title: "「A」を削除しますか？",
+      choices: [{ id: "delete", label: "ゴミ箱に移す", tone: "danger" }],
+      initial: "cancel",
+    });
+    world.dispatch({ type: "dialog/cancel" });
+    expect(world.pending()).toEqual([]);
+    expect(world.session().folder).toBe("cast-0");
+
+    world.dispatch({ type: "editor/delete" });
+    world.dispatch({ type: "dialog/choose", choice: "delete" });
+    const deleting = world.take("deleteCast");
+    expect(deleting.args).toEqual(["cast-0"]);
+    expect(world.vm().workspace).toMatchObject({
+      editor: { saveState: { text: "削除中…" }, deletion: { disabled: true } },
+    });
+    deleting.resolve({ kind: "trashed" });
+    await world.flush();
+    expect(world.mediator.getState().session).toBeNull();
+    expect(world.vm().sidebar.items.map((item) => item.title)).toEqual(["B"]);
+    expect(world.mediator.getState().toasts.at(-1)).toMatchObject({
+      tone: "info",
+      message: "「A」をゴミ箱に移しました。",
+    });
+    expect(world.pending()).toEqual(["getLibrary"]);
+  });
+
+  it("保存していない変更があれば、それも失われると伝える", async () => {
+    const world = await started([{ name: "A" }]);
+    await opened(world, "cast-0", castNamed("A"));
+    world.dispatch(name("A2"));
+    world.dispatch({ type: "editor/delete" });
+    expect(world.mediator.getState().dialog).toMatchObject({
+      title: "「A」を削除しますか？",
+      message: expect.stringContaining("保存していない変更は失われます") as string,
+    });
+  });
+
+  it("ゴミ箱へ移せなければ、開いたまま知らせる", async () => {
+    const world = await started([{ name: "A" }]);
+    await opened(world, "cast-0", castNamed("A"));
+    world.dispatch({ type: "editor/delete" });
+    world.dispatch({ type: "dialog/choose", choice: "delete" });
+    world.take("deleteCast").reject(new Error("Failed to move item to trash"));
+    await world.flush();
+    expect(world.session().folder).toBe("cast-0");
+    expect(world.vm().workspace).toMatchObject({ editor: { deletion: { disabled: false } } });
+    expect(world.vm().sidebar.items.map((item) => item.title)).toEqual(["A"]);
+    expect(world.mediator.getState().toasts.at(-1)).toMatchObject({
+      tone: "error",
+      message: "削除できませんでした: Failed to move item to trash",
+    });
+  });
+
+  it("フォルダがもうなければ、閉じて一覧から外したと知らせる", async () => {
+    const world = await started([{ name: "A" }]);
+    await opened(world, "cast-0", castNamed("A"));
+    world.dispatch({ type: "editor/delete" });
+    world.dispatch({ type: "dialog/choose", choice: "delete" });
+    world.take("deleteCast").resolve({ kind: "missing" });
+    await world.flush();
+    expect(world.mediator.getState().session).toBeNull();
+    expect(world.vm().sidebar.items).toEqual([]);
+    expect(world.mediator.getState().toasts.at(-1)?.message).toBe(
+      "「A」のフォルダはもうなかったので、一覧から外しました。",
+    );
+  });
+
+  it("まだ保存していないキャストと、保存しているあいだは削除しない", async () => {
+    const world = await started([{ name: "A" }]);
+    world.dispatch({ type: "library/new" });
+    expect(world.vm().workspace).toMatchObject({ editor: { deletion: null } });
+    world.dispatch({ type: "editor/delete" });
+    expect(world.mediator.getState().dialog).toBeNull();
+
+    await opened(world, "cast-0", castNamed("A"));
+    world.dispatch(name("A2"));
+    world.dispatch({ type: "editor/save" });
+    expect(world.vm().workspace).toMatchObject({ editor: { deletion: { disabled: true } } });
+    world.dispatch({ type: "editor/delete" });
+    expect(world.mediator.getState().dialog).toBeNull();
+    expect(world.pending()).toEqual(["saveCast"]);
+  });
+
+  it("削除しているあいだは、ほかのキャストを開かず、保存もしない", async () => {
+    const world = await started([{ name: "A" }, { name: "B" }]);
+    await opened(world, "cast-0", castNamed("A"));
+    world.dispatch(name("A2"));
+    world.dispatch({ type: "editor/delete" });
+    world.dispatch({ type: "dialog/choose", choice: "delete" });
+    world.dispatch({ type: "library/open", folder: "cast-1" });
+    world.dispatch({ type: "menu", command: "save" });
+    expect(world.pending()).toEqual(["deleteCast"]);
+    expect(world.mediator.getState().dialog).toBeNull();
+    world.take("deleteCast").resolve({ kind: "trashed" });
+    await world.flush();
+    expect(world.mediator.getState().session).toBeNull();
+  });
+});
+
 describe("書き換え", () => {
   it("{{user}} が上限に入りきらないときは、本文を削らずに入れない", async () => {
     const world = await started();

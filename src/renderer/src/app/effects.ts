@@ -13,6 +13,7 @@ export type Effect =
   | { type: "library/open-folder" }
   | { type: "cast/load"; token: number; folder: string }
   | { type: "cast/save"; token: number; request: SaveCastRequest }
+  | { type: "cast/delete"; token: number; folder: string }
   | { type: "cast/open-folder"; folder: string }
   | { type: "cast/write-copy-log"; folder: string; log: CopyLog }
   | { type: "image/read"; token: number; file: PickedFile }
