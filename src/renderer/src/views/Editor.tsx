@@ -159,6 +159,17 @@ export function Editor({ vm }: { vm: EditorVM }) {
               <span className="tab-count is-error">{vm.checks.blocking}</span>
             ) : null}
           </button>
+          {vm.deletion ? (
+            <button
+              type="button"
+              className="btn btn-plain btn-danger"
+              disabled={vm.deletion.disabled}
+              title="このキャストを、フォルダごとゴミ箱に移します"
+              onClick={() => emit({ type: "editor/delete" })}
+            >
+              削除
+            </button>
+          ) : null}
           {vm.canOpenFolder ? (
             <button
               type="button"

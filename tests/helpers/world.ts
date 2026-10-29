@@ -70,6 +70,7 @@ export function createWorld(): World {
       chooseLibraryRoot: forge("chooseLibraryRoot"),
       loadCast: forge("loadCast"),
       saveCast: forge("saveCast"),
+      deleteCast: forge("deleteCast"),
       openCastFolder: forge("openCastFolder"),
       openLibraryFolder: forge("openLibraryFolder"),
       showImage: forge("showImage"),

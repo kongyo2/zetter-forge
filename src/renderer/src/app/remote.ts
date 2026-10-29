@@ -17,7 +17,7 @@ import {
 import { introRoleValue } from "./edits";
 import type { AppEvent, FieldEvent } from "./events";
 import type { Mediator } from "./mediator";
-import type { AppState, Session } from "./state";
+import type { AppState, ConfirmDialog, Session } from "./state";
 import { transferGroups, transferStatus } from "./transfer";
 import { AFFINITY_DEFAULT, type Path } from "./types";
 
@@ -96,11 +96,18 @@ function statusReport(state: AppState): JsonObject {
   };
 }
 
+/** 利用者が画面で始めた、キャストの削除の確かめ（AI のエージェントには答えさせない） */
+function confirmsDeletion(dialog: ConfirmDialog): boolean {
+  return dialog.choices.some((choice) => choice.intent?.kind === "delete");
+}
+
 /** 頼まれた操作を、いま始められないわけ。始められるなら null */
 function blocked(state: AppState, needsCast: boolean): string | null {
   switch (state.dialog?.kind) {
     case "confirm":
-      return "確かめのダイアログが出ています。answer_dialog で答えてから続けてください。";
+      return confirmsDeletion(state.dialog)
+        ? "キャストを削除するかの確かめが出ています。利用者が答えるまで待ってください。"
+        : "確かめのダイアログが出ています。answer_dialog で答えてから続けてください。";
     case "crop":
       return "画像を切り抜く画面が開いています。利用者が閉じるまで待ってください。";
     case "settings":
@@ -110,6 +117,8 @@ function blocked(state: AppState, needsCast: boolean): string | null {
   }
   if (state.task.kind === "choosing-root")
     return "保存先のフォルダを選ぶ画面が開いています。利用者が閉じるまで待ってください。";
+  if (state.task.kind === "deleting")
+    return "キャストを削除しているところです。終わってから続けてください。";
   if (needsCast && !state.session)
     return "開いているキャストはありません。open_cast か new_cast で開いてください。";
   return null;
@@ -367,6 +376,8 @@ export class Remote {
           : "答える確かめのダイアログは出ていません。",
       );
     }
+    if (confirmsDeletion(dialog))
+      return this.refuse(state, "キャストの削除の確かめには、利用者が画面で答えます。");
     if (choice !== "cancel" && !dialog.choices.some((candidate) => candidate.id === choice)) {
       const ids = [...dialog.choices.map((candidate) => candidate.id), "cancel"];
       return fail(`choice は ${ids.join("・")} のどれかにしてください。`, {

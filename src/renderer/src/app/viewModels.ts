@@ -267,6 +267,8 @@ export interface EditorVM {
   saveState: { text: string; tone: "is-busy" | "is-new" | "is-dirty" | "is-saved" };
   saving: boolean;
   canOpenFolder: boolean;
+  /** 「削除」のボタン。まだ保存していないキャストには出さない */
+  deletion: { disabled: boolean } | null;
   notices: string[];
   tabs: {
     id: ViewTab;

@@ -14,6 +14,7 @@ import {
   CAST_MISSING,
   castFilePath,
   castImagePath,
+  deleteCast,
   listCasts,
   loadCast,
   sanitizeFolderName,
@@ -247,6 +248,39 @@ describe("listCasts", () => {
     expect(listing.errors).toEqual([
       { folder: "壊れた", message: "cast.json が JSON として読めません。" },
     ]);
+  });
+});
+
+describe("deleteCast", () => {
+  it("キャストのフォルダを、画像や前の版も入ったまま丸ごとゴミ箱へ渡す", async () => {
+    const first = await saveCast(root, {
+      folder: null,
+      doc: castWithImages(),
+      pendingImages: { "pending:a": JPEG_A },
+    });
+    await saveCast(root, { folder: first.folder, doc: first.doc, pendingImages: {} });
+    const trashed: string[][] = [];
+    await deleteCast(root, first.folder, async (dir) => {
+      trashed.push([dir, ...(await filesIn(dir))]);
+    });
+    expect(trashed).toEqual([[path.join(root, first.folder), "cast.json", "history", "images"]]);
+  });
+
+  it("cast.json のないフォルダや、保存先そのもの・保存先の外は渡さない", async () => {
+    // 保存先そのものがキャストのフォルダに見えても、保存先ごと消すことはない
+    await fs.writeFile(path.join(root, "cast.json"), "{}");
+    await fs.mkdir(path.join(root, "関係ないフォルダ"));
+    const trashed: string[] = [];
+    const trash = async (dir: string) => void trashed.push(dir);
+    await Promise.all([
+      ...["関係ないフォルダ", "ない"].map((folder) =>
+        expect(deleteCast(root, folder, trash)).rejects.toMatchObject({ code: CAST_MISSING }),
+      ),
+      ...["", ".", "..", "a/b"].map((folder) =>
+        expect(deleteCast(root, folder, trash)).rejects.toThrow("フォルダ名が正しくありません"),
+      ),
+    ]);
+    expect(trashed).toEqual([]);
   });
 });
 

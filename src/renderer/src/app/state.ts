@@ -75,7 +75,9 @@ export type Intent =
   | { kind: "remove-member"; id: string }
   | { kind: "remove-affinity" }
   | { kind: "trim-intro" }
-  | { kind: "reset-copy-log" };
+  | { kind: "reset-copy-log" }
+  /** キャストをフォルダごとゴミ箱へ移す（title は終わったときの知らせに使う） */
+  | { kind: "delete"; folder: string; title: string };
 
 /** いま進めている、ファイルを読み書きする処理（同時には 1 つだけ） */
 type Task =
@@ -99,7 +101,9 @@ type Task =
       /** 保存が終わったら続ける操作 */
       then: Intent | null;
     }
-  | { kind: "choosing-root"; token: number };
+  | { kind: "choosing-root"; token: number }
+  /** キャストをフォルダごとゴミ箱へ移している */
+  | { kind: "deleting"; token: number; folder: string; title: string };
 
 interface DialogChoice {
   id: string;
