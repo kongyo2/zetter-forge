@@ -214,6 +214,20 @@ describe("文字の書き換え", () => {
     expect(applyInput(doc, ["affinity", AFFINITY_BASE_SUBJECT, "itemName"], "x")).toBeNull();
     expect(applyInput(createEmptyCast(), ["affinity", "default", "itemName"], "x")).toBeNull();
   });
+
+  it("遊び方シートの欄を書き換える（元の文書は変えない）", () => {
+    const doc = createEmptyCast();
+    const next = docOf(applyInput(doc, ["playGuide", "world", "text"], "海辺の町"));
+    expect(next.playGuide.world).toEqual({ text: "海辺の町", hidden: false });
+    expect(doc.playGuide.world.text).toBe("");
+    // 上限は入力欄（maxlength）と確認が受け持つので、超えても切らずに書く（ほかの欄と同じ）
+    expect(
+      docOf(applyInput(doc, ["playGuide", "role", "text"], "あ".repeat(201))).playGuide.role.text,
+    ).toHaveLength(201);
+    expect(applyInput(doc, ["playGuide", "unknown", "text"], "x")).toBeNull();
+    expect(applyInput(doc, ["playGuide", "world", "hidden"], "x")).toBeNull();
+    expect(applyInput(doc, ["playGuide", "world"], "x")).toBeNull();
+  });
 });
 
 describe("オン・オフ", () => {
@@ -265,6 +279,18 @@ describe("オン・オフ", () => {
     expect(applyCheck(doc, ["affinity", "default", "disabled"], true)).toBeNull();
     expect(applyCheck(doc, ["cast", "unknown"], true)).toBeNull();
     expect(applyCheck(createEmptyCast(), ["affinity", "default", "showInChat"], true)).toBeNull();
+  });
+
+  it("遊び方シートの「隠しておく」を欄ごとに切り替える", () => {
+    const doc = createEmptyCast();
+    const next = docOf(applyCheck(doc, ["playGuide", "summary", "hidden"], true));
+    expect(next.playGuide.summary).toEqual({ text: "", hidden: true });
+    expect(docOf(applyCheck(next, ["playGuide", "gimmick", "hidden"], false)).playGuide).toEqual({
+      ...next.playGuide,
+      gimmick: { text: "", hidden: false },
+    });
+    expect(applyCheck(doc, ["playGuide", "unknown", "hidden"], true)).toBeNull();
+    expect(applyCheck(doc, ["playGuide", "summary", "text"], true)).toBeNull();
   });
 
   it("「このキャラは好感度を使わない」は、個別設定がなければ共通設定を写して作る", () => {

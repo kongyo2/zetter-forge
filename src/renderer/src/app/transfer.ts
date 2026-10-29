@@ -10,16 +10,19 @@ import {
   type CastImage,
   type CastMember,
   PARTNER_SETTINGS_FIELDS,
+  PLAY_GUIDE_FIELDS,
   type PartnerSettings,
+  type PlayGuide,
   type ToneExample,
   createDefaultAffinityConfig,
   createEmptyCast,
+  filledPlayGuideFields,
   sendableMembers,
 } from "@shared/cast";
 import { type CopyLog, textHash } from "@shared/copyLog";
 import { LIMITS } from "@shared/limits";
 import { codePointLength, formatCount, utf16Length } from "@shared/text";
-import type { EditorTab } from "@shared/validate";
+import { type EditorTab, introUsage } from "@shared/validate";
 
 import { perDocument } from "./memo";
 import { isPendingImage } from "./session";
@@ -205,6 +208,28 @@ function toneItems(builder: Builder, base: Path, list: readonly ToneExample[]): 
   });
 }
 
+/** 遊び方シート（Zetter では体験設定のイントロの下にある）。何か書いたときだけ写す */
+function playGuideItems(builder: Builder, guide: PlayGuide): void {
+  if (filledPlayGuideFields(guide).length === 0) return;
+  builder.sectionOf("遊び方シート");
+  for (const field of PLAY_GUIDE_FIELDS) {
+    const entry = guide[field.key];
+    const base = ["playGuide", field.key];
+    builder.text([...base, "text"], field.label, entry.text, {
+      max: LIMITS.playGuide[field.key],
+    });
+    // 書いていない欄は見えないので、「隠しておく」も写さなくてよい
+    if (entry.text.trim()) {
+      builder.setting(
+        [...base, "hidden"],
+        `${field.label}の「隠しておく」`,
+        onOff(entry.hidden),
+        entry.hidden === field.hiddenByDefault,
+      );
+    }
+  }
+}
+
 function memberItems(
   builder: Builder,
   doc: CastDocument,
@@ -325,6 +350,7 @@ function build(doc: CastDocument): TransferGroup[] {
     builder.text(["cast", "situation"], "いまの状況", doc.situation, { max: LIMITS.situation });
     builder.sectionOf("イントロ");
     const members = sendableMembers(doc);
+    const intro = introUsage(doc);
     doc.introScript.forEach((part, index) => {
       const speaker =
         part.kind === "narration"
@@ -334,6 +360,12 @@ function build(doc: CastDocument): TransferGroup[] {
             : `セリフ（${doc.name.trim() || "キャスト本体"}）`;
       builder.text(["intro", index, "text"], `パート${index + 1}（${speaker}）`, part.text, {
         max: LIMITS.introPart,
+        notes:
+          index === intro.crossing
+            ? [
+                `イントロは全部のパートを合わせて${formatCount(LIMITS.introTotal)}字までです（いまは${formatCount(intro.total)}字）。このパートで上限を超えます。`,
+              ]
+            : [],
       });
     });
   } else {
@@ -341,6 +373,7 @@ function build(doc: CastDocument): TransferGroup[] {
       max: LIMITS.introPart,
     });
   }
+  playGuideItems(builder, doc.playGuide);
   builder.sectionOf("オプション設定");
   builder.text(["cast", "aboutText"], "このキャストについて", doc.aboutText, {
     max: LIMITS.aboutText,

@@ -4,6 +4,7 @@ import {
   createDefaultAffinityConfig,
   createEmptyMember,
   createEmptyPersona,
+  createEmptyPlayGuide,
 } from "@shared/cast";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -67,6 +68,11 @@ function richCast() {
     cover: { file: "images/cover-a.jpg", width: 900, height: 1200, bytes: 4096 },
     hook: "……で、話って何？",
     zetterUrl: "https://z-etter.com/cast/1",
+    playGuide: {
+      ...createEmptyPlayGuide(),
+      world: { text: "雨の降る港町", hidden: false },
+      gimmick: { text: "合言葉がある", hidden: true },
+    },
   });
 }
 
@@ -89,6 +95,25 @@ describe("画面の部品", () => {
         expect(html).toContain('role="tabpanel"');
       }
     }
+  });
+
+  it("体験設定に、イントロの合計と遊び方シート（書いた欄の数・隠しておく）を描く", async () => {
+    const world = await started([{ name: "灯里" }]);
+    await opened(world, "cast-0", richCast());
+    world.dispatch({ type: "editor/tab", tab: "experience" });
+    const html = renderToString(<Root mediator={world.mediator} />);
+    // イントロは「雨。」と「いらっしゃい。」の 9 字（空のパートは数えない）
+    expect(html).toContain("合計 9/12,000字");
+    expect(html).toContain("遊び方シート");
+    expect(html).toContain("2項目");
+    expect(html).toContain("最初にできること（1行に1つ）");
+    expect(html).toMatch(/maxlength="600"/iu);
+    expect(html.match(/隠しておく/gu)).toHaveLength(7);
+    // 雑談モードでも遊び方シートは出し、イントロの合計は出さない
+    world.dispatch({ type: "input", path: ["cast", "mode"], value: "chat" });
+    const chat = renderToString(<Root mediator={world.mediator} />);
+    expect(chat).toContain("遊び方シート");
+    expect(chat).not.toContain("/12,000字");
   });
 
   it("登場人物・好感度の個別設定・開いた段階・確かめのダイアログ・知らせも描ける", async () => {

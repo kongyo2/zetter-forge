@@ -114,6 +114,29 @@ describe("MCP サーバーからの頼み: 書き換える", () => {
     expect(issues).toContainEqual(expect.objectContaining({ path: "cast/persona" }));
   });
 
+  it("遊び方シートの欄と「隠しておく」も書き換え、上限を超えれば確認に出す", async () => {
+    const world = await started();
+    world.dispatch({ type: "library/new" });
+    const { results, issues } = await edit(
+      remoteOf(world),
+      { action: "set", path: "playGuide/world/text", value: "雨の降る港町" },
+      { action: "switch", path: "playGuide/gimmick/hidden", on: false },
+      { action: "set", path: "playGuide/role/text", value: "あ".repeat(201) },
+      { action: "set", path: "playGuide/unknown/text", value: "x" },
+    );
+    expect(results.map((entry) => entry.result)).toEqual([
+      "applied",
+      "applied",
+      "applied",
+      "ignored",
+    ]);
+    expect(world.session().doc.playGuide).toMatchObject({
+      world: { text: "雨の降る港町", hidden: false },
+      gimmick: { text: "", hidden: false },
+    });
+    expect(issues).toContainEqual(expect.objectContaining({ path: "playGuide/role/text" }));
+  });
+
   it("上限に合わせて切り詰めたら、入った値を返す", async () => {
     const world = await started();
     world.dispatch({ type: "library/new" });

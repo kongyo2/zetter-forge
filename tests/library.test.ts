@@ -2,7 +2,12 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { type CastDocument, createEmptyCast, createEmptyMember } from "@shared/cast";
+import {
+  type CastDocument,
+  createEmptyCast,
+  createEmptyMember,
+  createEmptyPlayGuide,
+} from "@shared/cast";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -121,6 +126,38 @@ describe("saveCast", () => {
     expect((loaded.doc as unknown as Record<string, unknown>).futureField).toEqual({
       nested: [1, 2],
     });
+  });
+
+  it("遊び方シートのない前の版のファイルは、開いても書き換えず、保存してもほかの中身はそのまま", async () => {
+    // 0.2.0 までの版が書いた cast.json（playGuide がない）
+    const { playGuide: _, ...older } = { ...createEmptyCast(), name: "灯里", persona: "店主。" };
+    const folder = "灯里-older";
+    const file = path.join(root, folder, "cast.json");
+    const text = `${JSON.stringify(older, null, 2)}\n`;
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, text, "utf8");
+
+    const loaded = await loadCast(root, folder);
+    expect(loaded.doc.playGuide).toEqual(createEmptyPlayGuide());
+    expect(loaded.notices).toEqual([]);
+    expect(await fs.readFile(file, "utf8")).toBe(text);
+
+    const saved = await saveCast(root, { folder, doc: loaded.doc, pendingImages: {} });
+    const {
+      playGuide,
+      updatedAt: _updatedAt,
+      ...rest
+    } = JSON.parse(await fs.readFile(file, "utf8"));
+    const { updatedAt: _olderUpdatedAt, ...olderRest } = older;
+    expect(rest).toEqual(olderRest);
+    expect(playGuide).toEqual(createEmptyPlayGuide());
+    expect(saved.doc.formatVersion).toBe(older.formatVersion);
+    // 前の版は history に残る
+    const history = await filesIn(path.join(root, folder, "history"));
+    expect(history).toHaveLength(1);
+    expect(
+      await fs.readFile(path.join(root, folder, "history", history[0] as string), "utf8"),
+    ).toBe(text);
   });
 
   it("新しい版で保存されたファイルには知らせを付ける", async () => {

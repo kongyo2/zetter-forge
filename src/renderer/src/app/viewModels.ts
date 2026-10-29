@@ -350,6 +350,20 @@ export interface PersonaVM {
   note: TextFieldVM;
 }
 
+interface PlayGuideFieldVM {
+  key: string;
+  text: TextFieldVM;
+  hidden: ToggleVM;
+}
+
+export interface PlayGuideVM {
+  /** 遊び方シートの場所（["playGuide"]） */
+  scope: Path;
+  /** 見出しに添える、書いた欄の数（「未設定」「3項目」） */
+  summary: string;
+  fields: PlayGuideFieldVM[];
+}
+
 export interface ExperienceTabVM {
   /** モード・キャッチコピー・いまの状況・このキャストについて の場所（["cast"]） */
   scope: Path;
@@ -360,9 +374,17 @@ export interface ExperienceTabVM {
   story: {
     tagline: TextFieldVM;
     situation: TextFieldVM;
-    intro: { scope: Path; meta: string; parts: IntroPartVM[]; canAdd: boolean };
+    intro: {
+      scope: Path;
+      meta: string;
+      /** 全部のパートの合計 */
+      total: CounterVM;
+      parts: IntroPartVM[];
+      canAdd: boolean;
+    };
   } | null;
   chat: { scope: Path; first: TextFieldVM; hidden: string | null } | null;
+  playGuide: PlayGuideVM;
   about: TextFieldVM;
   personas: ListVM<PersonaVM>;
 }

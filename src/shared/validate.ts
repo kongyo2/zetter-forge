@@ -5,6 +5,7 @@ import {
   type AffinityStage,
   type CastDocument,
   type CastMember,
+  PLAY_GUIDE_FIELDS,
   type PartnerSettings,
   type ToneExample,
   sendableMembers,
@@ -94,6 +95,30 @@ export function toneShares(doc: CastDocument): UsageShare[] {
 /** 「口調サンプルの使用量（全員合計）」。 */
 export function toneUsage(doc: CastDocument): BudgetUsage {
   return usage(toneShares(doc), LIMITS.toneTotal);
+}
+
+export interface IntroUsage extends BudgetUsage {
+  /** 合計が上限を超えるパートの位置（超えていなければ null） */
+  crossing: number | null;
+}
+
+/**
+ * 「イントロの合計」。Zetter に送られる分（前後の空白を除いた長さ。空のパートは送られない）で数える。
+ * Zetter の画面には数える欄がないので、ほかの合計と違って入力中の値ではなく送られる分を出す。
+ */
+export function introUsage(doc: CastDocument): IntroUsage {
+  let total = 0;
+  let crossing: number | null = null;
+  doc.introScript.forEach((part, index) => {
+    total += utf16Length(part.text.trim());
+    if (crossing === null && total > LIMITS.introTotal) crossing = index;
+  });
+  return {
+    total,
+    remaining: Math.max(0, LIMITS.introTotal - total),
+    over: Math.max(0, total - LIMITS.introTotal),
+    crossing,
+  };
 }
 
 export function partnerSettingsLength(settings: PartnerSettings): number {
@@ -355,6 +380,13 @@ export function validateCast(doc: CastDocument): CastIssue[] {
       issues.push(issue("error", "experience", message, introPath(index)));
     }
   });
+  // 全部のパートの合計（Zetter の「作り方」の依頼文の「全部合わせて12000文字まで」）。雑談モードは
+  // 最初のひとことしか写さないので数えない。直す場所は、合計が上限を超えるパートにする
+  const intro = introUsage(doc);
+  if (story && intro.crossing !== null) {
+    const message = `イントロは全部のパートを合わせて${formatCount(LIMITS.introTotal)}字までです。いまは${formatCount(intro.total)}字で、${formatCount(intro.over)}字ぶん超えています。どのパートを削るかはお任せします。`;
+    issues.push(issue("error", "experience", message, ["intro", intro.crossing, "text"]));
+  }
   const emptyParts = doc.introScript.filter((part) => !part.text.trim()).length;
   if (emptyParts > 0) {
     const firstEmpty = doc.introScript.findIndex((part) => !part.text.trim());
@@ -381,6 +413,14 @@ export function validateCast(doc: CastDocument): CastIssue[] {
           "Zetter では、新しく足した登場人物は一度完成するまで話者に選べません。新しく作るときは、いったん話者を本体にして完成し、編集し直して話者を変えてください。",
         ),
       );
+    }
+  }
+  // 遊び方シート（Zetter はどちらのモードでも、前後の空白を残したまま送る）
+  for (const field of PLAY_GUIDE_FIELDS) {
+    const max = LIMITS.playGuide[field.key];
+    if (overLimit(doc.playGuide[field.key].text, max)) {
+      const message = `遊び方シートの「${field.label}」は${max}文字までです。`;
+      issues.push(issue("error", "experience", message, ["playGuide", field.key, "text"]));
     }
   }
   if (overLimit(doc.aboutText, LIMITS.aboutText)) {

@@ -8,13 +8,16 @@ import {
   PARTNER_HABIT_CHIPS,
   PARTNER_SETTINGS_FIELDS,
   PARTNER_TIME_CHIPS,
+  PLAY_GUIDE_FIELDS,
   castDisplayTitle,
   createDefaultAffinityConfig,
   createEmptyCast,
   createEmptyMember,
   createEmptyPartnerSettings,
   createEmptyPersona,
+  createEmptyPlayGuide,
   createEmptyStage,
+  filledPlayGuideFields,
   normalizeAffinityConfig,
   normalizeCastDocument,
   removeMember,
@@ -76,6 +79,21 @@ describe("createEmptyCast", () => {
       gallery: [],
     });
     expect(createEmptyCast().id).not.toBe(createEmptyCast().id);
+  });
+
+  it("遊び方シートは 7 欄とも空で、「隠しておく」は隠しギミックだけオン（Zetter の createEmptyCastPlayGuide と同じ）", () => {
+    expect(createEmptyCast().playGuide).toEqual({
+      summary: { text: "", hidden: false },
+      world: { text: "", hidden: false },
+      role: { text: "", hidden: false },
+      start: { text: "", hidden: false },
+      first: { text: "", hidden: false },
+      hint: { text: "", hidden: false },
+      gimmick: { text: "", hidden: true },
+    });
+    expect(createEmptyPlayGuide()).toEqual(createEmptyCast().playGuide);
+    // 作るたびに別のもの（片方を書き換えても、もう片方は変わらない）
+    expect(createEmptyPlayGuide().summary).not.toBe(createEmptyPlayGuide().summary);
   });
 
   it("好感度のひな形は 0・25・50・75 の 4 段階", () => {
@@ -192,6 +210,20 @@ describe("Zetter の作成画面と同じ欄と札", () => {
     ]);
     expect(AFFINITY_BASE_SUBJECT).toBe("__cast_base__");
   });
+
+  it("遊び方シートの 7 欄の順・見出し・「隠しておく」の既定（Zetter の CAST_PLAY_GUIDE_FIELDS）", () => {
+    expect(
+      PLAY_GUIDE_FIELDS.map((field) => [field.key, field.label, field.hiddenByDefault]),
+    ).toEqual([
+      ["summary", "あらすじ", false],
+      ["world", "世界観", false],
+      ["role", "あなたの役割", false],
+      ["start", "始まりの状況", false],
+      ["first", "最初にできること（1行に1つ）", false],
+      ["hint", "迷ったときのヒント", false],
+      ["gimmick", "隠しギミック", true],
+    ]);
+  });
 });
 
 describe("normalizeCastDocument", () => {
@@ -281,6 +313,51 @@ describe("normalizeCastDocument", () => {
     };
     expect(affinity.default.futureConfigField).toBe(true);
     expect(affinity.futureAffinityField).toBe(3);
+  });
+
+  it("遊び方シートのない前の版のファイルは、何も書いていないシートとして読む", () => {
+    // 0.2.0 までの版で保存した cast.json には playGuide がない
+    const { playGuide: _, ...older } = createEmptyCast();
+    const doc = normalizeCastDocument(JSON.parse(JSON.stringify(older)));
+    expect(doc.playGuide).toEqual(createEmptyPlayGuide());
+    // 読み直しても同じ（開いただけで「保存していない変更」にならない）
+    expect(normalizeCastDocument(JSON.parse(JSON.stringify(doc)))).toEqual(doc);
+  });
+
+  it("遊び方シートは Zetter の normalizeCastPlayGuide と同じに補う", () => {
+    const read = (playGuide: unknown) =>
+      normalizeCastDocument({ format: CAST_FILE_FORMAT, playGuide }).playGuide;
+    // シートとして読めなければ、何も書いていないシート
+    for (const playGuide of [null, "x", 3, [{ text: "a" }]])
+      expect(read(playGuide)).toEqual(createEmptyPlayGuide());
+    // 欄として読めなければ既定、文字でなければ空、「隠しておく」は真偽値のときだけ使う
+    expect(
+      read({
+        summary: { text: "雨の古書店で、", hidden: true },
+        world: { text: 3, hidden: "true" },
+        role: "あなたは客",
+        start: [{ text: "x" }],
+        gimmick: { text: "合言葉がある" },
+      }),
+    ).toEqual({
+      ...createEmptyPlayGuide(),
+      summary: { text: "雨の古書店で、", hidden: true },
+      world: { text: "", hidden: false },
+      gimmick: { text: "合言葉がある", hidden: true },
+    });
+  });
+
+  it("遊び方シートの知らない欄やキーも残す", () => {
+    const doc = normalizeCastDocument({
+      format: CAST_FILE_FORMAT,
+      playGuide: {
+        futureField: { text: "x" },
+        summary: { text: "a", hidden: false, futureEntryField: 1 },
+      },
+    });
+    const guide = doc.playGuide as unknown as Record<string, Record<string, unknown>>;
+    expect(guide.futureField).toEqual({ text: "x" });
+    expect(guide.summary).toEqual({ text: "a", hidden: false, futureEntryField: 1 });
   });
 
   it("保存前の画像はふつうは外し、指定すれば残す", () => {
@@ -492,6 +569,19 @@ describe("castDisplayTitle", () => {
       title: "",
       sub: "",
     });
+  });
+});
+
+describe("filledPlayGuideFields", () => {
+  it("何か書いてある欄を並びの順に返す。空白だけの欄は数えない（Zetter の castPlayGuideHasContent と同じ）", () => {
+    expect(filledPlayGuideFields(createEmptyPlayGuide())).toEqual([]);
+    const guide = {
+      ...createEmptyPlayGuide(),
+      gimmick: { text: "合言葉がある", hidden: true },
+      world: { text: "海辺の町", hidden: false },
+      hint: { text: " \n　", hidden: false },
+    };
+    expect(filledPlayGuideFields(guide).map((field) => field.key)).toEqual(["world", "gimmick"]);
   });
 });
 
