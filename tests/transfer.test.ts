@@ -150,7 +150,6 @@ describe("写す項目", () => {
         ],
       ],
     ]);
-    // セリフには話者を添え、登場人物はまとまりの見出しに何人目かを出す
     expect(
       ["intro/0/text", "intro/1/text", "intro/2/text"].map((key) => {
         const item = itemOf(doc, key);
@@ -275,10 +274,8 @@ describe("写す項目", () => {
     const skip = (key: string) =>
       transferItems(doc).find((candidate) => candidate.key === key)?.skip;
     const base = `affinity/${AFFINITY_BASE_SUBJECT}`;
-    // 共通設定はひな形と比べる
     expect(skip("affinity/default/itemName")).toBeNull();
     expect(skip("affinity/default/maxValue")).toBe("default");
-    // 個別設定の項目名はひな形と同じでも、共通設定とは違うので写す
     expect(skip(`${base}/itemName`)).toBeNull();
     expect(skip(`${base}/maxValue`)).toBeNull();
     expect(skip(`${base}/minValue`)).toBe("default");
@@ -445,7 +442,6 @@ describe("写す項目", () => {
     const textKeys = ["summary", "world", "role", "start", "first", "hint", "gimmick"].map(
       (key) => `playGuide/${key}/text`,
     );
-    // 空白だけなら書いていないのと同じ
     const blank = cast();
     blank.playGuide.world.text = " \n";
     expect(keysOf(blank)?.some((key) => key.startsWith("playGuide/"))).toBe(false);
@@ -463,7 +459,6 @@ describe("写す項目", () => {
       ...textKeys.slice(2),
       "cast/aboutText",
     ]);
-    // 雑談モードでも写す（Zetter はどちらのモードでも送る）
     const chat = structuredClone({ ...story, mode: "chat" as const });
     expect(keysOf(chat)).toEqual([
       "cast/mode",
@@ -505,7 +500,6 @@ describe("写す項目", () => {
     const item = findTransferItem(doc, ["playGuide", "summary", "text"]);
     expect(item).toMatchObject({ tab: "experience", group: "体験設定", value: "雨の古書店で、" });
     expect(isCopyable(item as NonNullable<typeof item>)).toBe(true);
-    // 上限を超えていれば、入りきらないことを添える
     const over = structuredClone(doc);
     over.playGuide.role.text = "あ".repeat(201);
     expect(findTransferItem(over, ["playGuide", "role", "text"])?.notes[0]).toContain(
@@ -572,7 +566,6 @@ describe("コピーした記録のファイル", () => {
   it("形が違うものは空として読む", () => {
     expect(normalizeCopyLog(null)).toEqual({});
     expect(normalizeCopyLog({ format: "other", items: {} })).toEqual({});
-    // 記録の並びは、中身が記録の形でも読まない
     expect(normalizeCopyLog({ format: COPY_LOG_FORMAT, items: [{ hash: "1", at: "t" }] })).toEqual(
       {},
     );
@@ -614,7 +607,6 @@ describe("原稿用紙の字数の枠", () => {
     expect(vm.rows.map((row) => row.cells)).toEqual([25, 25, 1]);
     expect(vm.tone).toBe("over");
     expect(vm.rest.text).toBe("1字オーバー");
-    // 上限の線は 2 行目の終わり、斜線は 3 行目
     expect(vm.rows[1]?.limit).toBe("100%");
     expect(vm.rows[2]?.over).toBe("0%");
   });

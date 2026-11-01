@@ -1,8 +1,6 @@
 import { type JsonObject, isRecord } from "./json";
 import { LIMITS } from "./limits";
 
-// ローカル保存用のキャスト設定。項目名と既定値は Zetter のキャスト作成画面に合わせ、
-// 画像だけは Zetter の URL の代わりにキャストのフォルダ内のファイルを指す。
 export const CAST_FILE_FORMAT = "zetter-forge/cast";
 export const CAST_FILE_VERSION = 1;
 
@@ -11,11 +9,9 @@ export type CastStatus = "private" | "public";
 type IntroKind = "narration" | "speech";
 export type AffinityPace = "gentle" | "normal" | "rapid";
 
-/** 好感度の「本体」の個別設定を指すキー（Zetter と同じ）。 */
 export const AFFINITY_BASE_SUBJECT = "__cast_base__";
 
 export interface CastImage {
-  /** キャストのフォルダからの相対パス。保存前の画像は "pending:<id>"。 */
   file: string;
   width: number;
   height: number;
@@ -35,7 +31,6 @@ export interface ToneExample {
 export interface IntroPart {
   kind: IntroKind;
   text: string;
-  /** セリフの話者。null はキャスト本体、文字列は登場人物の id。 */
   speakerId: string | null;
 }
 
@@ -65,16 +60,13 @@ export interface RecommendedPersona {
   avatar: CastImage | null;
 }
 
-/** 遊び方シートの欄（Zetter と同じキー） */
 export type PlayGuideKey = "summary" | "world" | "role" | "start" | "first" | "hint" | "gimmick";
 
 interface PlayGuideEntry {
   text: string;
-  /** 「隠しておく」（遊ぶ人がタップしたときだけ見える） */
   hidden: boolean;
 }
 
-/** 遊び方シート（遊ぶ人がチャットで開ける案内。AI には渡らない） */
 export type PlayGuide = Record<PlayGuideKey, PlayGuideEntry>;
 
 export interface AffinityStage {
@@ -100,11 +92,9 @@ export interface AffinityConfig {
 
 interface CastAffinity {
   default: AffinityConfig;
-  /** キーは AFFINITY_BASE_SUBJECT か登場人物の id。 */
   overrides: Record<string, AffinityConfig>;
 }
 
-/** 連動する設定集のメモ（設定集そのものは Zetter 側にある）。 */
 interface LorebookNote {
   id: string;
   title: string;
@@ -119,26 +109,21 @@ export interface CastDocument {
   updatedAt: string;
   mode: CastMode;
   status: CastStatus;
-  // キャラクター（本人）
   name: string;
   persona: string;
   avatar: CastImage | null;
   avatarBlurred: boolean;
   partnerSettings: PartnerSettings;
   toneExamples: ToneExample[];
-  /** 2 人目以降の登場人物（ストーリーモードのみ Zetter に送られる） */
   members: CastMember[];
-  // 体験設定
   tagline: string;
   situation: string;
   introScript: IntroPart[];
   aboutText: string;
   playGuide: PlayGuide;
   recommendedPersonas: RecommendedPersona[];
-  // 好感度・設定集
   affinity: CastAffinity | null;
   lorebooks: LorebookNote[];
-  // 見た目・公開
   cover: CastImage | null;
   coverBlurred: boolean;
   tags: string[];
@@ -151,7 +136,6 @@ export interface CastDocument {
   authorHidden: boolean;
   showFavoriteCount: boolean;
   showTalkCount: boolean;
-  // ローカルだけで使うメモ
   zetterUrl: string;
   memo: string;
 }
@@ -190,7 +174,6 @@ export const PARTNER_HABIT_CHIPS = [
   "絵文字は使わない",
 ] as const;
 
-/** 遊び方シートの欄（Zetter の作成画面と同じ順・見出し・「隠しておく」の既定） */
 export const PLAY_GUIDE_FIELDS = [
   { key: "summary", label: "あらすじ", hiddenByDefault: false },
   { key: "world", label: "世界観", hiddenByDefault: false },
@@ -245,7 +228,6 @@ export function createEmptyPersona(): RecommendedPersona {
   return { id: newId(), name: "", useViewerName: false, tagline: "", note: "", avatar: null };
 }
 
-/** 何も書いていない遊び方シート（「隠しておく」は欄ごとの既定。Zetter と同じ） */
 export function createEmptyPlayGuide(): PlayGuide {
   return Object.fromEntries(
     PLAY_GUIDE_FIELDS.map((field) => [field.key, { text: "", hidden: field.hiddenByDefault }]),
@@ -264,7 +246,6 @@ export function createEmptyStage(startValue: number | null): AffinityStage {
   };
 }
 
-/** 「好感度を設定する」を押したときのひな形（Zetter と同じ 4 段階）。 */
 export function createDefaultAffinityConfig(): AffinityConfig {
   const stage = (startValue: number, freeText: string): AffinityStage => ({
     ...createEmptyStage(startValue),
@@ -287,7 +268,6 @@ export function createDefaultAffinityConfig(): AffinityConfig {
   };
 }
 
-/** 新しいキャストの既定値（Zetter の新規作成と同じ）。 */
 export function createEmptyCast(now = new Date()): CastDocument {
   const timestamp = now.toISOString();
   return {
@@ -330,10 +310,6 @@ export function createEmptyCast(now = new Date()): CastDocument {
   };
 }
 
-// ---------------------------------------------------------------------------
-// 読み込み時の正規化。欠けた値は既定値で埋め、知らないキーは消さずに残す
-// （新しい版のアプリで書いたファイルを古い版で保存しても情報を落とさないため）。
-
 function str(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
@@ -342,7 +318,6 @@ function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-/** Zetter の normalizeNumber と同じ規則（空は null、整数でなければ既定値）。 */
 function intOrNull(value: unknown, fallback: number | null): number | null {
   if (value === null || value === "") return null;
   const number = Number(value);
@@ -353,7 +328,6 @@ function list(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-/** 既知のキーを正規化した値で並べ、そのあとに知らないキーを元の値のまま足す。 */
 function keepExtras<T extends object>(raw: unknown, known: T): T {
   if (!isRecord(raw)) return known;
   const extras: JsonObject = {};
@@ -434,10 +408,6 @@ function normalizeIntroPart(raw: unknown): IntroPart {
   });
 }
 
-/**
- * Zetter の normalizeCastPlayGuide と同じ既定値の補い方（欄が欠けていれば空、「隠しておく」が
- * 真偽値でなければ欄ごとの既定）。遊び方シートのない前の版のファイルも、何も書いていないシートになる。
- */
 function normalizePlayGuide(raw: unknown): PlayGuide {
   const source = isRecord(raw) ? raw : {};
   const guide = createEmptyPlayGuide();
@@ -465,7 +435,6 @@ function normalizeStage(raw: unknown): AffinityStage {
   });
 }
 
-/** Zetter の normalizeCastAffinityConfig と同じ既定値の補い方。 */
 export function normalizeAffinityConfig(raw: unknown): AffinityConfig | null {
   if (!isRecord(raw)) return null;
   const defaults = createDefaultAffinityConfig();
@@ -511,11 +480,9 @@ function normalizeLorebook(raw: unknown): LorebookNote {
 export class CastFormatError extends Error {}
 
 export interface NormalizeOptions {
-  /** 保存前の画像（"pending:<id>"）を残す。保存処理の途中でだけ使う */
   keepPendingImages?: boolean;
 }
 
-/** cast.json の中身を CastDocument にする。キャストのファイルでなければ CastFormatError。 */
 export function normalizeCastDocument(raw: unknown, options: NormalizeOptions = {}): CastDocument {
   const keep = options.keepPendingImages === true;
   if (!isRecord(raw) || raw.format !== CAST_FILE_FORMAT) {
@@ -577,13 +544,6 @@ export function normalizeCastDocument(raw: unknown, options: NormalizeOptions = 
   });
 }
 
-// ---------------------------------------------------------------------------
-// Zetter が保存時にどう扱うかに合わせた判定
-
-/**
- * Zetter に送られる登場人物。何も書いていない（追加しただけの）ブロックは Zetter が黙って落とすので数えない。
- * 雑談モードでは登場人物そのものが送られない。
- */
 export function sendableMembers(doc: CastDocument): CastMember[] {
   if (doc.mode === "chat") return [];
   return doc.members
@@ -597,7 +557,6 @@ export function sendableMembers(doc: CastDocument): CastMember[] {
     );
 }
 
-/** 一覧などに出す代表の名前（Zetter と同じく、ストーリーでキャッチコピーがあればそれを使う）。 */
 export function castDisplayTitle(doc: Pick<CastDocument, "mode" | "tagline" | "name">): {
   title: string;
   sub: string;
@@ -608,12 +567,10 @@ export function castDisplayTitle(doc: Pick<CastDocument, "mode" | "tagline" | "n
   return { title: name, sub: "" };
 }
 
-/** 遊び方シートの、何か書いてある欄（Zetter の castPlayGuideHasContent と同じく、空白だけの欄は数えない）。 */
 export function filledPlayGuideFields(guide: PlayGuide): (typeof PLAY_GUIDE_FIELDS)[number][] {
   return PLAY_GUIDE_FIELDS.filter((field) => guide[field.key].text.trim());
 }
 
-/** 好感度の段階を開始値の小さい順に並べ直す（1 段階目は動かさない。Zetter と同じ）。 */
 export function sortAffinityStages(config: AffinityConfig): void {
   if (config.stages.length < 2) return;
   const [first, ...rest] = config.stages;
@@ -629,7 +586,6 @@ export function sortAffinityStages(config: AffinityConfig): void {
   config.stages.splice(0, config.stages.length, first as AffinityStage, ...rest);
 }
 
-/** 登場人物を外したときの後始末（その人の話者指定と好感度の個別設定を消す）。 */
 export function removeMember(doc: CastDocument, memberId: string): void {
   doc.members = doc.members.filter((member) => member.id !== memberId);
   for (const part of doc.introScript) {

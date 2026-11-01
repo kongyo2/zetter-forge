@@ -1,7 +1,5 @@
-// 編集中のキャストの中身についての決まりごと（保存済みかどうか、画像の参照の付け替えなど）。
 import type { CastDocument, CastImage } from "@shared/cast";
 
-/** キーの順番に左右されない JSON（変更があるかの判定に使う）。 */
 export function canonicalJson(value: unknown): string {
   const normalize = (item: unknown): unknown => {
     if (Array.isArray(item)) return item.map(normalize);
@@ -17,7 +15,6 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(normalize(value));
 }
 
-/** doc の中の画像参照をすべて書き換える（保存で "pending:" がファイル名に変わったときに使う）。 */
 export function mapImages(doc: CastDocument, map: (image: CastImage) => CastImage): void {
   if (doc.avatar) doc.avatar = map(doc.avatar);
   if (doc.cover) doc.cover = map(doc.cover);
@@ -28,7 +25,6 @@ export function mapImages(doc: CastDocument, map: (image: CastImage) => CastImag
     if (persona.avatar) persona.avatar = map(persona.avatar);
 }
 
-/** doc が参照している画像（保存前のものも含む）の file をすべて返す。 */
 function imageFiles(doc: CastDocument): string[] {
   const files: string[] = [];
   mapImages(structuredClone(doc), (image) => {
@@ -38,7 +34,6 @@ function imageFiles(doc: CastDocument): string[] {
   return files;
 }
 
-/** doc が参照している保存前の画像だけを残す（外した画像の dataURL を送らないため）。 */
 export function usedPendingImages(
   doc: CastDocument,
   pendingImages: Readonly<Record<string, string>>,
@@ -55,10 +50,6 @@ export function isPendingImage(image: CastImage | null | undefined): boolean {
   return !!image?.file.startsWith("pending:");
 }
 
-/**
- * 保存済みの画像（フォルダの中のファイル）の参照を外す。元のフォルダがなくなったキャストを
- * 新しいキャストとして保存し直すときに使う（そのファイルは新しいフォルダにはないため）。
- */
 export function dropSavedImages(doc: CastDocument): number {
   let dropped = 0;
   const keep = <T extends CastImage>(image: T | null): T | null => {

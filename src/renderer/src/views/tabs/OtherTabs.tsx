@@ -5,9 +5,6 @@ import { IconFolder, IconPlus, IconRemove } from "../parts/icons";
 import { FilePicker, ImageField } from "../parts/ImageField";
 import { TextField } from "../parts/TextField";
 
-// どの部品も、自分の場所（scope）の輪は呼び出す側に置く。部品が出すできごとも、その輪を通って上る。
-
-/** 設定集の一覧（["lorebooks"] の中に置く） */
 function Lorebooks({ vm }: { vm: LorebookTabVM }) {
   return (
     <>
@@ -48,7 +45,6 @@ export function LorebookTab({ vm }: { vm: LorebookTabVM }) {
   );
 }
 
-/** ギャラリーの 1 枚（["gallery", id] の中に置く） */
 function GalleryItem({ vm }: { vm: GalleryItemVM }) {
   const emit = useEmit();
   return (
@@ -100,7 +96,6 @@ function GalleryItem({ vm }: { vm: GalleryItemVM }) {
   );
 }
 
-/** タグの並び（["tags"] の中に置く） */
 function Tags({ vm }: { vm: PublishTabVM["tags"] }) {
   const emit = useEmit();
   return (
@@ -249,7 +244,6 @@ export function PublishTab({ vm }: { vm: PublishTabVM }) {
   );
 }
 
-/** メモの欄（["cast"] の中に置く） */
 function Memo({ vm }: { vm: MemoTabVM }) {
   const emit = useEmit();
   return (

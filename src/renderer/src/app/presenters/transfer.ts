@@ -1,4 +1,3 @@
-// 「Zetter へ写す」のタブに描くもの。Zetter の作成画面の順に、コピーする文字・画像・選ぶ値を並べる。
 import { formatCount, utf16Length } from "@shared/text";
 
 import { isZetterUrl } from "../machine";

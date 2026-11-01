@@ -22,7 +22,6 @@ import {
   writeCopyLog,
 } from "../src/main/library";
 
-// 1×1 の JPEG（中身は何でもよいが、ファイル名のハッシュが変わることを確かめる）
 const JPEG_A = `data:image/jpeg;base64,${Buffer.from("fake-jpeg-a").toString("base64")}`;
 const JPEG_B = `data:image/jpeg;base64,${Buffer.from("fake-jpeg-b").toString("base64")}`;
 
@@ -97,18 +96,15 @@ describe("saveCast", () => {
       pendingImages: { "pending:a": JPEG_A, "pending:m": JPEG_A, "pending:g": JPEG_A },
     });
     const dir = path.join(root, first.folder);
-    // アイコンを差し替える
     const second = await saveCast(root, {
       folder: first.folder,
       doc: { ...first.doc, avatar: { file: "pending:new", width: 400, height: 400, bytes: 0 } },
       pendingImages: { "pending:new": JPEG_B },
     });
     expect(await filesIn(path.join(dir, "history"))).toHaveLength(1);
-    // 古いアイコンは history の版が参照しているので残る
     expect(
       (await filesIn(path.join(dir, "images"))).filter((name) => name.startsWith("avatar-")),
     ).toHaveLength(2);
-    // history を消すと、次の保存で古いアイコンは片付く
     await fs.rm(path.join(dir, "history"), { recursive: true });
     await saveCast(root, {
       folder: second.folder,
@@ -130,7 +126,6 @@ describe("saveCast", () => {
   });
 
   it("遊び方シートのない前の版のファイルは、開いても書き換えず、保存してもほかの中身はそのまま", async () => {
-    // 0.2.0 までの版が書いた cast.json（playGuide がない）
     const { playGuide: _, ...older } = { ...createEmptyCast(), name: "灯里", persona: "店主。" };
     const folder = "灯里-older";
     const file = path.join(root, folder, "cast.json");
@@ -153,7 +148,6 @@ describe("saveCast", () => {
     expect(rest).toEqual(olderRest);
     expect(playGuide).toEqual(createEmptyPlayGuide());
     expect(saved.doc.formatVersion).toBe(older.formatVersion);
-    // 前の版は history に残る
     const history = await filesIn(path.join(root, folder, "history"));
     expect(history).toHaveLength(1);
     expect(
@@ -174,7 +168,6 @@ describe("saveCast", () => {
     const saving = saveCast(root, { folder: "ない", doc: createEmptyCast(), pendingImages: {} });
     await expect(saving).rejects.toThrow("キャストのフォルダが見つかりません");
     await expect(saving).rejects.toMatchObject({ code: CAST_MISSING });
-    // 保存先のフォルダを勝手に作らない
     expect(await filesIn(root)).toEqual([]);
   });
 });
@@ -267,7 +260,6 @@ describe("deleteCast", () => {
   });
 
   it("cast.json のないフォルダや、保存先そのもの・保存先の外は渡さない", async () => {
-    // 保存先そのものがキャストのフォルダに見えても、保存先ごと消すことはない
     await fs.writeFile(path.join(root, "cast.json"), "{}");
     await fs.mkdir(path.join(root, "関係ないフォルダ"));
     const trashed: string[] = [];

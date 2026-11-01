@@ -1,5 +1,3 @@
-// Zetter へ写す項目の一覧。Zetter の作成画面の欄と同じ順に並べ、コピーする文字を取り出す。
-// 項目のキーは文書の中の場所（"cast/name" など）で、コピーした記録（copied.json）のキーにもなる。
 import {
   AFFINITY_BASE_SUBJECT,
   AFFINITY_PACES,
@@ -28,25 +26,18 @@ import { perDocument } from "./memo";
 import { isPendingImage } from "./session";
 import { AFFINITY_DEFAULT, type Path, pathKey } from "./types";
 
-/** text はコピーして貼る欄、image は画像ファイルを選ぶ欄、setting は画面で選ぶ・切り替える欄 */
 type TransferKind = "text" | "image" | "setting";
 
 export interface TransferItem {
   key: string;
   path: Path;
-  /** 編集するタブ */
   tab: EditorTab;
-  /** Zetter の作成画面のタブ */
   group: string;
-  /** まとまり（本人・登場人物・イントロなど） */
   section: string;
   label: string;
   kind: TransferKind;
-  /** コピーする文字（text）・選ぶ値（setting）・画像のファイル（image） */
   value: string;
-  /** 何もしなくてよい（空のまま・Zetter の既定のまま） */
   skip: "empty" | "default" | null;
-  /** 写すときの注意（上限を超えている・保存されないなど） */
   notes: string[];
   image: CastImage | null;
 }
@@ -57,7 +48,6 @@ export interface TransferGroup {
   items: TransferItem[];
 }
 
-/** done はコピー（確認）済み、changed はそのあと書き換えた、todo はまだ */
 export type TransferStatus = "skip" | "todo" | "done" | "changed";
 
 export function transferStatus(item: TransferItem, log: CopyLog): TransferStatus {
@@ -67,14 +57,11 @@ export function transferStatus(item: TransferItem, log: CopyLog): TransferStatus
   return record.hash === textHash(item.value) ? "done" : "changed";
 }
 
-/** コピーできる項目か（画像は保存してファイルになってから） */
 export function isCopyable(item: TransferItem): boolean {
   if (item.kind === "text") return !item.skip;
   if (item.kind === "image") return !item.skip && !!item.image && !isPendingImage(item.image);
   return false;
 }
-
-// ---------------------------------------------------------------------------
 
 const DEFAULTS = createEmptyCast(new Date(0));
 const AFFINITY_TEMPLATE = createDefaultAffinityConfig();
@@ -171,7 +158,6 @@ class Builder {
 
 const onOff = (value: boolean) => (value ? "オン" : "オフ");
 
-/** 本人のアイコン（Zetter では、ストーリーはキャラクター、雑談は見た目・公開のタブにある） */
 function avatarItems(builder: Builder, doc: CastDocument): void {
   builder.image(["cast", "avatar"], "アイコン", doc.avatar);
   builder.setting(
@@ -208,7 +194,6 @@ function toneItems(builder: Builder, base: Path, list: readonly ToneExample[]): 
   });
 }
 
-/** 遊び方シート（Zetter では体験設定のイントロの下にある）。何か書いたときだけ写す */
 function playGuideItems(builder: Builder, guide: PlayGuide): void {
   if (filledPlayGuideFields(guide).length === 0) return;
   builder.sectionOf("遊び方シート");
@@ -218,7 +203,6 @@ function playGuideItems(builder: Builder, guide: PlayGuide): void {
     builder.text([...base, "text"], field.label, entry.text, {
       max: LIMITS.playGuide[field.key],
     });
-    // 書いていない欄は見えないので、「隠しておく」も写さなくてよい
     if (entry.text.trim()) {
       builder.setting(
         [...base, "hidden"],
@@ -254,7 +238,6 @@ function affinityItems(
   subject: string,
   title: string,
   config: AffinityConfig,
-  /** 個別設定なら共通設定、共通設定なら null */
   common: AffinityConfig | null,
 ): void {
   const base = ["affinity", subject];
@@ -263,8 +246,6 @@ function affinityItems(
     builder.setting([...base, "disabled"], "このキャラは好感度を使わない", "オン", false);
     return;
   }
-  // 「何もしなくてよい」とするのは、Zetter のひな形と同じ値のときだけ。個別設定は、作ったときに
-  // ひな形と共通設定のどちらが入っていても困らないよう、両方と同じときだけにする
   const baselines = common ? [AFFINITY_TEMPLATE, common] : [AFFINITY_TEMPLATE];
   const unchanged = (pick: (target: AffinityConfig) => unknown) =>
     baselines.every((baseline) => pick(baseline) === pick(config));
@@ -299,12 +280,10 @@ function affinityItems(
   );
   config.stages.forEach((stage, index) => {
     const row = [...base, "stages", index];
-    // ひな形より段階が多いときは、Zetter で段階を足してから写す
     const stageNotes =
       index === AFFINITY_TEMPLATE.stages.length
         ? ["Zetter で「段階を追加」してから写します。"]
         : [];
-    // その段階がない設定とは、同じとみなさない
     const stageUnchanged = (key: keyof AffinityStage) =>
       baselines.every((baseline) => {
         const same = baseline.stages[index];
@@ -326,7 +305,6 @@ function build(doc: CastDocument): TransferGroup[] {
   const builder = new Builder();
   const story = doc.mode === "story";
 
-  // キャラクター
   builder.group("キャラクター", "character");
   builder.sectionOf("本人");
   builder.text(["cast", "name"], "名前", doc.name, { max: LIMITS.name });
@@ -336,7 +314,6 @@ function build(doc: CastDocument): TransferGroup[] {
   toneItems(builder, ["cast"], doc.toneExamples);
   sendableMembers(doc).forEach((member, index) => memberItems(builder, doc, member, index === 0));
 
-  // 体験設定
   builder.group("体験設定", "experience");
   builder.sectionOf("");
   builder.setting(
@@ -400,7 +377,6 @@ function build(doc: CastDocument): TransferGroup[] {
     });
   });
 
-  // 好感度（雑談モードでは効かないので写さない）
   if (story && doc.affinity) {
     builder.group("好感度", "affinity");
     const common = doc.affinity.default;
@@ -427,7 +403,6 @@ function build(doc: CastDocument): TransferGroup[] {
     }
   }
 
-  // 設定集（Zetter 側にある設定集を選ぶ）
   if (doc.lorebooks.length > 0) {
     builder.group("設定集", "lorebook");
     doc.lorebooks.forEach((book, index) => {
@@ -441,7 +416,6 @@ function build(doc: CastDocument): TransferGroup[] {
     });
   }
 
-  // 見た目・公開
   builder.group("見た目・公開", "publish");
   builder.sectionOf("");
   builder.setting(
@@ -513,7 +487,6 @@ function build(doc: CastDocument): TransferGroup[] {
   return builder.groups.filter((group) => group.items.length > 0);
 }
 
-/** Zetter の作成画面の順に並べた、写す項目（同じ文書なら一度だけ並べる） */
 export const transferGroups = perDocument(build);
 
 export function transferItems(doc: CastDocument): TransferItem[] {
@@ -525,7 +498,6 @@ export function findTransferItem(doc: CastDocument, path: Path): TransferItem | 
   return transferItems(doc).find((item) => item.key === key) ?? null;
 }
 
-/** 次にコピーする項目（まだコピーしていないか、コピーしたあとに書き換えたもの） */
 export function nextTransferItem(doc: CastDocument, log: CopyLog): TransferItem | null {
   return (
     transferItems(doc).find((item) => {

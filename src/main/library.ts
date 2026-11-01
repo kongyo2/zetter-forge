@@ -13,11 +13,6 @@ import { type CopyLog, copyLogFile, normalizeCopyLog } from "@shared/copyLog";
 import { type ImageKind, imageSlotName } from "@shared/images";
 import type { SaveCastRequest } from "@shared/ipc";
 
-// ライブラリの中身:
-//   <root>/<キャストのフォルダ>/cast.json        設定
-//   <root>/<キャストのフォルダ>/images/*.jpg     画像（中身のハッシュ入りの名前で、一度書いたら変えない）
-//   <root>/<キャストのフォルダ>/history/*.json   保存のたびに残す前の版
-//   <root>/<キャストのフォルダ>/copied.json      Zetter へ写すためにコピーした記録
 const CAST_FILE = "cast.json";
 const IMAGES_DIR = "images";
 const HISTORY_DIR = "history";
@@ -35,11 +30,9 @@ export interface LoadedCast extends StoredCast {
 }
 
 export interface SavedCast extends StoredCast {
-  /** 保存前の画像（"pending:<id>"）→ 書き出したファイルを指す参照 */
   replacedImages: Record<string, CastImage>;
 }
 
-/** キャストのフォルダがなくなっている（移動・削除された）ときのエラーの印 */
 export const CAST_MISSING = "CAST_MISSING";
 
 export function isCastMissing(error: unknown): error is Error {
@@ -60,7 +53,6 @@ export interface CastListing {
   errors: { folder: string; message: string }[];
 }
 
-/** フォルダ名が 1 階層の名前であることを確かめて、キャストのフォルダの絶対パスを返す。 */
 export function castDir(root: string, folder: string): string {
   if (!folder || folder !== path.basename(folder) || folder === "." || folder === "..") {
     throw new Error(`キャストのフォルダ名が正しくありません: ${folder}`);
@@ -68,7 +60,6 @@ export function castDir(root: string, folder: string): string {
   return path.join(root, folder);
 }
 
-/** キャストのフォルダの中のファイルの絶対パス。フォルダの外を指していればエラー。 */
 export function castFilePath(root: string, folder: string, relative: string): string {
   const dir = castDir(root, folder);
   const full = path.resolve(dir, relative);
@@ -148,17 +139,12 @@ async function readCopyLog(dir: string): Promise<CopyLog> {
   try {
     return normalizeCopyLog(JSON.parse(await fs.readFile(path.join(dir, COPY_LOG_FILE), "utf8")));
   } catch {
-    // まだコピーしていない（ファイルがない）か、壊れた記録は空から始める
     return {};
   }
 }
 
 const copyLogWrites = new Map<string, Promise<void>>();
 
-/**
- * コピーした記録を書く。キャストのフォルダがなければ（新しく作らずに）エラー。
- * 続けてコピーしたときに古い記録で上書きしないよう、同じキャストへの書き込みは順に行う。
- */
 export function writeCopyLog(root: string, folder: string, log: CopyLog): Promise<void> {
   const dir = castDir(root, folder);
   const write = async () => {
@@ -179,11 +165,6 @@ export function writeCopyLog(root: string, folder: string, log: CopyLog): Promis
   return next;
 }
 
-/**
- * キャストをフォルダごと削除する（設定・画像・前の版・コピーした記録をまとめて trash に渡す。
- * アプリはゴミ箱へ移すので、あとから戻せる）。cast.json のないフォルダは、キャストのものとは
- * 限らないので渡さずにエラー（フォルダが移動・削除されていたとき）。
- */
 export async function deleteCast(
   root: string,
   folder: string,
@@ -194,7 +175,6 @@ export async function deleteCast(
   await trash(dir);
 }
 
-/** キャストの画像ファイルの絶対パス。images の外やない画像はエラー。 */
 export async function castImagePath(root: string, folder: string, file: string): Promise<string> {
   const full = castFilePath(root, folder, file);
   if (!full.startsWith(path.join(castDir(root, folder), IMAGES_DIR) + path.sep))
@@ -203,7 +183,6 @@ export async function castImagePath(root: string, folder: string, file: string):
   return full;
 }
 
-/** Windows でも使えるフォルダ名にする。 */
 export function sanitizeFolderName(name: string): string {
   const cleaned = name
     .replace(/[<>:"/\\|?*]/gu, "")
@@ -244,7 +223,6 @@ interface ImageSlot {
   set(image: CastImage | null): void;
 }
 
-/** キャストが持つ画像をすべて、ファイル名に使う枠の情報とともに並べる。 */
 function imageSlots(doc: CastDocument): ImageSlot[] {
   const slots: ImageSlot[] = [
     { kind: "avatar", get: () => doc.avatar, set: (image) => (doc.avatar = image) },
@@ -261,7 +239,6 @@ function imageSlots(doc: CastDocument): ImageSlot[] {
       },
     });
   });
-  // 登場人物とペルソナのアイコン
   const avatars = (kind: ImageKind, owners: readonly { avatar: CastImage | null }[]) => {
     owners.forEach((owner, index) => {
       slots.push({ kind, index, get: () => owner.avatar, set: (image) => (owner.avatar = image) });
@@ -272,7 +249,6 @@ function imageSlots(doc: CastDocument): ImageSlot[] {
   return slots;
 }
 
-/** cast.json が参照している画像ファイル（相対パス） */
 export function referencedImages(doc: CastDocument): string[] {
   return imageSlots(doc)
     .map((slot) => slot.get()?.file)
@@ -299,8 +275,6 @@ export async function saveCast(root: string, input: SaveCastInput): Promise<Save
   const historyDir = path.join(dir, HISTORY_DIR);
   await fs.mkdir(imagesDir, { recursive: true });
 
-  // 保存前の画像（dataURL）をファイルにする。名前に中身のハッシュを入れるので、同じ画像は書き直さない。
-  // dataURL が届かなかった画像は、最後の正規化で参照ごと外れる。
   const replacedImages: Record<string, CastImage> = {};
   const writes = imageSlots(working).map(async (slot) => {
     const image = slot.get();
@@ -348,7 +322,6 @@ function historyStamp(date: Date): string {
 let tempCounter = 0;
 
 async function writeFileAtomic(file: string, data: string | Buffer): Promise<void> {
-  // 同じファイルを続けて書いても一時ファイルが重ならないよう、通し番号を付ける
   tempCounter += 1;
   const temp = `${file}.${process.pid}.${Date.now()}.${tempCounter}.tmp`;
   await fs.writeFile(temp, data);
@@ -367,7 +340,6 @@ async function pruneHistory(historyDir: string): Promise<void> {
   await Promise.all(stale.map((name) => fs.rm(path.join(historyDir, name), { force: true })));
 }
 
-/** cast.json と残している版のどれからも参照されていない画像を消す。 */
 async function collectUnusedImages(dir: string): Promise<void> {
   const used = new Set(referencedImages(await readCastFile(dir)));
   const historyDir = path.join(dir, HISTORY_DIR);
@@ -379,7 +351,6 @@ async function collectUnusedImages(dir: string): Promise<void> {
           const text = await fs.readFile(path.join(historyDir, name), "utf8");
           return referencedImages(normalizeCastDocument(JSON.parse(text)));
         } catch {
-          // 読めない版は画像の参照元として数えない
           return [];
         }
       }),

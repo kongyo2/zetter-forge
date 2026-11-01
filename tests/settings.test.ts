@@ -1,4 +1,3 @@
-// アプリの設定（settings.json）と、MCP サーバーの設定の画面。
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -116,7 +115,6 @@ describe("設定の画面", () => {
   it("メニューから開き、変えた値は「この設定にする」で保存する。保存したあとも開いたまま様子を見せる", async () => {
     const world = await started();
     world.dispatch({ type: "menu", command: "settings" });
-    // 開くたびに、いまの様子を読み直す
     world.take("getMcp").resolve(mcpInfo());
     await world.flush();
     expect(settingsVm(world)).toMatchObject({
@@ -137,7 +135,6 @@ describe("設定の画面", () => {
     });
     const save = world.take("saveMcp");
     expect(save.args[0]).toEqual({ enabled: true, port: 30001 });
-    // 保存中は閉じない
     world.dispatch({ type: "dialog/cancel" });
     save.resolve(
       mcpInfo(
@@ -239,7 +236,6 @@ describe("設定の画面", () => {
     await opened(world, "cast-0", castNamed("A"));
     world.dispatch({ type: "input", path: ["cast", "name"], value: "A2" });
     world.dispatch({ type: "library/open", folder: "cast-1" });
-    // 「保存して続ける」: 保存が終わったら B を開く
     world.dispatch({ type: "dialog/choose", choice: "save" });
     world.dispatch({ type: "settings/open" });
     expect(world.vm().dialog).toBeNull();

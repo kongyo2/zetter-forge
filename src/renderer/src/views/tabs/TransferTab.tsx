@@ -1,4 +1,3 @@
-// Zetter へ写す。Zetter の作成画面の順に、コピーする文字・画像・選ぶ値を並べた一覧。
 import { useLayoutEffect, useRef } from "react";
 
 import type { TransferItemVM, TransferTabVM } from "../../app/viewModels";
@@ -6,11 +5,9 @@ import { Link, useEmit } from "../chain";
 import { CopyButton, Section } from "../parts/basics";
 import { IconCheck, IconFolder, IconWarning } from "../parts/icons";
 
-/** 写す項目 1 つ（その項目の場所の中に置く） */
 function Item({ vm }: { vm: TransferItemVM }) {
   const emit = useEmit();
   const ref = useRef<HTMLLIElement | null>(null);
-  // いまコピーした項目が見えるようにする（「次の項目をコピー」で進んだとき）
   useLayoutEffect(() => {
     if (vm.flash !== null) ref.current?.scrollIntoView({ block: "nearest" });
   }, [vm.flash]);
@@ -85,7 +82,6 @@ export function TransferTab({ vm }: { vm: TransferTabVM }) {
         title="Zetter へ写す"
         description="Zetter のキャスト作成画面と同じ順に並べています。文章は「コピー」で写し、画像は「場所をコピー」してから Zetter のファイル選択の画面に貼り付けると選べます。コピーしたあとに書き換えた項目には「書き換えあり」が付きます。"
       />
-      {/* 一覧のどこにいても使えるよう、タブの直下に置いて上に貼り付ける */}
       <div className="transfer-bar">
         <p className="transfer-progress" aria-live="polite">
           {vm.progress.text}

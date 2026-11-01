@@ -36,7 +36,6 @@ const messages = (doc: CastDocument) => validateCast(doc).map((issue) => issue.m
 const issueOf = (doc: CastDocument, message: string) =>
   validateCast(doc).find((issue) => issue.message === message);
 
-/** max 字までは message が出ず、1 字超えると出ることを確かめて、そのときの確認を返す */
 function overLimit(set: (doc: CastDocument, value: string) => void, max: number, message: string) {
   const doc = validCast();
   set(doc, "あ".repeat(max));
@@ -154,7 +153,6 @@ describe("validateCast", () => {
     doc.persona = `${"あ".repeat(20000)}\n\n `;
     expect(messages(doc)).toEqual([]);
     expect(settingsUsage(doc)).toEqual({ total: 20003, remaining: 0, over: 3 });
-    // 空白のあとに字があれば、その空白も送られるので数に入る
     expect(messages({ ...doc, persona: `${doc.persona}あ` })).toContain(
       "キャラクター設定（本人の性格・設定と登場人物のプロフィール）は合わせて20,000字までです。いまは20,004字で、4字ぶん超えています。誰の設定を削るかはお任せします（「いまの状況」は別枠です）。",
     );
@@ -175,7 +173,6 @@ describe("validateCast", () => {
     expect(result).toContain(
       "本人の口調サンプル4は状況と発話例の片方が空なので、Zetter では保存されません。",
     );
-    // 画面のカウンタは入力中の値をそのまま数える（片方だけの行も入る）
     expect(toneUsage(doc).total).toBe(10001 + 4);
   });
 
@@ -407,7 +404,6 @@ describe("validateCast", () => {
         ["personas", persona.id, "note"],
       ],
     ]);
-    // 「遊ぶ人の名前を使う」なら、名前の欄は使わない
     persona.useViewerName = true;
     expect(messages(doc)).not.toContain("この会話でのあなた1の名前は20文字までです。");
     doc.recommendedPersonas = Array.from({ length: 6 }, () => ({
@@ -477,7 +473,6 @@ describe("validateCast", () => {
     ];
     expect(introUsage(doc)).toEqual({ total: 12000, remaining: 0, over: 0, crossing: null });
     expect(messages(doc).filter((message) => message.startsWith("イントロは全部"))).toEqual([]);
-    // 絵文字は UTF-16 で 2 字に数える
     (doc.introScript[2] as { text: string }).text = `${"🌙".repeat(2000)}a`;
     expect(introUsage(doc)).toMatchObject({ total: 12001, crossing: 3 });
   });
@@ -706,9 +701,7 @@ describe("missingRequired", () => {
     expect(missingRequired({ ...doc, persona: "\n" }).character).toBe(true);
     expect(missingRequired({ ...doc, tagline: "　" }).experience).toBe(true);
     expect(missingRequired({ ...doc, mode: "chat", tagline: "" }).experience).toBe(false);
-    // 何も書いていない登場人物は送られないので、名前がなくてもよい
     expect(missingRequired({ ...doc, members: [createEmptyMember()] }).character).toBe(false);
-    // 雑談モードでは登場人物を送らないので、名前のない登場人物が残っていてもよい
     const unnamed = { ...createEmptyMember(), profile: "妹" };
     expect(missingRequired({ ...doc, members: [unnamed] }).character).toBe(true);
     expect(missingRequired({ ...doc, mode: "chat", members: [unnamed] }).character).toBe(false);
@@ -827,12 +820,10 @@ describe("validateAffinityConfig", () => {
 
   it("1 つの段階で規則が重なるときは、Zetter と同じ順で最初の 1 つを返す", () => {
     const config = createDefaultAffinityConfig();
-    // 重複していて、態度文もない
     config.stages[1] = createEmptyStage(0);
     expect(validateAffinityConfig(config)).toBe(
       "段階の開始値が重複しています。段階ごとに異なる値を入力してください。",
     );
-    // 範囲の外で、6 欄の合計も超えている
     config.stages[1] = { ...createEmptyStage(200), freeText: "あ".repeat(1001) };
     expect(validateAffinityConfig(config)).toBe("段階の開始値は範囲内の整数にしてください。");
   });
@@ -873,7 +864,6 @@ describe("パートナー設定", () => {
     const settings = { ...createEmptyPartnerSettings(), dailyRoutine: "あ".repeat(4998) };
     expect(partnerSettingsLength(settings)).toBe(4998);
     expect(limitPartnerSettingsValue(settings, "freeform", "🌙🌙🌙")).toBe("🌙🌙");
-    // 既存の文字の間に挿入した場合も、前後は残して挿入分を詰める
     const edited = limitPartnerSettingsValue(
       settings,
       "dailyRoutine",

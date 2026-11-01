@@ -15,23 +15,14 @@ import { codePointLength, formatCount, utf16Length } from "./text";
 
 export type EditorTab = "character" | "experience" | "affinity" | "lorebook" | "publish" | "memo";
 
-/** 文書の中の場所（["cast", "name"]、["members", <id>, "profile"] など） */
 type FieldPath = readonly (string | number)[];
 
 export interface CastIssue {
-  /**
-   * error は Zetter で「完成」できない・保存されない内容、warning は Zetter が黙って落とす内容、
-   * info は Zetter の画面に写すときの手順の注意
-   */
   level: "error" | "warning" | "info";
   tab: EditorTab;
   message: string;
-  /** 直す場所（確認欄から飛ぶ先）。場所が 1 つに決まらないものは持たない */
   path?: FieldPath;
 }
-
-// ---------------------------------------------------------------------------
-// 文字数の集計（Zetter の画面のカウンタと同じ数え方）
 
 export interface BudgetUsage {
   total: number;
@@ -39,9 +30,7 @@ export interface BudgetUsage {
   over: number;
 }
 
-/** 合計のうち、ひとりぶん（本人か登場人物ひとり）が使っている字数。 */
 export interface UsageShare {
-  /** 本人は null、登場人物はその id */
   memberId: string | null;
   length: number;
 }
@@ -51,12 +40,10 @@ function usage(shares: readonly UsageShare[], max: number): BudgetUsage {
   return { total, remaining: Math.max(0, max - total), over: Math.max(0, total - max) };
 }
 
-/** 数える登場人物。雑談モードでは登場人物を数えない。 */
 function countedMembers(doc: CastDocument) {
   return doc.mode === "chat" ? [] : doc.members;
 }
 
-/** 合計の内訳（本人、登場人物の順）。own は本人の字数、ofMember は登場人物ひとりの字数 */
 function sharesOf(
   doc: CastDocument,
   own: number,
@@ -68,12 +55,10 @@ function sharesOf(
   ];
 }
 
-/** 「キャラクター設定の合計」の内訳（本人、登場人物の順）。入力中の値をそのまま数える。 */
 export function settingsShares(doc: CastDocument): UsageShare[] {
   return sharesOf(doc, utf16Length(doc.persona), (member) => utf16Length(member.profile));
 }
 
-/** 「キャラクター設定の合計」。 */
 export function settingsUsage(doc: CastDocument): BudgetUsage {
   return usage(settingsShares(doc), LIMITS.settingsTotal);
 }
@@ -85,27 +70,20 @@ function toneExamplesLength(list: readonly ToneExample[]): number {
   );
 }
 
-/** 「口調サンプルの使用量（全員合計）」の内訳（本人、登場人物の順）。 */
 export function toneShares(doc: CastDocument): UsageShare[] {
   return sharesOf(doc, toneExamplesLength(doc.toneExamples), (member) =>
     toneExamplesLength(member.toneExamples),
   );
 }
 
-/** 「口調サンプルの使用量（全員合計）」。 */
 export function toneUsage(doc: CastDocument): BudgetUsage {
   return usage(toneShares(doc), LIMITS.toneTotal);
 }
 
 export interface IntroUsage extends BudgetUsage {
-  /** 合計が上限を超えるパートの位置（超えていなければ null） */
   crossing: number | null;
 }
 
-/**
- * 「イントロの合計」。Zetter に送られる分（前後の空白を除いた長さ。空のパートは送られない）で数える。
- * Zetter の画面には数える欄がないので、ほかの合計と違って入力中の値ではなく送られる分を出す。
- */
 export function introUsage(doc: CastDocument): IntroUsage {
   let total = 0;
   let crossing: number | null = null;
@@ -135,10 +113,6 @@ export function affinityStageTextLength(stage: AffinityStage): number {
   return AFFINITY_STAGE_FIELDS.reduce((sum, field) => sum + codePointLength(stage[field.key]), 0);
 }
 
-/**
- * パートナー設定の 1 欄を書き換えたときに、5 欄の合計が上限を超えないよう挿入分だけを切り詰める
- * （Zetter の入力欄と同じふるまい）。
- */
 export function limitPartnerSettingsValue(
   settings: PartnerSettings,
   field: keyof PartnerSettings,
@@ -167,9 +141,6 @@ export function limitPartnerSettingsValue(
     ...(suffix ? previous.slice(-suffix) : []),
   ].join("");
 }
-
-// ---------------------------------------------------------------------------
-// 好感度（Zetter の validateCastAffinityConfigForUi と同じ判定と文言）
 
 export function validateAffinityConfig(config: AffinityConfig): string {
   const itemName = config.itemName.trim();
@@ -216,7 +187,6 @@ export function validateAffinityConfig(config: AffinityConfig): string {
   return "";
 }
 
-/** 開始値がほかの段階と重なっている段階の位置（Zetter の画面の「重複しています」表示用）。 */
 export function duplicateStageIndexes(config: AffinityConfig): Set<number> {
   const seen = new Map<number, number[]>();
   config.stages.forEach((stage, index) => {
@@ -226,14 +196,10 @@ export function duplicateStageIndexes(config: AffinityConfig): Set<number> {
   return new Set([...seen.values()].filter((indexes) => indexes.length > 1).flat());
 }
 
-// ---------------------------------------------------------------------------
-// キャスト全体
-
 function overLimit(value: string, max: number): boolean {
   return utf16Length(value) > max;
 }
 
-/** 確認の 1 件。直す場所が 1 つに決まらないものは path を持たせない */
 function issue(
   level: CastIssue["level"],
   tab: EditorTab,
@@ -287,13 +253,11 @@ function partnerIssues(
   }
 }
 
-/** Zetter で同じ内容を作るときに問題になる点を集める。ローカルの保存はこれと関係なくできる。 */
 export function validateCast(doc: CastDocument): CastIssue[] {
   const issues: CastIssue[] = [];
   const story = doc.mode === "story";
   const members = sendableMembers(doc);
 
-  // キャラクター
   if (!doc.name.trim())
     issues.push(issue("error", "character", "名前を入力してください。", ["cast", "name"]));
   if (overLimit(doc.name, LIMITS.name))
@@ -323,7 +287,6 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     }
   }
 
-  // 保存時に送られる分（前後の空白を除いた値）で数える。Zetter の保存前の確認と同じ。
   const settingsTotal = members.reduce(
     (sum, member) => sum + utf16Length(member.profile.trim()),
     utf16Length(doc.persona.trim()),
@@ -354,7 +317,6 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     partnerIssues(owner, ["members", member.id], member.partnerSettings, issues);
   }
 
-  // 体験設定
   if (story) {
     if (!doc.tagline.trim()) {
       const message = "キャッチコピーを入力してください。";
@@ -371,7 +333,6 @@ export function validateCast(doc: CastDocument): CastIssue[] {
   }
   if (doc.introScript.length > LIMITS.introParts)
     issues.push(issue("error", "experience", "イントロは12パートまでです。"));
-  // 雑談モードでは 1 つ目のパートが「最初のひとこと」の欄になる
   const introPath = (index: number): FieldPath =>
     !story && index === 0 ? ["intro", "first", "text"] : ["intro", index, "text"];
   doc.introScript.forEach((part, index) => {
@@ -380,8 +341,6 @@ export function validateCast(doc: CastDocument): CastIssue[] {
       issues.push(issue("error", "experience", message, introPath(index)));
     }
   });
-  // 全部のパートの合計（Zetter の「作り方」の依頼文の「全部合わせて12000文字まで」）。雑談モードは
-  // 最初のひとことしか写さないので数えない。直す場所は、合計が上限を超えるパートにする
   const intro = introUsage(doc);
   if (story && intro.crossing !== null) {
     const message = `イントロは全部のパートを合わせて${formatCount(LIMITS.introTotal)}字までです。いまは${formatCount(intro.total)}字で、${formatCount(intro.over)}字ぶん超えています。どのパートを削るかはお任せします。`;
@@ -393,7 +352,6 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     const message = `中身が空のイントロのパートが${emptyParts}件あります。Zetter では保存されません。`;
     issues.push(issue("warning", "experience", message, introPath(firstEmpty)));
   }
-  // 登場人物がいるときの話者の選び方（2026-10-21 に Zetter の作成画面で確かめた手順）
   const spokenParts = story
     ? doc.introScript.filter((part) => part.kind === "speech" && part.text.trim())
     : [];
@@ -415,7 +373,6 @@ export function validateCast(doc: CastDocument): CastIssue[] {
       );
     }
   }
-  // 遊び方シート（Zetter はどちらのモードでも、前後の空白を残したまま送る）
   for (const field of PLAY_GUIDE_FIELDS) {
     const max = LIMITS.playGuide[field.key];
     if (overLimit(doc.playGuide[field.key].text, max)) {
@@ -432,7 +389,6 @@ export function validateCast(doc: CastDocument): CastIssue[] {
   doc.recommendedPersonas.forEach((persona, index) => {
     const label = `この会話でのあなた${index + 1}`;
     const base = ["personas", persona.id];
-    // 「遊ぶ人の名前を使う」のときは名前の欄を使わない
     if (!persona.useViewerName && overLimit(persona.name, LIMITS.personaName)) {
       const message = `${label}の名前は20文字までです。`;
       issues.push(issue("error", "experience", message, [...base, "name"]));
@@ -451,7 +407,6 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     }
   });
 
-  // 好感度（共通設定、本体と登場人物の個別設定の順）
   if (doc.affinity) {
     const { overrides } = doc.affinity;
     const suffix = doc.mode === "story" ? "" : "（雑談モードでは効きません）";
@@ -468,11 +423,9 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     }
   }
 
-  // 設定集
   if (doc.lorebooks.length > LIMITS.lorebooks)
     issues.push(issue("error", "lorebook", "連動できる設定集は10冊までです。"));
 
-  // 見た目・公開
   if (doc.tags.length > LIMITS.tags) issues.push(issue("error", "publish", "タグは5個までです。"));
   doc.tags.forEach((tag, index) => {
     if (overLimit(tag, LIMITS.tag))
@@ -491,7 +444,6 @@ export function validateCast(doc: CastDocument): CastIssue[] {
   return issues;
 }
 
-/** タブの見出しに出す「未入力」（Zetter の画面と同じ条件）。 */
 export function missingRequired(doc: CastDocument): { character: boolean; experience: boolean } {
   const story = doc.mode === "story";
   const members = sendableMembers(doc);

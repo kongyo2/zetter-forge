@@ -1,4 +1,3 @@
-// 画面全体に描くもの。仲介役の状態から、部品に渡す値（View Model）を作る。
 import { castDisplayTitle, sendableMembers } from "@shared/cast";
 import { IMAGE_SPECS } from "@shared/images";
 import { MCP_PORT_MAX, MCP_PORT_MIN, type McpInfo, parsePort } from "@shared/mcp";
@@ -46,7 +45,6 @@ const TABS: ViewTab[] = [
   "transfer",
 ];
 
-/** 絞り込みでは、全角・半角、大文字・小文字、カタカナ・ひらがなを区別しない */
 function fold(text: string): string {
   return text
     .normalize("NFKC")
@@ -116,7 +114,6 @@ function presentSidebar(state: AppState): SidebarVM {
   };
 }
 
-/** 一覧の下に出す MCP サーバーの様子。使っていなければ出さない */
 function presentMcpLine(info: McpInfo | null): SidebarVM["mcp"] {
   if (!info || info.status.state === "off") return null;
   return info.status.state === "running"
@@ -178,7 +175,6 @@ function presentEditor(state: AppState, session: Session): EditorVM {
   const deleting = state.task.kind === "deleting" && state.task.folder === session.folder;
   const count = (tab: EditorTab, level: "error" | "warning") =>
     issues.filter((issue) => issue.tab === tab && issue.level === level).length;
-  // 一度でも写したキャストでは、まだ写していない・写し直す項目の数を出す
   const logged = Object.keys(session.copyLog).length > 0;
   const remaining = logged
     ? transferItems(doc).filter((item) => {
@@ -206,7 +202,6 @@ function presentEditor(state: AppState, session: Session): EditorVM {
             : { text: "保存済み", tone: "is-saved" },
     saving,
     canOpenFolder: !!session.folder,
-    // 保存・読み込みなどのあいだは押せない（押しても始めない）
     deletion: session.folder ? { disabled: state.task.kind !== "idle" } : null,
     notices: session.notices,
     tabs: TABS.map((tab) => {
@@ -295,7 +290,6 @@ function presentDialog(state: AppState): DialogVM | null {
       message: dialog.message,
       choices: dialog.choices.map(({ id, label, tone }) => ({ id, label, tone })),
       cancelLabel: dialog.cancelLabel,
-      // 消すだけの確かめは「キャンセル」に、保存を勧めるものは「保存して続ける」に置く
       initial: danger ? "cancel" : (dialog.choices[0]?.id ?? "cancel"),
     };
   }
@@ -328,7 +322,6 @@ function presentToasts(state: AppState): ToastVM[] {
 function windowTitle(session: Session | null): string {
   if (!session) return "Zetter Forge";
   const title = castDisplayTitle(session.doc).title || "名前未設定のキャスト";
-  // 保存していない変更があれば、名前の前に印を付ける
   return `${session.dirty ? "● " : ""}${title} — Zetter Forge`;
 }
 

@@ -1,19 +1,14 @@
-// Zetter の画面へ写すためにコピーした記録。キャストのフォルダの copied.json に置く。
-// 中身そのものは残さず、コピーした値のハッシュだけを持つ（あとで書き換えたかを見分けるため）。
 import { isRecord } from "./json";
 
 export const COPY_LOG_FORMAT = "zetter-forge/copied";
 
 interface CopyRecord {
   hash: string;
-  /** コピーした日時（ISO 8601） */
   at: string;
 }
 
-/** キーは写す項目の場所（"cast/name" など） */
 export type CopyLog = Readonly<Record<string, CopyRecord>>;
 
-/** 値が変わったかを見分けるためのハッシュ（FNV-1a 32bit、16 進 8 桁）。 */
 export function textHash(text: string): string {
   let hash = 0x811c9dc5;
   for (let index = 0; index < text.length; index += 1) {
@@ -23,7 +18,6 @@ export function textHash(text: string): string {
   return hash.toString(16).padStart(8, "0");
 }
 
-/** copied.json の中身を読む。形が違うものは空の記録として扱う。 */
 export function normalizeCopyLog(raw: unknown): CopyLog {
   if (!isRecord(raw) || raw.format !== COPY_LOG_FORMAT || !isRecord(raw.items)) return {};
   const log: Record<string, CopyRecord> = {};
@@ -35,7 +29,6 @@ export function normalizeCopyLog(raw: unknown): CopyLog {
   return log;
 }
 
-/** copied.json に書く形 */
 export function copyLogFile(log: CopyLog): { format: typeof COPY_LOG_FORMAT; items: CopyLog } {
   return { format: COPY_LOG_FORMAT, items: log };
 }

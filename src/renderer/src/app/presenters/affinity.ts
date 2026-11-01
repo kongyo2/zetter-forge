@@ -1,4 +1,3 @@
-// 好感度のタブに描くもの。
 import {
   AFFINITY_BASE_SUBJECT,
   AFFINITY_PACES,
@@ -19,10 +18,6 @@ import { AFFINITY_DEFAULT, type Path } from "../types";
 import type { AffinityConfigVM, AffinityTabVM, RulerVM, StageVM, TabItemVM } from "../viewModels";
 import { type Context, avatar, imageSrc, textField, toggle } from "./common";
 
-/**
- * 段階を最小値〜最大値の目盛りに並べた帯。開始値が範囲内で小さい順に並んでいるときだけ描く
- * （そうでなければ、すぐ上のエラー文が直し方を伝える）。
- */
 function ruler(config: AffinityConfig, open: number): RulerVM | null {
   const { minValue: min, maxValue: max, initialValue: initial } = config;
   if (min === null || max === null || !Number.isSafeInteger(min) || !Number.isSafeInteger(max))
@@ -193,7 +188,6 @@ export function presentAffinity(ctx: Context): AffinityTabVM {
       };
     }),
   ];
-  // 選んでいた人が選べなくなったら（中身を消したなど）、共通設定を見せる
   const selected = choices.find((choice) => choice.key === session.ui.subject) ?? choices[0];
   const selectedKey = selected?.key ?? AFFINITY_DEFAULT;
   const subjects: TabItemVM<string>[] = choices.map((choice) => {
@@ -229,7 +223,6 @@ export function presentAffinity(ctx: Context): AffinityTabVM {
           ? {
               kind: "disabled",
               disabled: toggle(["disabled"], "このキャラは好感度を使わない", true),
-              // 使わない設定でも中身は確認されるので、直すものがあれば見せる（欄は使う設定に戻すと出る）
               error: validateAffinityConfig(value) || null,
             }
           : { kind: "config", config: configVM(ctx, scope, value, isOverride, session.ui.stage) },

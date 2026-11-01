@@ -1,4 +1,3 @@
-// 画面の部品が、いろいろな中身の値（View Model）で描けるか（描くだけで、ブラウザは使わない）。
 import {
   AFFINITY_BASE_SUBJECT,
   createDefaultAffinityConfig,
@@ -102,14 +101,12 @@ describe("画面の部品", () => {
     await opened(world, "cast-0", richCast());
     world.dispatch({ type: "editor/tab", tab: "experience" });
     const html = renderToString(<Root mediator={world.mediator} />);
-    // イントロは「雨。」と「いらっしゃい。」の 9 字（空のパートは数えない）
     expect(html).toContain("合計 9/12,000字");
     expect(html).toContain("遊び方シート");
     expect(html).toContain("2項目");
     expect(html).toContain("最初にできること（1行に1つ）");
     expect(html).toMatch(/maxlength="600"/iu);
     expect(html.match(/隠しておく/gu)).toHaveLength(7);
-    // 雑談モードでも遊び方シートは出し、イントロの合計は出さない
     world.dispatch({ type: "input", path: ["cast", "mode"], value: "chat" });
     const chat = renderToString(<Root mediator={world.mediator} />);
     expect(chat).toContain("遊び方シート");

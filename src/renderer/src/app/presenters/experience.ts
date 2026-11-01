@@ -1,4 +1,3 @@
-// 体験設定のタブに描くもの。
 import { PLAY_GUIDE_FIELDS, filledPlayGuideFields, sendableMembers } from "@shared/cast";
 import { LIMITS } from "@shared/limits";
 import { formatCount, utf16Length } from "@shared/text";
@@ -43,7 +42,6 @@ function intro(ctx: Context): IntroPartVM[] {
   const mainName = doc.name.trim() || "キャスト本体";
   const count = doc.introScript.length;
   return doc.introScript.map((part, index) => {
-    // 選べなくなった登場人物（中身を消した人）が話者のままなら、その人も選択肢に残す
     const orphan =
       part.speakerId && !members.some((member) => member.id === part.speakerId)
         ? doc.members.find((member) => member.id === part.speakerId)

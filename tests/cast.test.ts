@@ -92,7 +92,6 @@ describe("createEmptyCast", () => {
       gimmick: { text: "", hidden: true },
     });
     expect(createEmptyPlayGuide()).toEqual(createEmptyCast().playGuide);
-    // 作るたびに別のもの（片方を書き換えても、もう片方は変わらない）
     expect(createEmptyPlayGuide().summary).not.toBe(createEmptyPlayGuide().summary);
   });
 
@@ -316,21 +315,17 @@ describe("normalizeCastDocument", () => {
   });
 
   it("遊び方シートのない前の版のファイルは、何も書いていないシートとして読む", () => {
-    // 0.2.0 までの版で保存した cast.json には playGuide がない
     const { playGuide: _, ...older } = createEmptyCast();
     const doc = normalizeCastDocument(JSON.parse(JSON.stringify(older)));
     expect(doc.playGuide).toEqual(createEmptyPlayGuide());
-    // 読み直しても同じ（開いただけで「保存していない変更」にならない）
     expect(normalizeCastDocument(JSON.parse(JSON.stringify(doc)))).toEqual(doc);
   });
 
   it("遊び方シートは Zetter の normalizeCastPlayGuide と同じに補う", () => {
     const read = (playGuide: unknown) =>
       normalizeCastDocument({ format: CAST_FILE_FORMAT, playGuide }).playGuide;
-    // シートとして読めなければ、何も書いていないシート
     for (const playGuide of [null, "x", 3, [{ text: "a" }]])
       expect(read(playGuide)).toEqual(createEmptyPlayGuide());
-    // 欄として読めなければ既定、文字でなければ空、「隠しておく」は真偽値のときだけ使う
     expect(
       read({
         summary: { text: "雨の古書店で、", hidden: true },
@@ -513,7 +508,6 @@ describe("normalizeCastDocument", () => {
     };
     expect(read(null)).toEqual([null, null]);
     expect(read("")).toEqual([null, null]);
-    // 空白だけは 0、指数表記も数として読む（Zetter の normalizeNumber と同じ）
     expect(read(" ")).toEqual([0, 0]);
     expect(read("1e2")).toEqual([100, 100]);
     expect(read("-3")).toEqual([-3, -3]);
@@ -526,7 +520,6 @@ describe("normalizeCastDocument", () => {
     expect(normalizeAffinityConfig({})).toEqual({ ...createDefaultAffinityConfig(), stages: [] });
     expect(normalizeAffinityConfig(null)).toBeNull();
     expect(normalizeAffinityConfig("on")).toBeNull();
-    // 表示と有効は false のときだけ切る。変化の速さは 3 つのどれかでなければ「普通」
     expect(
       normalizeAffinityConfig({ itemName: 3, pace: "fast", showInChat: 0, enabled: false }),
     ).toMatchObject({ itemName: "好感度", pace: "normal", showInChat: true, enabled: false });

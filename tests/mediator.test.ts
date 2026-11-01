@@ -91,7 +91,6 @@ describe("保存", () => {
     world.dispatch(name("B2"));
     world.dispatch({ type: "editor/save" });
     world.dispatch({ type: "library/open", folder: "cast-0" });
-    // まだ開かない
     expect(world.pending()).toEqual(["saveCast"]);
     const save = world.take("saveCast");
     expect((save.args[0] as SaveCastRequest).folder).toBe("cast-1");
@@ -185,7 +184,6 @@ describe("保存", () => {
     const request = world.take("saveCast").args[0] as SaveCastRequest;
     expect(request.folder).toBeNull();
     expect(request.doc.name).toBe("A2");
-    // 元のフォルダの画像は新しいフォルダにはないので外す
     expect(request.doc.avatar).toBeNull();
   });
 
@@ -323,7 +321,6 @@ describe("開く・作る", () => {
     const load = world.take("loadCast");
     const save = world.take("saveCast");
     expect(save.args[0]).toMatchObject({ folder: "cast-1", doc: { name: "B2" } });
-    // 保存を始める前に頼んだ読み込みの結果は使わない
     load.resolve(loadedCast("cast-0", castNamed("A")));
     await world.flush();
     expect(world.session().folder).toBe("cast-1");
@@ -404,7 +401,6 @@ describe("削除", () => {
     await opened(world, "cast-0", castNamed("A"));
     world.dispatch({ type: "editor/delete" });
     expect(world.pending()).toEqual([]);
-    // 消すだけの確かめなので、はじめは「キャンセル」にフォーカスを置く
     expect(world.vm().dialog).toMatchObject({
       kind: "confirm",
       title: "「A」を削除しますか？",
@@ -732,11 +728,9 @@ describe("Zetter へ写す", () => {
 
 describe("Zetter のページの URL", () => {
   it("https の z-etter.com と zetter.si のページだけを Zetter のページとみなす", () => {
-    // Zetter が本番として扱うホスト（www.z-etter.com は 2026-10-23 時点で名前が引けない）
     expect(isZetterUrl("https://z-etter.com/")).toBe(true);
     expect(isZetterUrl("https://z-etter.com/cast/42")).toBe(true);
     expect(isZetterUrl("https://zetter.si/cast/42")).toBe(true);
-    // ほかのページ・なりすましは開かない
     expect(isZetterUrl("http://z-etter.com/cast/42")).toBe(false);
     expect(isZetterUrl("https://z-etter.com.example.com/cast/42")).toBe(false);
     expect(isZetterUrl("https://example.com/https://z-etter.com/")).toBe(false);

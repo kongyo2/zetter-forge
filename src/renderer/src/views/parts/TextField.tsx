@@ -1,5 +1,3 @@
-// 文字・数の欄。値は描くだけで、書き換えたら input、札を押したら insert を出す（Passive View）。
-// カーソルの位置・フォーカス・欄の高さは描き方のことなので、この部品が扱う。
 import { type CSSProperties, Fragment, useId, useLayoutEffect, useRef } from "react";
 
 import type { ChipsVM, HintPart, TextFieldVM } from "../../app/viewModels";
@@ -28,7 +26,6 @@ function Chips({ vm, onChip }: { vm: ChipsVM; onChip: (text: string) => void }) 
       key={item.text}
       type="button"
       className={vm.style === "button" ? "btn btn-plain btn-small" : "chip"}
-      // 押してもカーソルの位置を失わないよう、フォーカスを欄に残す
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => onChip(item.text)}
     >
@@ -48,10 +45,8 @@ export function TextField({ vm, className }: { vm: TextFieldVM; className?: stri
   const emit = useEmit();
   const id = useId();
   const ref = useRef<Element | null>(null);
-  /** 一度でもこの欄にカーソルを置いたか（置いていなければ、札は末尾に入れる） */
   const touched = useRef(false);
 
-  // フォーカスを移す頼み。閉じている「オプション設定」の中なら、先に開いてもらう
   const nonce = vm.focus?.nonce;
   useLayoutEffect(() => {
     const element = ref.current;
@@ -62,7 +57,6 @@ export function TextField({ vm, className }: { vm: TextFieldVM; className?: stri
     element.scrollIntoView({ block: "center" });
     if (focus.selection && !(element instanceof HTMLInputElement && element.type === "number"))
       element.setSelectionRange(focus.selection.start, focus.selection.end);
-    // nonce が変わったときだけ動かす
   }, [nonce]);
 
   const onChip = (text: string) => {

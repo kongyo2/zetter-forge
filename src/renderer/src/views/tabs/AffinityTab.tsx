@@ -13,7 +13,6 @@ import {
 import { IconError } from "../parts/icons";
 import { TextField } from "../parts/TextField";
 
-/** 個別設定をやめて、共通設定に戻すボタン（個別設定の場所の中に置く） */
 function ResetToCommon() {
   const emit = useEmit();
   return (
@@ -88,7 +87,6 @@ function Stage({ vm }: { vm: StageVM }) {
   );
 }
 
-/** 開いている段階の中身（["stages", 位置] の中に置く） */
 function StageBody({ vm }: { vm: StageVM }) {
   return (
     <div className="stage-body">
@@ -160,7 +158,6 @@ export function AffinityTab({ vm }: { vm: AffinityTabVM }) {
   );
 }
 
-/** 好感度の設定全体（["affinity"] の中に置く） */
 function Affinity({ vm }: { vm: AffinityTabVM }) {
   const emit = useEmit();
   const description =

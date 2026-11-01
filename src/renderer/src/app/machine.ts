@@ -1,6 +1,3 @@
-// 仲介役（Mediator）の判断。いまの状態とできごとから、次の状態と頼む処理を決める状態機械。
-// 画面の部品どうしは直接やり取りせず、すべてここを通る。同じ状態に同じできごとが来れば、
-// いつも同じ答えを返す（時刻も引数でもらう）。
 import { type CastDocument, createEmptyCast } from "@shared/cast";
 import { type CopyLog, textHash } from "@shared/copyLog";
 import type { CroppedImage } from "@shared/images";
@@ -65,13 +62,11 @@ export interface Transition {
 }
 
 const TOAST_MS = { info: 3200, error: 7000, undo: 8000 } as const;
-/** 窓に戻ってきたときに一覧を読み直す間隔の下限 */
 const LIBRARY_REFRESH_MS = 3000;
 const MAX_TOASTS = 4;
 
 type Task = AppState["task"];
 
-/** 1 回の判断のあいだの書き換えをまとめる */
 class Step {
   readonly effects: Effect[] = [];
 
@@ -94,10 +89,6 @@ class Step {
     this.effects.push(effect);
   }
 
-  /**
-   * 届いた結果が、いま進めている kind の処理（token）のものなら、その処理を終えて返す。
-   * 先に頼んだものが後から届いたときなど、いまの処理のものでなければ null。
-   */
   finish<K extends Exclude<Task["kind"], "idle">>(
     kind: K,
     token: number,
@@ -119,7 +110,6 @@ class Step {
 
   toast(message: string, tone: Toast["tone"] = "info", undoPoint: UndoPoint | null = null): void {
     const id = this.next();
-    // 同じ知らせは重ねずに出し直す（続けて保存したときなど）
     const others = this.state.toasts.filter((toast) => toast.message !== message);
     this.set({
       toasts: [...others.slice(-(MAX_TOASTS - 1)), { id, message, tone, undo: undoPoint }],
@@ -133,7 +123,6 @@ class Step {
   }
 }
 
-/** 利用者の操作ではないできごと（処理の結果・時計・画面の中だけのもの） */
 const NOT_USER_ACTIONS = new Set<AppEvent["type"]>([
   "app/start",
   "clock",
@@ -167,8 +156,6 @@ const NOT_USER_ACTIONS = new Set<AppEvent["type"]>([
 
 export function arbitrate(state: AppState, event: AppEvent, now: number): Transition {
   const step = new Step(state, now);
-  // フォーカスを移す頼みと「コピーしました」は一度きり。次の操作で消す
-  // （残っていると、タブを切り替えて戻ったときにもう一度効いてしまう）
   const ui = state.session?.ui;
   if (ui && (ui.focus || ui.flash) && !NOT_USER_ACTIONS.has(event.type))
     step.ui({ focus: null, flash: null });
@@ -187,7 +174,6 @@ function handle(step: Step, event: AppEvent): void {
       step.set({ now: event.now });
       return;
     case "menu":
-      // ダイアログを出しているあいだは、その裏で別のことを始めない
       if (state.dialog) return;
       if (event.command === "new") request(step, { kind: "new", discard: false });
       else if (event.command === "save") save(step, null);
@@ -195,7 +181,6 @@ function handle(step: Step, event: AppEvent): void {
       else copyNext(step);
       return;
 
-    // ライブラリ ------------------------------------------------------------
     case "library/open":
       request(step, { kind: "open", folder: event.folder, discard: false });
       return;
@@ -226,7 +211,6 @@ function handle(step: Step, event: AppEvent): void {
       }
       return;
     case "window/focus":
-      // Zetter の画面との行き来のたびに読み直さないよう、間をあける
       if (state.library.status !== "loading" && step.now - state.libraryAt >= LIBRARY_REFRESH_MS)
         loadLibrary(step);
       return;
@@ -246,7 +230,6 @@ function handle(step: Step, event: AppEvent): void {
       step.toast(`保存先を変えられませんでした: ${event.message}`, "error");
       return;
 
-    // 開く・保存する・削除する ----------------------------------------------
     case "cast/loaded":
       castLoaded(step, event.token, event.loaded);
       return;
@@ -269,7 +252,6 @@ function handle(step: Step, event: AppEvent): void {
       step.toast(`削除できませんでした: ${event.message}`, "error");
       return;
 
-    // 編集画面 --------------------------------------------------------------
     case "editor/save":
       if (!state.dialog) save(step, null);
       return;
@@ -299,7 +281,6 @@ function handle(step: Step, event: AppEvent): void {
       step.ui({ stage: event.index });
       return;
 
-    // Zetter へ写す ---------------------------------------------------------
     case "transfer/next":
       if (!state.dialog) copyNext(step);
       return;
@@ -324,7 +305,6 @@ function handle(step: Step, event: AppEvent): void {
       step.toast(`コピーできませんでした: ${event.message}`, "error");
       return;
 
-    // ダイアログ ------------------------------------------------------------
     case "dialog/choose": {
       const dialog = state.dialog;
       if (dialog?.kind !== "confirm") return;
@@ -335,7 +315,6 @@ function handle(step: Step, event: AppEvent): void {
       return;
     }
     case "dialog/cancel":
-      // 設定は、保存の途中では閉じない（保存した結果を見せる）
       if (
         state.dialog?.kind === "confirm" ||
         (state.dialog?.kind === "settings" && !state.dialog.busy)
@@ -371,11 +350,9 @@ function handle(step: Step, event: AppEvent): void {
       withCrop(step, event.token, (dialog) => ({ ...dialog, busy: false, error: event.message }));
       return;
     case "crop/cancel":
-      // ギャラリーの連続トリミング中にキャンセルしたら、残りも取りやめる
       if (state.dialog?.kind === "crop") step.set({ dialog: null });
       return;
 
-    // 設定（MCP サーバー） --------------------------------------------------
     case "settings/open":
       openSettings(step);
       return;
@@ -418,12 +395,10 @@ function handle(step: Step, event: AppEvent): void {
       );
       return;
     case "remote/edit":
-      // MCP サーバーからの書き換えでは、入力欄のフォーカスを動かさない（利用者が書いている欄から離さない）
       fieldEvent(step, event.edit);
       step.ui({ focus: null });
       return;
 
-    // 知らせ ----------------------------------------------------------------
     case "toast/expire":
       step.set({ toasts: state.toasts.filter((toast) => toast.id !== event.id) });
       return;
@@ -438,16 +413,12 @@ function handle(step: Step, event: AppEvent): void {
       return;
     case "reveal":
     case "tab/select":
-      // 画面の中で受け持つもの（ここまで上ってきても何もしない）
       return;
 
     default:
       fieldEvent(step, event);
   }
 }
-
-// ---------------------------------------------------------------------------
-// ライブラリ
 
 function loadLibrary(step: Step): void {
   const token = step.next();
@@ -458,9 +429,6 @@ function loadLibrary(step: Step): void {
   });
   step.effect({ type: "library/load", token });
 }
-
-// ---------------------------------------------------------------------------
-// 開く・作る・保存先を変える
 
 function newSession(key: number, doc: CastDocument): Session {
   return {
@@ -488,21 +456,14 @@ function sessionFromLoaded(key: number, loaded: LoadedCast): Session {
   };
 }
 
-/**
- * 開いているキャストを替える。前のキャストについて出していたダイアログは閉じる
- * （残すと、消す・切り抜くなどの確かめが、替えたあとのキャストに効いてしまう）。設定はキャストと
- * 関わらないので残す。
- */
 function switchSession(step: Step, session: Session | null): void {
   const dialog = step.state.dialog?.kind === "settings" ? step.state.dialog : null;
   step.set({ session, dialog });
 }
 
-/** いま編集しているキャストを、確かめずに離れてよいか */
 function mayLeave(state: AppState, intent: { discard: boolean }): boolean {
   const session = state.session;
   if (!session || !session.dirty || intent.discard) return true;
-  // 別のキャストを開いている途中なら、離れることはもう確かめてある（そのあと書き換えていなければ）
   const task = state.task;
   return (
     task.kind === "opening" && task.sessionKey === session.key && task.revision === session.revision
@@ -515,7 +476,6 @@ function castTitle(state: AppState, folder: string): string {
   return title || folder;
 }
 
-/** キャストを切り替える操作。保存中なら終わってから、保存していない変更があれば確かめてから行う */
 function request(step: Step, intent: Intent): void {
   const { state } = step;
   if (state.dialog) return;
@@ -527,20 +487,16 @@ function request(step: Step, intent: Intent): void {
     perform(step, intent);
     return;
   }
-  // 保存先を選ぶ画面を出しているあいだは、ほかのキャストへ切り替えない（選んだ結果を捨てないため）
   if (state.task.kind === "choosing-root") return;
-  // 削除しているあいだも切り替えない（終わったら、削除したキャストを閉じるので）
   if (state.task.kind === "deleting") return;
   if (intent.kind === "open") {
     if (state.session?.folder === intent.folder) {
-      // 開いているものをもう一度選んだら、別のキャストの読み込みはやめる
       if (state.task.kind === "opening") step.set({ task: { kind: "idle" } });
       return;
     }
     if (state.task.kind === "opening" && state.task.folder === intent.folder) return;
   }
   if (!mayLeave(state, intent)) {
-    // 前に頼んだキャストの読み込みはやめる（あとから届いて、この確かめを差し替えないように）
     if (state.task.kind === "opening") step.set({ task: { kind: "idle" } });
     const what =
       intent.kind === "open"
@@ -571,7 +527,6 @@ function request(step: Step, intent: Intent): void {
   perform(step, intent);
 }
 
-/** 確かめ終わった操作を行う */
 function perform(step: Step, intent: Intent): void {
   const { state } = step;
   switch (intent.kind) {
@@ -593,7 +548,6 @@ function perform(step: Step, intent: Intent): void {
     case "new": {
       if (!mayLeave(state, intent)) return request(step, intent);
       const key = step.next();
-      // 読み込み中のキャストがあれば、その結果は捨てる
       if (state.task.kind === "opening") step.set({ task: { kind: "idle" } });
       switchSession(step, newSession(key, createEmptyCast(new Date(step.now))));
       return;
@@ -647,7 +601,6 @@ function perform(step: Step, intent: Intent): void {
       updateCopyLog(step, () => ({}));
       return;
     case "delete": {
-      // 確かめているあいだに、ほかの処理が始まっていたら行わない
       if (state.task.kind !== "idle") return;
       const token = step.next();
       step.set({ task: { kind: "deleting", token, folder: intent.folder, title: intent.title } });
@@ -659,7 +612,6 @@ function perform(step: Step, intent: Intent): void {
 
 function castLoaded(step: Step, token: number, cast: LoadedCast): void {
   const { state } = step;
-  // 先に頼んだ読み込みが後から届いたときなどは捨てる
   const task = step.finish("opening", token);
   if (!task) return;
   const session = state.session;
@@ -677,7 +629,6 @@ function castLoaded(step: Step, token: number, cast: LoadedCast): void {
           id: "save",
           label: "保存して開く",
           tone: "primary",
-          // 保存してから読み直す（保存のあいだにまた書き換えたら、もう一度確かめる）
           intent: {
             kind: "save-then",
             then: { kind: "open", folder: cast.folder, discard: true },
@@ -702,19 +653,15 @@ function save(step: Step, then: Intent | null): void {
   if (!session) return;
   const task = state.task;
   if (task.kind === "saving") {
-    // 保存中にもう一度頼まれたら、終わったあとにもう一度保存する
     step.set({ task: { ...task, again: true, then: then ?? task.then } });
     return;
   }
-  // 保存先を選ぶ画面を出しているあいだは、どこへ保存するかが決まらない。削除しているキャストは保存しない
   if (task.kind === "choosing-root" || task.kind === "deleting") return;
   if (session.folder && !session.dirty) {
     if (then) perform(step, then);
     else step.toast("変更はありません。");
     return;
   }
-  // 別のキャストを読み込んでいる途中なら、その読み込みはやめて先に保存し、保存してから開き直す
-  // （黙って保存をとばすと、書いた内容が残らない）
   const next: Intent | null =
     then ??
     (task.kind === "opening" ? { kind: "open", folder: task.folder, discard: false } : null);
@@ -752,7 +699,6 @@ function saved(step: Step, token: number, result: SavedCast): void {
     loadLibrary(step);
     return;
   }
-  // 保存中に書き足したか
   const editedWhileSaving = session.revision !== task.revision;
   let doc: CastDocument;
   let pendingImages = session.pendingImages;
@@ -760,7 +706,6 @@ function saved(step: Step, token: number, result: SavedCast): void {
     doc = result.doc;
     pendingImages = {};
   } else {
-    // 保存中に書き足した分は残し、書き出した画像の参照だけを差し替える
     doc = structuredClone(session.doc);
     mapImages(doc, (image) => {
       const savedImage = result.replacedImages[image.file];
@@ -786,23 +731,18 @@ function saved(step: Step, token: number, result: SavedCast): void {
       notices: result.notices,
     },
   });
-  // まだフォルダがないうちにコピーした記録は、はじめて保存したときに書く
   if (firstSave && Object.keys(session.copyLog).length > 0)
     step.effect({ type: "cast/write-copy-log", folder: result.folder, log: session.copyLog });
   step.toast("保存しました。");
   loadLibrary(step);
-  // 保存中に書き足した分は保存していないので、続ける操作でも黙って捨てずに確かめ直す
   const then = task.then && editedWhileSaving ? keepChanges(task.then) : task.then;
   if (task.again && step.state.session?.dirty) save(step, then);
   else if (then) {
-    // 続ける操作は保存を始める前に頼まれたもの。保存のあいだに出したダイアログ（いまのキャストに
-    // ついてのもの）は閉じて進める（閉じずにいると、頼んだ切り替えが黙って行われなくなる）
     step.set({ dialog: null });
     request(step, then);
   }
 }
 
-/** 「保存しないで続ける」をやめて、もう一度確かめる形にする */
 function keepChanges(intent: Intent): Intent {
   if (intent.kind === "open" || intent.kind === "new" || intent.kind === "choose-root")
     return { ...intent, discard: false };
@@ -812,10 +752,8 @@ function keepChanges(intent: Intent): Intent {
 
 function saveFailed(step: Step, token: number, message: string, missing: boolean): void {
   const { state } = step;
-  // 保存できなかったら、続けるはずだった操作はしない（変更が失われるので）
   if (!step.finish("saving", token)) return;
   loadLibrary(step);
-  // 保存のあいだに出したダイアログ（画像の切り抜きなど）は残す。もう一度保存すれば、ここでまた勧める
   if (missing && state.session?.folder && !state.dialog) {
     showConfirm(step, {
       title: "保存先のフォルダが見つかりません",
@@ -835,13 +773,9 @@ function saveFailed(step: Step, token: number, message: string, missing: boolean
   step.toast(`保存できませんでした: ${message}`, "error");
 }
 
-// ---------------------------------------------------------------------------
-// 削除する（フォルダごとゴミ箱へ）
-
 function confirmDelete(step: Step): void {
   const { state } = step;
   const session = state.session;
-  // まだ保存していない（フォルダのない）キャストと、保存・読み込みなどのあいだは削除しない
   if (!session?.folder || state.dialog || state.task.kind !== "idle") return;
   const folder = session.folder;
   const title = castTitle(state, folder);
@@ -862,7 +796,6 @@ function confirmDelete(step: Step): void {
 function deleted(step: Step, token: number, missing: boolean): void {
   const task = step.finish("deleting", token);
   if (!task) return;
-  // 開いていれば閉じ、一覧からも読み直しを待たずに外す
   if (step.state.session?.folder === task.folder) switchSession(step, null);
   const { library } = step.state;
   if (library.listing) {
@@ -877,9 +810,6 @@ function deleted(step: Step, token: number, missing: boolean): void {
   loadLibrary(step);
 }
 
-// ---------------------------------------------------------------------------
-// 確かめるダイアログ
-
 function showConfirm(
   step: Step,
   dialog: Pick<ConfirmDialog, "title" | "message" | "choices"> & { cancelLabel?: string },
@@ -888,9 +818,6 @@ function showConfirm(
     dialog: { kind: "confirm", id: step.next(), cancelLabel: "キャンセル", ...dialog },
   });
 }
-
-// ---------------------------------------------------------------------------
-// 文書の書き換え
 
 function commit(step: Step, result: EditResult): void {
   const session = step.state.session;
@@ -942,7 +869,6 @@ function undo(step: Step, id: number): void {
 function fieldEvent(step: Step, event: FieldEvent): void {
   const { state } = step;
   const session = state.session;
-  // 編集中のキャストがないときや、ダイアログの裏からは書き換えない
   if (!session || state.dialog) return;
   const doc = session.doc;
   switch (event.type) {
@@ -1022,9 +948,6 @@ function confirmRemoval(step: Step, path: Path, subject: string): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// 確認欄から直す場所へ
-
 function jump(step: Step, tab: EditorTab, path: Path | null): void {
   const patch: Partial<SessionUi> = { tab, checksOpen: false };
   if (path) {
@@ -1038,13 +961,9 @@ function jump(step: Step, tab: EditorTab, path: Path | null): void {
   }
   step.ui(patch);
   if (!path) return;
-  // 好感度は設定ごとに確認が出るので、その設定の最初の欄へ
   const target = path[0] === "affinity" && path.length === 2 ? [...path, "itemName"] : path;
   step.focus(target);
 }
-
-// ---------------------------------------------------------------------------
-// 画像の切り抜き
 
 function startCrop(step: Step, path: Path, files: readonly PickedFile[]): void {
   const session = step.state.session;
@@ -1087,7 +1006,6 @@ function withCrop(step: Step, token: number, update: (dialog: CropDialog) => Cro
   if (dialog?.kind === "crop" && dialog.token === token) step.set({ dialog: update(dialog) });
 }
 
-/** 次の画像へ進む（なければ閉じる）。error は、いまの画像を飛ばした理由 */
 function nextImage(step: Step, dialog: CropDialog, error: string | null): void {
   const [file, ...queue] = dialog.queue;
   if (!file) {
@@ -1120,7 +1038,6 @@ function encoded(step: Step, token: number, image: CroppedImage): void {
   step.set({
     session: { ...session, pendingImages: { ...session.pendingImages, [file]: image.dataUrl } },
   });
-  // 置く場所がなくなっていたら（画像を足す前に枠が消えたなど）、知らせて閉じる
   const result = placeImage(session.doc, dialog.path, {
     file,
     width: image.width,
@@ -1135,33 +1052,25 @@ function encoded(step: Step, token: number, image: CroppedImage): void {
   nextImage(step, dialog, null);
 }
 
-// ---------------------------------------------------------------------------
-// 設定（MCP サーバー）
-
 function loadMcp(step: Step): void {
   const token = step.next();
   step.set({ mcpToken: token });
   step.effect({ type: "mcp/load", token });
 }
 
-/** 入力欄の値（保存した設定から始める） */
 function settingsForm(settings: McpSettings): Pick<SettingsDialog, "enabled" | "port"> {
   return { enabled: settings.enabled, port: String(settings.port) };
 }
 
 function openSettings(step: Step): void {
   const { state } = step;
-  // キャストを開く・保存するあいだは開かない（そのあとに続ける操作が、ダイアログを閉じたり
-  // 確かめに差し替えたりするので、保存の途中の設定の結果が見えなくなる）
   if (state.dialog || state.task.kind !== "idle") return;
-  // 起動できたかなど、いまの様子を読み直す
   loadMcp(step);
   step.set({
     dialog: {
       kind: "settings",
       token: step.state.mcpToken,
       ...settingsForm(state.mcp?.settings ?? DEFAULT_MCP_SETTINGS),
-      // 起動したときに読めていなければ、読み終えるまで入力欄を止める
       busy: state.mcp === null,
       error: null,
     },
@@ -1200,7 +1109,6 @@ function mcpLoaded(step: Step, token: number, info: McpInfo): void {
       ? { ...dialog, ...settingsForm(info.settings), busy: false }
       : dialog,
   );
-  // 起動したときに立てられなかったら知らせる（設定でポートを変えられる）
   if (state.mcp === null && info.status.state === "failed")
     step.toast(`MCP サーバーを起動できませんでした: ${info.status.message}`, "error");
 }
@@ -1219,9 +1127,6 @@ function mcpSaved(step: Step, token: number, info: McpInfo): void {
     info.status.state === "failed" ? "error" : "info",
   );
 }
-
-// ---------------------------------------------------------------------------
-// Zetter へ写す
 
 function updateCopyLog(step: Step, update: (log: CopyLog) => CopyLog): void {
   const session = step.state.session;
@@ -1328,14 +1233,12 @@ function openUrl(step: Step, path: Path): void {
   step.effect({ type: "url/open", url });
 }
 
-/** Zetter のページの URL か（ほかのページは開かない） */
 export function isZetterUrl(url: string): boolean {
   return /^https:\/\/(z-etter\.com|zetter\.si)\//u.test(url);
 }
 
 const ZETTER_TOP = "https://z-etter.com/";
 
-/** 写すときに開く Zetter のページ（控えたキャストの URL があればそこ） */
 function zetterPage(doc: CastDocument): string {
   const url = doc.zetterUrl.trim();
   return isZetterUrl(url) ? url : ZETTER_TOP;

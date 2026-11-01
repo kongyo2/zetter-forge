@@ -54,7 +54,6 @@ import { type AppSettings, readSettings, writeSettings } from "./settings";
 
 const APP_NAME = "Zetter Forge";
 const IMAGE_SCHEME = "forge-image";
-/** MCP サーバーからの頼みに、画面が返事をするまで待つ長さ（画面は 20 秒で打ち切って返事をする） */
 const REMOTE_TIMEOUT_MS = 30_000;
 
 protocol.registerSchemesAsPrivileged([
@@ -68,11 +67,6 @@ function settingsFile(): string {
   return path.join(app.getPath("userData"), "settings.json");
 }
 
-// ---------------------------------------------------------------------------
-// MCP サーバーから画面への頼み。編集中のキャストは画面が持っているので、仲介役に頼んで返事を待つ。
-// 頼みは 1 つずつ順に送る（前の頼みの結果を待ってから、次の操作を始めるように）。
-
-/** 頼みを受け持つと知らせてきた画面 */
 let remoteScreen: WebContents | null = null;
 const remoteWaiting = new Map<number, (reply: RemoteReply) => void>();
 let remoteSeq = 0;
@@ -125,7 +119,6 @@ async function mcpInfo(): Promise<McpInfo> {
   return { settings: settings.mcp, status: await mcpHost.status() };
 }
 
-/** 画像を表示するための URL。forge-image://cast/<フォルダ>/<相対パス> */
 function imageUrl(folder: string, relative: string): string {
   const parts = relative.split("/").map(encodeURIComponent).join("/");
   return `${IMAGE_SCHEME}://cast/${encodeURIComponent(folder)}/${parts}`;
@@ -151,7 +144,6 @@ async function listing(): Promise<LibraryListing> {
   return { root: settings.libraryRoot, casts: summaries, errors };
 }
 
-/** 例外の文言を Electron の前置き（Error invoking remote method…）なしで画面に届ける。 */
 function handle<A extends unknown[], T>(channel: string, task: (...args: A) => Promise<T>): void {
   ipcMain.handle(channel, async (_event, ...args: unknown[]): Promise<InvokeResult<T>> => {
     try {
@@ -169,7 +161,6 @@ async function openFolder(folder: string): Promise<void> {
 }
 
 async function openLibraryFolder(): Promise<void> {
-  // まだ一度も保存していなくても開けるように、フォルダを用意してから開く
   await fs.mkdir(settings.libraryRoot, { recursive: true });
   await openFolder(settings.libraryRoot);
 }
@@ -190,7 +181,6 @@ function registerIpc(): void {
     const previous = settings;
     settings = { ...settings, libraryRoot: chosen };
     try {
-      // 一覧が読めるのを確かめてから、新しい保存先を覚える
       const next = await listing();
       await writeSettings(settingsFile(), settings);
       return next;
@@ -227,7 +217,6 @@ function registerIpc(): void {
   });
   handle("cast:delete", async (folder: string): Promise<DeleteCastResult> => {
     try {
-      // 消したあとでも戻せるよう、ゴミ箱へ移す（移せなければエラーにして、消しはしない）
       await deleteCast(settings.libraryRoot, folder, (dir) => shell.trashItem(dir));
       return { kind: "trashed" };
     } catch (error) {
@@ -253,7 +242,6 @@ function registerIpc(): void {
     clipboard.writeText(text);
   });
   handle("shell:open-external", async (url: unknown) => {
-    // 開いてよいのは https のページだけ（ファイルやほかの種類の URL は開かない）
     if (typeof url !== "string" || new URL(url).protocol !== "https:")
       throw new Error("https で始まる URL だけ開けます。");
     await shell.openExternal(url);
@@ -262,7 +250,6 @@ function registerIpc(): void {
   handle("mcp:save", async (next: unknown) => {
     if (!isMcpSettings(next))
       throw new Error(`ポートは ${MCP_PORT_MIN}〜${MCP_PORT_MAX} の数にしてください。`);
-    // 書けたときだけ覚えて、立て直す（書けなければ、いまの設定とサーバーのまま）
     const updated: AppSettings = { ...settings, mcp: { enabled: next.enabled, port: next.port } };
     await writeSettings(settingsFile(), updated);
     settings = updated;
@@ -321,7 +308,6 @@ function buildMenu(): void {
       ),
     );
   const template: Electron.MenuItemConstructorOptions[] = [
-    // macOS では最初のメニューがアプリの名前のメニューになるので、ファイルとは分ける
     ...(mac
       ? [
           {
@@ -349,7 +335,6 @@ function buildMenu(): void {
         { label: "保存", accelerator: "CmdOrCtrl+S", click: () => sendCommand("save") },
         { type: "separator" },
         { label: "ライブラリのフォルダを開く", click: openLibrary },
-        // macOS では、設定はアプリの名前のメニューに置く
         ...(mac
           ? []
           : [
@@ -405,10 +390,8 @@ function createWindow(): void {
     minWidth: 980,
     minHeight: 640,
     title: APP_NAME,
-    // Windows と macOS では、配布するアプリに埋め込んだアイコンが窓にも出る。Linux（AppImage）は窓に渡す
     ...(process.platform === "linux" ? { icon } : {}),
     show: false,
-    // 画面が描かれるまでの下地。styles.css の --desk に合わせる
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#13171e" : "#e9ece6",
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
@@ -423,11 +406,9 @@ function createWindow(): void {
     if (mainWindow === window) mainWindow = null;
     forgetRemoteScreen();
   });
-  // 読み直しているあいだは、MCP サーバーからの頼みを受け持てない（読み終えた画面が知らせ直す）
   window.webContents.on("did-start-loading", () => {
     if (remoteScreen === window.webContents) forgetRemoteScreen();
   });
-  // 保存していない変更があるときは、閉じる前に確かめる（画面側の beforeunload が合図）。
   window.webContents.on("will-prevent-unload", (event) => {
     const choice = dialog.showMessageBoxSync(window, {
       type: "warning",
@@ -461,7 +442,6 @@ async function start(): Promise<void> {
   registerImageProtocol();
   registerIpc();
   buildMenu();
-  // 立てられなかったときは、画面が様子を読んで知らせる（読むときは、立て終わるのを待つ）
   mcpHost.apply(settings.mcp).catch((error: unknown) => console.error("[mcp]", error));
   createWindow();
   app.on("activate", () => {
@@ -469,7 +449,6 @@ async function start(): Promise<void> {
   });
 }
 
-// 2 つ目を起動したときは、同じライブラリに 2 か所から書かないよう、開いている窓を前に出すだけにする
 if (app.requestSingleInstanceLock()) {
   app.on("second-instance", () => {
     if (!mainWindow) return;

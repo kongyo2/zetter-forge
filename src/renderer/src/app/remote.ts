@@ -1,7 +1,3 @@
-// MCP サーバーから届いた頼み（読む・開く・書き換える・保存する…）を、仲介役へのできごとにして行い、
-// 結果を返事にまとめる。利用者が画面で操作するのと同じ決まりで進むので、画面にもそのまま出る。
-// 開く・保存するのように外とのやり取りを待つものは、仲介役の処理が落ち着く（終わるか、確かめの
-// ダイアログが出る）まで待つ。
 import { type CastDocument, type CastMember, castDisplayTitle } from "@shared/cast";
 import type { JsonObject } from "@shared/json";
 import {
@@ -21,7 +17,6 @@ import type { AppState, ConfirmDialog, Session } from "./state";
 import { transferGroups, transferStatus } from "./transfer";
 import { AFFINITY_DEFAULT, type Path } from "./types";
 
-/** 開く・保存するなどが落ち着くまで待つ長さ（MCP サーバーの側は 30 秒で打ち切る） */
 const SETTLE_MS = 20_000;
 
 const DIALOG_NOTE =
@@ -31,9 +26,7 @@ const IGNORED =
   "この場所では、この操作はできません。場所の書き方（edit_cast の説明）と、上限・モード（雑談モードでは登場人物を足せないなど）を確かめてください。";
 
 export interface RemoteOptions {
-  /** ms ミリ秒後に task を行う（待ちの打ち切りに使う） */
   schedule(ms: number, task: () => void): void;
-  /** 落ち着くまで待つ長さ */
   settleMs?: number;
 }
 
@@ -79,7 +72,6 @@ function dialogReport(state: AppState): JsonObject | null {
   return { kind: dialog.kind, title: dialog.kind === "crop" ? "画像の切り抜き" : "設定" };
 }
 
-/** mark（AppState.seq）のあとに出た知らせ */
 function messagesSince(state: AppState, mark: number): Message[] {
   return state.toasts
     .filter((toast) => toast.id > mark)
@@ -96,12 +88,10 @@ function statusReport(state: AppState): JsonObject {
   };
 }
 
-/** 利用者が画面で始めた、キャストの削除の確かめ（AI のエージェントには答えさせない） */
 function confirmsDeletion(dialog: ConfirmDialog): boolean {
   return dialog.choices.some((choice) => choice.intent?.kind === "delete");
 }
 
-/** 頼まれた操作を、いま始められないわけ。始められるなら null */
 function blocked(state: AppState, needsCast: boolean): string | null {
   switch (state.dialog?.kind) {
     case "confirm":
@@ -124,7 +114,6 @@ function blocked(state: AppState, needsCast: boolean): string | null {
   return null;
 }
 
-/** 書き換えの 1 件を、画面の部品が出すのと同じできごとにする。できなければ、そのわけ */
 function fieldEventOf(edit: RemoteEdit, path: Path): FieldEvent | string {
   if (path.length === 0) return "path が空です。";
   switch (edit.action) {
@@ -154,7 +143,6 @@ function textOf(record: object, key: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
-/** set で書いた場所に、いま入っている値（edits.ts の applyInput の読み取り版）。読めなければ null */
 function storedValue(doc: CastDocument, path: Path): string | null {
   const [head, key, field, at, stageField] = path;
   if (head === "cast" && path.length === 2) return textOf(doc, key);
@@ -198,7 +186,6 @@ function storedValue(doc: CastDocument, path: Path): string | null {
   return null;
 }
 
-/** add で足したものの場所（edits.ts の applyAdd が足す先の読み取り版） */
 function addedPath(doc: CastDocument, path: Path): string | null {
   const [head, key, field] = path;
   const last = (items: readonly unknown[]) => `${pathText(path)}/${items.length - 1}`;
@@ -233,13 +220,11 @@ function addedPath(doc: CastDocument, path: Path): string | null {
   }
 }
 
-/** 書き換えたあとに、返事に添えること（足した場所、書いた値と違う値になったこと） */
 function appliedDetail(edit: RemoteEdit, path: Path, doc: CastDocument): JsonObject {
   if (edit.action === "add") {
     const added = addedPath(doc, path);
     return added ? { added } : {};
   }
-  // 好感度の段階の開始値は、書いたあとで並べ直すので、同じ場所を読んでも比べられない
   if (edit.action !== "set" || path.at(-1) === "startValue") return {};
   const stored = storedValue(doc, path);
   return stored !== null && stored !== edit.value
@@ -256,7 +241,6 @@ export class Remote {
     private readonly options: RemoteOptions,
   ) {}
 
-  /** MCP サーバーからの頼みを 1 つ受け持つ */
   readonly handle = async (request: RemoteRequest): Promise<RemoteReply> => {
     try {
       return await this.run(request);
@@ -391,7 +375,6 @@ export class Remote {
     );
   }
 
-  /** できごとを渡して、落ち着いたら結果をまとめる。succeeded はうまくいったかの見分け方 */
   private async perform(
     event: AppEvent,
     succeeded: (state: AppState) => boolean,
@@ -410,7 +393,6 @@ export class Remote {
     return fail(errors.map((message) => message.text).join("\n") || failure, report);
   }
 
-  /** 処理が終わるか、ダイアログが出るまで待つ。待ちきれなければ false */
   private settle(): Promise<boolean> {
     return new Promise((resolve) => {
       let waiting = true;
@@ -451,7 +433,6 @@ export class Remote {
       const before = this.state();
       const revision = before.session?.revision;
       this.mediator.dispatch({ type: "remote/edit", edit: event });
-      // 好感度の段階の開始値は、欄を離れたときと同じく、書いたあとで小さい順に並べ直す
       if (
         event.type === "input" &&
         path.at(-1) === "startValue" &&

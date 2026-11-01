@@ -1,4 +1,3 @@
-// MCP サーバーからの頼み（Remote）を、仲介役を動かして確かめる。外とのやり取りは偽物（helpers/world）。
 import { createDefaultAffinityConfig } from "@shared/cast";
 import type { SaveCastRequest } from "@shared/ipc";
 import { LIMITS } from "@shared/limits";
@@ -8,7 +7,6 @@ import { describe, expect, it } from "vitest";
 import { Remote } from "../src/renderer/src/app/remote";
 import { type World, castNamed, loadedCast, opened, savedFrom, started } from "./helpers/world";
 
-/** 待ちの打ち切り（timers に溜め、テストが好きなときに呼ぶ） */
 function remoteOf(world: World, timers: (() => void)[] = []): Remote {
   return new Remote(world.mediator, { schedule: (_ms, task) => void timers.push(task) });
 }
@@ -109,7 +107,6 @@ describe("MCP サーバーからの頼み: 書き換える", () => {
     expect(results[4]).toMatchObject({ added: "cast/toneExamples/0" });
     expect(doc).toMatchObject({ name: "灯里", status: "public" });
     expect(doc.toneExamples).toEqual([{ situation: "雨の日", example: "" }]);
-    // 足した欄へフォーカスを移さない（利用者が書いている欄から離さない）
     expect(world.session().ui.focus).toBeNull();
     expect(issues).toContainEqual(expect.objectContaining({ path: "cast/persona" }));
   });
@@ -182,7 +179,6 @@ describe("MCP サーバーからの頼み: 書き換える", () => {
       dialog: { kind: "confirm", choices: [{ id: "remove", label: "削除する" }] },
     });
     expect(world.session().doc.name).toBe("");
-    // ダイアログに答えるまで、ほかの書き換えは断る
     const blocked = await remote.handle({
       kind: "edit",
       edits: [{ action: "set", path: "cast/name", value: "灯里" }],

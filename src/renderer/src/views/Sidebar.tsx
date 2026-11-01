@@ -3,7 +3,6 @@ import { useEmit } from "./chain";
 import { Avatar } from "./parts/basics";
 import { IconPlus, IconSettings } from "./parts/icons";
 
-/** 保存先のフォルダを選び直す（読めなかったときと、一覧の下に置く） */
 function ChooseRootButton() {
   const emit = useEmit();
   return (

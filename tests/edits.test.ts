@@ -39,7 +39,6 @@ function docOf(result: EditResult): CastDocument {
   return result.doc;
 }
 
-/** 書き換えた結果のうち、文書のほか（フォーカス・画面の状態・知らせ）だけ */
 function extrasOf(result: EditResult) {
   if (!result || "refused" in result)
     throw new Error(`書き換えられませんでした: ${JSON.stringify(result)}`);
@@ -61,9 +60,7 @@ describe("文字の書き換え", () => {
       docOf(applyInput(doc, ["members", member.id, "partnerSettings", "freeform"], "自由"))
         .members[0]?.partnerSettings.freeform,
     ).toBe("自由");
-    // 元の文書は変えない
     expect(doc.name).toBe("");
-    // 知らない場所は書き換えない
     expect(applyInput(doc, ["cast", "format"], "x")).toBeNull();
     expect(applyInput(doc, ["members", "いない", "name"], "x")).toBeNull();
   });
@@ -195,7 +192,6 @@ describe("文字の書き換え", () => {
     );
     expect(config(applyInput(doc, ["affinity", "default", "pace"], "rapid"))?.pace).toBe("rapid");
     expect(applyInput(doc, ["affinity", "default", "pace"], "fast")).toBeNull();
-    // 数でなければ空にする（整数かどうかは確認で見る。Zetter の数の欄と同じ）
     expect(
       config(applyInput(doc, ["affinity", "default", "initialValue"], "abc"))?.initialValue,
     ).toBeNull();
@@ -210,7 +206,6 @@ describe("文字の書き換え", () => {
     expect(applyInput(doc, ["affinity", "default", "stages", 1, "unknown"], "x")).toBeNull();
     expect(applyInput(doc, ["affinity", "default", "stages", 9, "freeText"], "x")).toBeNull();
     expect(applyInput(doc, ["affinity", "default", "enabled"], "x")).toBeNull();
-    // 個別設定がない人、好感度がないキャストは書き換えない
     expect(applyInput(doc, ["affinity", AFFINITY_BASE_SUBJECT, "itemName"], "x")).toBeNull();
     expect(applyInput(createEmptyCast(), ["affinity", "default", "itemName"], "x")).toBeNull();
   });
@@ -220,7 +215,6 @@ describe("文字の書き換え", () => {
     const next = docOf(applyInput(doc, ["playGuide", "world", "text"], "海辺の町"));
     expect(next.playGuide.world).toEqual({ text: "海辺の町", hidden: false });
     expect(doc.playGuide.world.text).toBe("");
-    // 上限は入力欄（maxlength）と確認が受け持つので、超えても切らずに書く（ほかの欄と同じ）
     expect(
       docOf(applyInput(doc, ["playGuide", "role", "text"], "あ".repeat(201))).playGuide.role.text,
     ).toHaveLength(201);
@@ -275,7 +269,6 @@ describe("オン・オフ", () => {
         .showInChat,
     ).toBe(false);
     expect(applyCheck(doc, ["affinity", AFFINITY_BASE_SUBJECT, "showInChat"], false)).toBeNull();
-    // 共通設定は「使わない」にできない
     expect(applyCheck(doc, ["affinity", "default", "disabled"], true)).toBeNull();
     expect(applyCheck(doc, ["cast", "unknown"], true)).toBeNull();
     expect(applyCheck(createEmptyCast(), ["affinity", "default", "showInChat"], true)).toBeNull();
@@ -325,8 +318,6 @@ describe("札と {{user}}", () => {
       value: "【朝】 起きる",
       caret: 4,
     });
-    // 先頭が改行でも、行の頭なら改行を足さない（Zetter の insertCastPartnerTimeChip は
-    // lastIndexOf の都合でこのときだけ改行を足すが、ここでは足さない）
     expect(insertTimeChip("\n起きる", { start: 0, end: 0 }, "朝").value).toBe("【朝】 \n起きる");
     expect(insertTimeChip("a\nb", { start: 2, end: 2 }, "夜").value).toBe("a\n【夜】 b");
   });
@@ -352,7 +343,6 @@ describe("札と {{user}}", () => {
   it("癖の札は、文の終わりの記号があれば句点を足さずに改行し、末尾の空白は落とす", () => {
     expect(appendHabitChip("気まぐれ！  \n", "一言で返す")).toBe("気まぐれ！\n一言で返す。");
     expect(appendHabitChip("早い?", "絵文字を使う")).toBe("早い?\n絵文字を使う。");
-    // 同じ言い回しが文の途中にあっても足さない（Zetter と同じ）
     expect(appendHabitChip("返事が早いほう", "返事が早い")).toBe("返事が早いほう");
   });
 
@@ -391,7 +381,6 @@ describe("札と {{user}}", () => {
     expect(extrasOf(time)).toEqual({
       focus: { path: [...base, "dailyRoutine"], selection: { start: 4, end: 4 } },
     });
-    // 札は決まった欄にだけ入れる
     expect(applyInsert(doc, [...base, "freeform"], "返事が早い", { start: 0, end: 0 })).toBeNull();
     expect(applyInsert(doc, [...base, "messageHabits"], "朝", { start: 0, end: 0 })).toBeNull();
   });
@@ -566,8 +555,6 @@ describe("足す・消す・並べ替える", () => {
       focus: { path: ["affinity", "default", "stages", 4, "startValue"], selection: null },
       ui: { stage: 4 },
     });
-    // 最後の段階の開始値が数でなければ、最小値＋段階の数から始める
-    // （Zetter は Number(null) が 0 になるので未入力のあとは 1 を入れるが、ここでは未入力を 0 とみなさない）
     doc.affinity!.default.stages[4]!.startValue = null;
     doc.affinity!.default.minValue = 10;
     doc = docOf(applyAdd(doc, ["affinity", "default", "stages"]));
@@ -616,7 +603,6 @@ describe("足す・消す・並べ替える", () => {
     expect(removed(["affinity", AFFINITY_BASE_SUBJECT])).toBe(
       "個別設定をやめて、共通設定に戻しました。",
     );
-    // ないものは外さない
     expect(applyRemove(doc, ["gallery", "いない"], { stage: 0 })).toBeNull();
     expect(applyRemove(doc, ["cast", "cover"], { stage: 0 })).toBeNull();
     expect(applyRemove(doc, ["cast", "toneExamples", 3], { stage: 0 })).toBeNull();
@@ -631,13 +617,11 @@ describe("足す・消す・並べ替える", () => {
       0, 50, 75,
     ]);
     expect(extrasOf(first)).toEqual({ ui: { stage: 1 }, removed: "段階を削除しました。" });
-    // 開いている段階より後ろを消しても、開いている段階は動かない
     expect(
       extrasOf(applyRemove(doc, ["affinity", "default", "stages", 3], { stage: 1 })).ui,
     ).toEqual({
       stage: 1,
     });
-    // 開いている最後の段階を消すと、1 つ前を開く
     expect(
       extrasOf(applyRemove(doc, ["affinity", "default", "stages", 3], { stage: 3 })).ui,
     ).toEqual({
@@ -683,7 +667,6 @@ describe("足す・消す・並べ替える", () => {
     expect(removed.doc.introScript[0]?.speakerId).toBeNull();
     expect(removed.doc.affinity?.overrides).toEqual({});
     expect(removed.ui).toEqual({ character: MAIN_CHARACTER });
-    // 元の文書は変えない
     expect(doc.members).toHaveLength(1);
     expect(removeAffinity(doc)).toEqual({
       doc: { ...doc, affinity: null },

@@ -1,26 +1,17 @@
-// 画像の切り抜きと圧縮の規則。Zetter のキャスト作成画面（Cropper.js 1.6.2）と同じにして、
-// ここで作った画像を Zetter で選び直しても、切り抜き枠が画像全体に一致するようにする。
 export type ImageKind = "avatar" | "member" | "persona" | "cover" | "background" | "gallery";
 
 export interface ImageSpec {
   kind: ImageKind;
-  /** 切り抜き画面の見出し */
   title: string;
-  /** 縦横比。null は自由比率 */
   aspectRatio: number | null;
-  /** 枠の大きさを変えられるか（アイコンは画像を動かして合わせる） */
   cropBoxAdjustable: boolean;
-  /** getCroppedCanvas に渡す大きさ */
   output: { width: number; height: number } | { maxWidth: number; maxHeight: number };
-  /** dataURL の長さの上限 */
   maxDataUrlLength: number;
-  /** カバーだけは画質を下げても収まらないとき縮小して再挑戦する */
   shrinkToFit: boolean;
 }
 
 export const JPEG_QUALITIES = [0.92, 0.85, 0.78, 0.7, 0.62] as const;
 
-/** 選べる元画像の大きさの上限（Zetter と同じ 5MB） */
 export const SOURCE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
 export const IMAGE_SPECS: Record<ImageKind, ImageSpec> = {
@@ -42,7 +33,6 @@ export const IMAGE_SPECS: Record<ImageKind, ImageSpec> = {
     maxDataUrlLength: 200000,
     shrinkToFit: false,
   },
-  // 登場人物のアイコンは、Zetter では 1200×400 を指定して正方形の枠から 400×400 になり、上限は 400,000。
   member: {
     kind: "member",
     title: "範囲を選択",
@@ -81,17 +71,14 @@ export const IMAGE_SPECS: Record<ImageKind, ImageSpec> = {
   },
 };
 
-/** 切り抜いたキャンバスを、上限に収まる JPEG の dataURL にする（収まらなければ null）。 */
 export interface EncodableCanvas {
   width: number;
   height: number;
   toDataURL(type: string, quality: number): string;
 }
 
-/** 切り抜いたキャンバス（切り抜きの画面が渡し、圧縮は仲介役が頼む） */
 export type CropCanvas = EncodableCanvas;
 
-/** 切り抜いて圧縮した画像 */
 export interface CroppedImage {
   dataUrl: string;
   width: number;
@@ -99,7 +86,6 @@ export interface CroppedImage {
   bytes: number;
 }
 
-/** base64 の dataURL が表すファイルの大きさ（バイト） */
 export function dataUrlBytes(dataUrl: string): number {
   const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
   const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
@@ -107,7 +93,6 @@ export function dataUrlBytes(dataUrl: string): number {
 }
 
 export interface CanvasFactory<C extends EncodableCanvas> {
-  /** source を width×height に縮小した新しいキャンバスを返す */
   resize(source: C, width: number, height: number): C | null;
 }
 
@@ -124,7 +109,6 @@ export function encodeWithinLimit<C extends EncodableCanvas>(
     }
     return null;
   }
-  // カバー: 画質を下げても収まらなければ縮小して繰り返す（最大 8 回、短辺 320 まで）。
   let source = canvas;
   for (let attempt = 0; attempt < 8; attempt += 1) {
     let dataUrl = "";
@@ -144,7 +128,6 @@ export function encodeWithinLimit<C extends EncodableCanvas>(
   return null;
 }
 
-/** 画像ファイルの名前に使う枠の名前 */
 export function imageSlotName(kind: ImageKind, index?: number): string {
   if (kind === "gallery") return `gallery-${String((index ?? 0) + 1).padStart(2, "0")}`;
   if (kind === "member") return `member-${String((index ?? 0) + 2).padStart(2, "0")}`;

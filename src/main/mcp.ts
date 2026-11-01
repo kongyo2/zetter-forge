@@ -1,8 +1,3 @@
-// AI のエージェント（Claude Code・Pi など）から Zetter Forge を操作するための MCP サーバー。
-// 公式の SDK で Streamable HTTP の窓口（/mcp）を 127.0.0.1 に立てる。2026-07-28 版の手順にも、
-// それより前の initialize から始める手順にも答える（どちらで来たかは SDK の createMcpHandler が見分ける）。
-// 編集中のキャストは画面が持っているので、開く・書き換える・保存するは画面の仲介役に頼む
-// （ファイルを直接書くと、画面の保存していない変更と食い違う）。保存したキャストは、ここで読む。
 import { type Server, createServer } from "node:http";
 
 import {
@@ -34,11 +29,8 @@ import { listCasts, loadCast } from "./library";
 const MCP_PATH = "/mcp";
 
 export interface McpDeps {
-  /** アプリの版（サーバーの名乗りに使う） */
   version: string;
-  /** いまの保存先のフォルダ */
   libraryRoot(): string;
-  /** 画面の仲介役に頼む。窓がなければ失敗の返事になる */
   remote(request: RemoteRequest): Promise<RemoteReply>;
 }
 
@@ -131,13 +123,11 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** 編集画面で開いているキャスト（窓がないときなどは null） */
 async function openEditor(deps: McpDeps): Promise<EditorReport | null> {
   const status = await deps.remote({ kind: "status" });
   return status.ok ? ((status.result.editor as EditorReport | null) ?? null) : null;
 }
 
-/** 道具を並べたサーバー。HTTP の窓口は、頼み 1 回ごとにこれを作り直す */
 export function createZetterServer(deps: McpDeps): McpServer {
   const server = new McpServer(
     { name: "zetter-forge", title: "Zetter Forge", version: deps.version },
@@ -308,7 +298,6 @@ export function createZetterServer(deps: McpDeps): McpServer {
   return server;
 }
 
-/** 待ち受けを始められなかったわけ */
 function listenFailure(error: unknown, port: number): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (code === "EADDRINUSE")
@@ -317,7 +306,6 @@ function listenFailure(error: unknown, port: number): string {
   return messageOf(error);
 }
 
-/** 設定に合わせて MCP サーバーを立てたり止めたりする。頼まれた順に 1 つずつ行う */
 export class McpHost {
   private server: Server | null = null;
   private handler: McpHttpHandler | null = null;
@@ -330,7 +318,6 @@ export class McpHost {
     private readonly report: (error: Error) => void = (error) => console.error("[mcp]", error),
   ) {}
 
-  /** いまの様子（立てている途中なら、終わるのを待ってから） */
   async status(): Promise<McpStatus> {
     await this.queue;
     return this.current;
@@ -342,7 +329,6 @@ export class McpHost {
     return next;
   }
 
-  /** 止める（アプリを終えるとき） */
   async close(): Promise<void> {
     await this.apply({ enabled: false, port: this.port ?? 0 });
   }
@@ -362,11 +348,9 @@ export class McpHost {
     return this.current;
   }
 
-  /** 待ち受けを始めて、待ち受けたポートを返す（0 を渡すと空いている番号になる） */
   private async start(port: number): Promise<number> {
     const handler = createMcpHandler(() => this.factory(), { onerror: this.report });
     const serve = toNodeHandler(handler, { onerror: this.report });
-    // ほかのサイトから（DNS リバインディングを含め）呼ばれないよう、Host と Origin を確かめる
     const validHost = localhostHostValidation();
     const validOrigin = localhostOriginValidation();
     const server = createServer((request, response) => {
@@ -380,7 +364,6 @@ export class McpHost {
     try {
       await new Promise<void>((resolve, reject) => {
         server.once("error", reject);
-        // このパソコンの中からだけつなげる
         server.listen(port, "127.0.0.1", () => {
           server.off("error", reject);
           resolve();
@@ -406,7 +389,6 @@ export class McpHost {
     if (server) {
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
-        // 開いたままのつながり（keep-alive・SSE）も切る
         server.closeAllConnections();
       });
     }
