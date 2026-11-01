@@ -6,10 +6,6 @@ import type { Plugin } from "vite";
 
 const shared = resolve(__dirname, "src/shared");
 
-/**
- * 配布するアプリでは、開発サーバーとのやり取り（ws:）を許さない。
- * index.html の CSP は開発中の自動再読み込みのために ws: を許しているので、ビルドのときだけ外す。
- */
 function strictCsp(): Plugin {
   return {
     name: "zetter-forge:strict-csp",

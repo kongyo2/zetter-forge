@@ -1,4 +1,3 @@
-// 設定集・見た目と公開・メモのタブに描くもの。
 import { castDisplayTitle } from "@shared/cast";
 import { LIMITS } from "@shared/limits";
 

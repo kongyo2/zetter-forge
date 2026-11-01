@@ -138,7 +138,6 @@ export function CharacterTab({ vm }: { vm: CharacterTabVM }) {
           style={{ "--ink": vm.sheet.ink } as CSSProperties}
           {...(vm.labelledBy ? { role: "tabpanel", "aria-labelledby": vm.labelledBy } : {})}
         >
-          {/* 本人と登場人物で欄の並びは同じなので、切り替えても開いた「オプション設定」はそのまま */}
           <Link scope={vm.sheet.scope}>
             <Sheet vm={vm.sheet} />
           </Link>

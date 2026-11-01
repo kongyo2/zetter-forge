@@ -1,4 +1,3 @@
-// 画像の欄。ファイルを選んだら pick を出し、切り抜きは仲介役がダイアログで進める（Passive View）。
 import { type ReactNode, useLayoutEffect, useRef } from "react";
 
 import type { Path, PickedFile } from "../../app/types";
@@ -7,7 +6,6 @@ import { useEmit } from "../chain";
 import { CopyButton } from "./basics";
 import { IconFolder } from "./icons";
 
-/** ファイルを選ぶ欄（見えない <input type="file">）と、それを開くボタンの組 */
 export function FilePicker({
   name,
   multiple,
@@ -30,7 +28,6 @@ export function FilePicker({
         hidden
         onChange={(event) => {
           const files: PickedFile[] = [...(event.target.files ?? [])];
-          // 同じファイルを続けて選んでも change が起きるように空にする
           event.target.value = "";
           if (files.length > 0) emit({ type: "pick", path: name, files });
         }}

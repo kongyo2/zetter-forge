@@ -1,11 +1,9 @@
-// 画面の CSS のうち、崩れても型やほかのテストでは気づけない決まりを確かめる。
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("../src/renderer/src/styles.css", import.meta.url), "utf8");
 
-/** セレクタのどれかが selector そのものである規則の、property の値（@media の中も含め、出てくる順） */
 function valuesOf(selector: string, property: string): string[] {
   const values: string[] = [];
   const source = css.replace(/\/\*[\s\S]*?\*\//gu, "");

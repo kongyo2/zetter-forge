@@ -1,12 +1,7 @@
-// 画面の部品（Passive View）に渡す、描画に使う値だけの形。
-// 部品はこの値を描き、操作されたらできごとを出すだけで、判断はしない。
 import type { ImageSpec } from "@shared/images";
 import type { EditorTab } from "@shared/validate";
 
 import type { Path, Selection, ViewTab } from "./types";
-
-// ---------------------------------------------------------------------------
-// 部品
 
 export interface FocusVM {
   nonce: number;
@@ -16,20 +11,15 @@ export interface FocusVM {
 export interface CounterVM {
   text: string;
   tone: "normal" | "near" | "over";
-  /** 横に添える数（「全体の残り」など） */
   aside: string | null;
 }
 
-/** Zetter へ写すためのコピーのボタン */
 export interface CopyVM {
-  /** todo はまだ、done はコピー済み、changed はコピーしたあとに書き換えた */
   state: "todo" | "done" | "changed";
   title: string;
-  /** いまコピーした（変わるたびに「コピーしました」を出す） */
   flash: number | null;
 }
 
-/** 文字の欄に添える札（【朝】・よくある癖・{{user}}） */
 export interface ChipsVM {
   label: string;
   placement: "above" | "below";
@@ -37,16 +27,12 @@ export interface ChipsVM {
   items: { label: string; text: string }[];
 }
 
-/** 説明文。code は等幅で見せる */
 export type HintPart = string | { code: string };
 
 export interface TextFieldVM {
-  /** できごとの path に入る、この欄の場所（まとまりの中での相対） */
   name: Path;
   label: string;
-  /** 読み上げ用の名前（見出しだけでは区別がつかないとき）。null なら label */
   ariaLabel: string | null;
-  /** 見出しを出さない（ほかの見出しで分かるとき）。読み上げには使う */
   labelHidden: boolean;
   value: string;
   placeholder: string;
@@ -56,7 +42,6 @@ export interface TextFieldVM {
   required: boolean;
   invalid: boolean;
   disabled: boolean;
-  /** 等幅・数字などアプリの言葉の欄（明朝にしない） */
   plain: boolean;
   hint: HintPart[] | null;
   error: string | null;
@@ -65,9 +50,7 @@ export interface TextFieldVM {
   copy: CopyVM | null;
   chips: ChipsVM | null;
   focus: FocusVM | null;
-  /** 欄を離れたときに確定を知らせる（好感度の開始値） */
   commitOnBlur: boolean;
-  /** 数の欄 */
   numeric: { min: number | null; max: number | null; readOnly: boolean } | null;
 }
 
@@ -95,7 +78,6 @@ export interface ImageFieldVM {
   meta: { size: string; bytes: string } | null;
   removeLabel: string;
   multiple: boolean;
-  /** 画像のファイルの場所をコピーする */
   copy: CopyVM | null;
   canShowFile: boolean;
   focus: FocusVM | null;
@@ -114,10 +96,8 @@ export interface MoveVM {
   removeLabel: string | null;
 }
 
-/** 足したり消したりできる行の並び（口調サンプル・設定集・この会話でのあなた） */
 interface ListVM<Row> {
   scope: Path;
-  /** 見出しに添える数（「3 / 10件」など） */
   meta: string;
   rows: Row[];
   canAdd: boolean;
@@ -135,9 +115,7 @@ export interface TabItemVM<T extends string> {
 export interface AllowanceVM {
   title: string;
   tone: "normal" | "near" | "over";
-  /** 原稿用紙の行（1 行 25 マス） */
   rows: {
-    /** 行の長さ（マスの数） */
     cells: number;
     width: string;
     fills: {
@@ -159,9 +137,6 @@ export interface AllowanceVM {
   note: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// 全体
-
 export interface ToastVM {
   id: number;
   message: string;
@@ -177,7 +152,6 @@ export type DialogVM =
       message: string;
       choices: { id: string; label: string; tone: "primary" | "danger" | "plain" }[];
       cancelLabel: string;
-      /** はじめにフォーカスを置くボタン（消すものは「キャンセル」） */
       initial: string;
     }
   | {
@@ -196,11 +170,9 @@ export interface SettingsDialogVM {
   kind: "settings";
   enabled: ToggleVM;
   port: { value: string; invalid: boolean; disabled: boolean; hint: string };
-  /** MCP サーバーのいまの様子（保存した設定で立てたもの） */
   status: { tone: "off" | "running" | "failed" | "loading"; text: string; url: string | null };
   error: string | null;
   canApply: boolean;
-  /** 変えた値があれば「キャンセル」、なければ「閉じる」 */
   closeLabel: string;
 }
 
@@ -226,23 +198,17 @@ export interface SidebarVM {
   errors: { folder: string; message: string }[];
   root: string;
   refreshing: boolean;
-  /** MCP サーバーの様子（使っていなければ null） */
   mcp: { tone: "running" | "failed"; text: string } | null;
 }
 
 export interface RootVM {
-  /** 窓のタイトル */
   title: string;
   sidebar: SidebarVM;
   workspace: { kind: "welcome"; hasCasts: boolean } | { kind: "editor"; editor: EditorVM };
   dialog: DialogVM | null;
   toasts: ToastVM[];
-  /** 閉じる前に確かめる（保存していない変更がある） */
   preventUnload: boolean;
 }
-
-// ---------------------------------------------------------------------------
-// 編集画面
 
 export interface IssueVM {
   key: string;
@@ -267,7 +233,6 @@ export interface EditorVM {
   saveState: { text: string; tone: "is-busy" | "is-new" | "is-dirty" | "is-saved" };
   saving: boolean;
   canOpenFolder: boolean;
-  /** 「削除」のボタン。まだ保存していないキャストには出さない */
   deletion: { disabled: boolean } | null;
   notices: string[];
   tabs: {
@@ -291,8 +256,6 @@ export type PanelVM =
   | { tab: "memo"; vm: MemoTabVM }
   | { tab: "transfer"; vm: TransferTabVM };
 
-// キャラクター -------------------------------------------------------------
-
 export interface PartnerVM {
   scope: Path;
   counter: CounterVM;
@@ -307,7 +270,6 @@ export type ToneListVM = ListVM<{
 }>;
 
 export interface CharacterSheetVM {
-  /** できごとの path の前半（["cast"] か ["members", id]） */
   scope: Path;
   ink: string;
   removeLabel: string | null;
@@ -326,12 +288,9 @@ export interface CharacterTabVM {
   scale: string;
   castTabs: { items: TabItemVM<string>[]; canAdd: boolean } | null;
   sheet: CharacterSheetVM;
-  /** 選んでいるタブ（読み上げ用の対応） */
   labelledBy: string | null;
   leftover: string | null;
 }
-
-// 体験設定 -----------------------------------------------------------------
 
 export interface IntroPartVM {
   index: number;
@@ -359,15 +318,12 @@ interface PlayGuideFieldVM {
 }
 
 export interface PlayGuideVM {
-  /** 遊び方シートの場所（["playGuide"]） */
   scope: Path;
-  /** 見出しに添える、書いた欄の数（「未設定」「3項目」） */
   summary: string;
   fields: PlayGuideFieldVM[];
 }
 
 export interface ExperienceTabVM {
-  /** モード・キャッチコピー・いまの状況・このキャストについて の場所（["cast"]） */
   scope: Path;
   mode: {
     name: Path;
@@ -379,7 +335,6 @@ export interface ExperienceTabVM {
     intro: {
       scope: Path;
       meta: string;
-      /** 全部のパートの合計 */
       total: CounterVM;
       parts: IntroPartVM[];
       canAdd: boolean;
@@ -390,8 +345,6 @@ export interface ExperienceTabVM {
   about: TextFieldVM;
   personas: ListVM<PersonaVM>;
 }
-
-// 好感度 -------------------------------------------------------------------
 
 export interface StageVM {
   index: number;
@@ -437,12 +390,10 @@ export interface AffinityConfigVM {
 }
 
 export interface AffinityTabVM {
-  /** 好感度の設定全体の場所（["affinity"]） */
   scope: Path;
   notice: string | null;
   setup: null | {
     subjects: TabItemVM<string>[];
-    /** 選んでいる対象の場所（[対象のキー]） */
     subject: Path;
     sheet:
       | { kind: "inherit" }
@@ -450,8 +401,6 @@ export interface AffinityTabVM {
       | { kind: "config"; config: AffinityConfigVM };
   };
 }
-
-// 設定集・見た目・メモ -----------------------------------------------------
 
 export type LorebookTabVM = ListVM<{
   id: string;
@@ -473,7 +422,6 @@ export interface GalleryItemVM {
 }
 
 export interface PublishTabVM {
-  /** 公開・画像・一言セリフ・ページの情報の場所（["cast"]） */
   scope: Path;
   status: ToggleVM;
   cover: ImageFieldVM;
@@ -503,8 +451,6 @@ export interface MemoTabVM {
   canOpenFolder: boolean;
 }
 
-// Zetter へ写す ------------------------------------------------------------
-
 export interface TransferItemVM {
   key: string;
   path: Path;
@@ -524,7 +470,6 @@ export interface TransferItemVM {
 
 export interface TransferTabVM {
   progress: { done: number; total: number; changed: number; text: string };
-  /** Zetter を開くボタンの文言（控えた URL があれば、そのキャストのページ） */
   openLabel: string;
   next: { label: string } | null;
   groups: {

@@ -1,6 +1,3 @@
-// 仲介役（Mediator）。画面の部品から上ってきたできごとを受け取り、状態機械（machine.ts）で
-// 裁定して状態を進め、頼まれた外とのやり取り（ports）を行って結果をまた受け取る。
-// 画面の部品は Mediator の状態を直接さわらず、Presenter が作った描画用の値だけを受け取る。
 import type { CopyLog } from "@shared/copyLog";
 import type { CroppedImage, CropCanvas, ImageKind } from "@shared/images";
 import type { ForgeApi } from "@shared/ipc";
@@ -11,17 +8,14 @@ import { arbitrate } from "./machine";
 import { type AppState, initialState } from "./state";
 import type { PickedFile } from "./types";
 
-/** 画像ファイルの読み込みと、切り抜いた画像の圧縮 */
 export interface ImagePort {
   read(file: PickedFile): Promise<string>;
   encode(canvas: CropCanvas, image: ImageKind): Promise<CroppedImage>;
 }
 
-/** Mediator が外とやり取りする口 */
 export interface Ports {
   forge: Omit<ForgeApi, "onCommand" | "onRemote">;
   images: ImagePort;
-  /** ms ミリ秒後に task を行う */
   schedule(ms: number, task: () => void): void;
   now(): number;
 }
@@ -30,7 +24,6 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** 頼んだ処理が失敗したことを知らせるできごと（どの頼みのものかは token で見分ける） */
 type FailureType =
   | "library/failed"
   | "root/failed"
@@ -62,7 +55,6 @@ export class Mediator {
     return () => this.listeners.delete(listener);
   };
 
-  /** できごとを受け取る。判断の途中で届いたものは、いまの判断が終わってから順に裁定する */
   readonly dispatch = (event: AppEvent): void => {
     this.queue.push(event);
     if (this.dispatching) return;
@@ -83,7 +75,6 @@ export class Mediator {
     for (const effect of effects) this.run(effect);
   }
 
-  /** 頼んだ処理の結果を、できごとにして受け取り直す */
   private settle<T>(
     task: Promise<T>,
     succeeded: (value: T) => AppEvent,

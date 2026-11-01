@@ -1,4 +1,3 @@
-// 小さな部品。どれも渡された値を描き、操作されたらできごとを出すだけ（Passive View）。
 import {
   type CSSProperties,
   type KeyboardEvent,
@@ -23,7 +22,6 @@ import type {
 import { Link, useEmit } from "../chain";
 import { IconCheck, IconCopy, IconDown, IconPlus, IconRemove, IconUp } from "./icons";
 
-/** タブの中のひとまとまり。まとまりどうしは罫線で区切る。 */
 export function Section({
   title,
   description,
@@ -33,7 +31,6 @@ export function Section({
 }: {
   title?: string;
   description?: ReactNode;
-  /** 見出しの右に添える数（「3 / 12パート」など） */
   meta?: ReactNode;
   className?: string;
   children?: ReactNode;
@@ -54,7 +51,6 @@ export function Section({
   );
 }
 
-/** 字数の具合（上限が近い・超えた）を表すクラス */
 export function toneClass(tone: CounterVM["tone"]): string {
   return tone === "over" ? " is-over" : tone === "near" ? " is-near" : "";
 }
@@ -124,10 +120,6 @@ export function Select({ vm, className }: { vm: SelectVM; className?: string }) 
   );
 }
 
-/**
- * 開け閉めできるまとまり。開いているかどうかは描き方だけのことなので、この部品が持つ。
- * 中の入力欄へフォーカスを移す頼み（reveal）が上ってきたら、自分を開いてから上へ渡す。
- */
 export function Disclosure({
   summary,
   hint,
@@ -155,7 +147,6 @@ export function Disclosure({
   );
 }
 
-/** 丸いアイコン。ink があれば、その人の色の輪で囲む。 */
 export function Avatar({ vm, size = "medium" }: { vm: AvatarVM; size?: "small" | "medium" }) {
   const classes = ["avatar", `avatar-${size}`, vm.ink ? "is-inked" : ""].filter(Boolean).join(" ");
   return (
@@ -173,7 +164,6 @@ export function Avatar({ vm, size = "medium" }: { vm: AvatarVM; size?: "small" |
   );
 }
 
-/** 並べ替えと削除のボタン。どれを動かすかは、上の部品（Link）が path に足す */
 export function MoveButtons({ vm }: { vm: MoveVM }) {
   const emit = useEmit();
   return (
@@ -213,7 +203,6 @@ export function MoveButtons({ vm }: { vm: MoveVM }) {
   );
 }
 
-/** 並べ替えられるリストの 1 行。頭に番号と、並べ替え・削除のボタンを置く */
 export function SortableRow({
   index,
   move,
@@ -236,7 +225,6 @@ export function SortableRow({
   );
 }
 
-/** リストに 1 つ足すボタン。どこに足すかは、上の部品（Link）が path に足す */
 export function AddButton({
   path = [],
   disabled,
@@ -260,7 +248,6 @@ export function AddButton({
   );
 }
 
-/** 文字で「〜を削除」と書いたボタン。何を消すかは、上の部品（Link）が path に足す */
 export function RemoveButton({ children }: { children: ReactNode }) {
   const emit = useEmit();
   return (
@@ -276,7 +263,6 @@ export function RemoveButton({ children }: { children: ReactNode }) {
 
 const FLASH_MS = 1600;
 
-/** Zetter に貼るためのコピー。コピーした直後だけ「コピーしました」と描く */
 export function CopyButton({
   vm,
   name,
@@ -319,10 +305,6 @@ export function CopyButton({
 
 const TAB_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End"]);
 
-/**
- * タブの並び。← → Home End で移り、移った先を選ぶ（選んでいないタブは Tab キーで止まらない）。
- * 選んだことは tab/select で知らせ、何を選んだかは上の部品が意味を足す。
- */
 export function TabList<T extends { id: string; domId: string; selected: boolean }>({
   items,
   label,
@@ -381,7 +363,6 @@ export function TabList<T extends { id: string; domId: string; selected: boolean
   );
 }
 
-/** 人を選ぶタブの並び（アイコンと名前）。何を選んだかは、上の部品（TabMeaning）が意味を足す */
 export function CastTabs({
   items,
   label,
@@ -412,7 +393,6 @@ export function CastTabs({
   );
 }
 
-/** 中の TabList の tab/select を、この場所での意味（editor/tab など）に読み替える輪 */
 export function TabMeaning({
   to,
   children,

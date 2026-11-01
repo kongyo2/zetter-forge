@@ -1,5 +1,3 @@
-// ダイアログ。<dialog> を前面に出すと、裏の画面は操作も読み上げもされなくなり、Esc で取りやめになる。
-// 閉じるかどうかは仲介役が決めるので、Esc（cancel）ではこの部品から閉じずに知らせるだけ。
 import type Cropper from "cropperjs";
 import {
   type ReactNode,
@@ -33,10 +31,8 @@ function Modal({
   useLayoutEffect(() => {
     const dialog = ref.current;
     if (!dialog) return undefined;
-    // 閉じたあとに、開く前にフォーカスがあったところへ戻す
     const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!dialog.open) dialog.showModal();
-    // はじめのフォーカスは、印を付けたボタンに置く（showModal は最初のボタンを選んでしまう）
     dialog.querySelector<HTMLElement>("[data-initial-focus]")?.focus();
     return () => {
       if (dialog.open) dialog.close();
@@ -103,10 +99,8 @@ function CropDialog({ vm }: { vm: Extract<DialogVM, { kind: "crop" }> }) {
   const emit = useEmit();
   const imageRef = useRef<HTMLImageElement | null>(null);
   const cropperRef = useRef<Cropper | null>(null);
-  // 切り抜けるようになった画像（token）。それまでは「この範囲にする」を押せない（押しても切り抜けない）
   const [readyToken, setReadyToken] = useState<number | null>(null);
 
-  // Cropper は描き方の道具なので、この部品が持つ。画像が替わるたびに作り直す
   useEffect(() => {
     const image = imageRef.current;
     if (!image || !vm.source) return undefined;
@@ -181,7 +175,6 @@ const PORT_HINT_ID = "settings-port-hint";
 
 function SettingsDialog({ vm }: { vm: SettingsDialogVM }) {
   const emit = useEmit();
-  // トグルのオン・オフを、設定の書き換えとして上へ渡す
   const enable = useCallback((event: ViewEvent, next: Emit) => {
     if (event.type !== "check") return false;
     next({ type: "settings/change", patch: { enabled: event.checked } });

@@ -1,4 +1,3 @@
-// 線だけの小さなアイコン。色は文字色（currentColor）に従い、読み上げでは無視させる。
 import type { ReactNode } from "react";
 
 function Icon({ children, size = 16 }: { children: ReactNode; size?: number }) {
@@ -53,7 +52,6 @@ export function IconRemove() {
   );
 }
 
-/** 直すもの（Zetter で止められる・上限を超えている） */
 export function IconError() {
   return (
     <Icon>
@@ -64,7 +62,6 @@ export function IconError() {
   );
 }
 
-/** Zetter で保存されないもの・上限が近いもの */
 export function IconWarning() {
   return (
     <Icon>
@@ -75,7 +72,6 @@ export function IconWarning() {
   );
 }
 
-/** Zetter に写すときの注意 */
 export function IconInfo() {
   return (
     <Icon>
@@ -94,7 +90,6 @@ export function IconCheck() {
   );
 }
 
-/** Zetter に貼るためにコピーする */
 export function IconCopy() {
   return (
     <Icon>
@@ -104,7 +99,6 @@ export function IconCopy() {
   );
 }
 
-/** 設定 */
 export function IconSettings() {
   return (
     <Icon>
@@ -115,7 +109,6 @@ export function IconSettings() {
   );
 }
 
-/** ファイルをフォルダで見る */
 export function IconFolder() {
   return (
     <Icon>

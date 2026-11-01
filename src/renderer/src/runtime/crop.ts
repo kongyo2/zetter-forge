@@ -1,4 +1,3 @@
-// 画像の読み込み・切り抜き・圧縮（ブラウザの機能を使うところ）。
 import {
   type CroppedImage,
   type CropCanvas,
@@ -16,7 +15,6 @@ import type { PickedFile } from "../app/types";
 
 class ImageInputError extends Error {}
 
-/** 選んだファイルを dataURL として読む（Zetter と同じく画像だけ、5MB まで）。 */
 function readImageFile(file: PickedFile): Promise<string> {
   if (!file.type.startsWith("image/"))
     return Promise.reject(new ImageInputError("画像ファイルを選択してください。"));
@@ -30,7 +28,6 @@ function readImageFile(file: PickedFile): Promise<string> {
   });
 }
 
-/** Zetter のキャスト作成画面と同じ設定で Cropper を作る。切り抜けるようになったら onReady を呼ぶ */
 export function createCropper(
   image: HTMLImageElement,
   spec: ImageSpec,
@@ -74,7 +71,6 @@ function imageSize(dataUrl: string): Promise<{ width: number; height: number }> 
   });
 }
 
-/** 切り抜いたキャンバスを、Zetter と同じ規則で JPEG に圧縮する。 */
 async function encodeCrop(canvas: CropCanvas, kind: ImageKind): Promise<CroppedImage> {
   const spec = IMAGE_SPECS[kind];
   const dataUrl = encodeWithinLimit(canvas, spec, { resize: resizeCanvas });

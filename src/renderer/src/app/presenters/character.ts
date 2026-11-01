@@ -1,4 +1,3 @@
-// キャラクターのタブに描くもの。
 import {
   type CastMember,
   PARTNER_HABIT_CHIPS,
@@ -131,7 +130,6 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
     const index = doc.members.findIndex((candidate) => candidate.id === memberId);
     return doc.members[index]?.name.trim() || `${index + 2}人目`;
   };
-  // 9 人目からは色が足りないので「ほか N人」にまとめる
   const toParts = (shares: UsageShare[]): AllowancePart[] => {
     const parts = shares.slice(0, INKED_CHARACTERS).map((share, index) => ({
       key: share.memberId ?? MAIN_CHARACTER,

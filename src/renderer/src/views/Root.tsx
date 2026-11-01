@@ -1,5 +1,3 @@
-// 画面のいちばん上。すべての部品はこの下に並び、部品からのできごとはここまで上ってきて
-// 仲介役（Mediator）に渡る。仲介役の状態が変わるたびに Presenter で描く値を作り直して配る。
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import type { Mediator } from "../app/mediator";
@@ -35,7 +33,6 @@ function Toasts({ vms }: { vms: ToastVM[] }) {
 
 function RootView({ vm }: { vm: RootVM }) {
   const emit = useEmit();
-  // 窓を閉じる前の確かめと、窓に戻ってきたときの読み直しは、窓そのものに付ける
   const preventUnload = useRef(vm.preventUnload);
   preventUnload.current = vm.preventUnload;
   useEffect(() => {

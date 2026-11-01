@@ -1,4 +1,3 @@
-// 何人かで分け合う字数の枠を、400 字詰めの原稿用紙のマスで描く（位置と幅は Presenter が決める）。
 import type { CSSProperties } from "react";
 
 import type { AllowanceVM } from "../../app/viewModels";

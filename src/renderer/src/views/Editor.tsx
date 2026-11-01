@@ -114,8 +114,6 @@ export function Editor({ vm }: { vm: EditorVM }) {
   const panelRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const wasOpen = useRef(false);
-  // 重ねて出した確認欄は、開いたら中へ、閉じたら「確認」ボタンへフォーカスを移す。
-  // ただし項目を押して直す欄へ移ったときは、その欄にフォーカスを残す（欄の中にあったときだけ戻す）
   useEffect(() => {
     if (vm.checks.open) closeRef.current?.focus();
     else if (wasOpen.current) {
@@ -217,7 +215,6 @@ export function Editor({ vm }: { vm: EditorVM }) {
         </TabList>
       </TabMeaning>
       <div className={vm.checks.open ? "editor-body is-checks-open" : "editor-body"}>
-        {/* タブを替えたら、新しい面を上から見せる（開いているキャストが同じなら、ほかの状態は保つ） */}
         <div
           className="editor-main"
           id="editor-panel"

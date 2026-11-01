@@ -1,6 +1,5 @@
 import { useEmit } from "./chain";
 
-/** 原稿用紙のマスに 1 字ずつ書く見出し */
 const WELCOME_HEADLINE = "キャストを、手元で育てる。";
 
 export function Welcome({ hasCasts }: { hasCasts: boolean }) {

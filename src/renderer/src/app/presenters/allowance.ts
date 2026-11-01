@@ -1,18 +1,14 @@
-// 何人かで分け合う字数の枠を、400 字詰めの原稿用紙のマスで描くための値。
 import { formatCount } from "@shared/text";
 
 import type { AllowanceVM } from "../viewModels";
 
-/** 400 字詰めの原稿用紙 1 枚を 1 マスとして描く。 */
 export const CHARS_PER_CELL = 400;
-/** 1 行のマスの数。原稿用紙に書くように、行の終わりで次の行へ折り返す。 */
 const CELLS_PER_ROW = 25;
 
 export interface AllowancePart {
   key: string;
   label: string;
   length: number;
-  /** マスを塗る色（castInk の値） */
   ink: string;
 }
 
@@ -25,7 +21,6 @@ export function allowance(
   const total = parts.reduce((sum, part) => sum + part.length, 0);
   const over = total - max;
   const near = over <= 0 && max - total <= max * 0.1;
-  // マスは 1 マスずつ並べる。上限を超えたら、超えた分が入るマスまで足す
   const cells = Math.max(1, Math.ceil(Math.max(total, max) / CHARS_PER_CELL - 1e-9));
   const limitCell = max / CHARS_PER_CELL;
   const rowCount = Math.ceil(cells / CELLS_PER_ROW);

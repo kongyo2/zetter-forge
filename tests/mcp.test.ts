@@ -1,5 +1,3 @@
-// MCP サーバーを、公式の SDK のクライアントから HTTP でつないで確かめる。画面（仲介役）は偽物にして、
-// 届いた頼みを控え、決めた返事を返す。保存先は本物のフォルダを使う。
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -65,7 +63,6 @@ async function serverUrl(): Promise<URL> {
   return new URL(status.url);
 }
 
-/** つなぐ。mode は SDK の版の決め方（legacy は initialize から始める 2025 年版） */
 async function connect(mode: "legacy" | { pin: string } = "legacy"): Promise<Client> {
   const client = new Client({ name: "test", version: "1.0.0" }, { versionNegotiation: { mode } });
   await client.connect(new StreamableHTTPClientTransport(await serverUrl()));
@@ -80,7 +77,6 @@ async function call(name: string, args: Record<string, unknown> = {}) {
   return { result, text: first?.text ?? "" };
 }
 
-/** Host・Origin などを好きに付けて POST し、HTTP の状態を返す */
 function post(url: URL, headers: Record<string, string>, pathname = url.pathname): Promise<number> {
   const body = JSON.stringify({
     jsonrpc: "2.0",
@@ -258,7 +254,6 @@ describe("MCP サーバー", () => {
     const url = await serverUrl();
     expect(await post(url, {})).toBe(200);
     expect(await post(url, { origin: "https://evil.example" })).toBe(403);
-    // サンドボックスの iframe や file: のページは Origin が null になる
     expect(await post(url, { origin: "null" })).toBe(403);
     expect(await post(url, { host: `evil.example:${url.port}` })).toBe(403);
     expect(await post(url, { "content-type": "text/plain" })).toBe(415);

@@ -1,5 +1,3 @@
-// 文書（CastDocument）の書き換え。画面の部品から届いた場所（path）と値を、どの項目をどう変えるかに読み替える。
-// どれも元の doc は変えずに、書き換えた複製を返す。読み替えられない場所なら null。
 import {
   AFFINITY_PACES,
   AFFINITY_STAGE_FIELDS,
@@ -33,20 +31,15 @@ import { limitPartnerSettingsValue } from "@shared/validate";
 
 import { AFFINITY_DEFAULT, MAIN_CHARACTER, type Path, type Selection } from "./types";
 
-/** {{user}}（相手の呼び名に置き換わる） */
 export const USER_PLACEHOLDER = "{{user}}";
 
 export interface EditOutcome {
   doc: CastDocument;
-  /** 書き換えたあとにフォーカスを移す欄 */
   focus?: { path: Path; selection: Selection | null };
-  /** 画面の状態の変更（選ぶ人・好感度の対象・開く段階） */
   ui?: { character?: string; subject?: string; stage?: number };
-  /** 消したので「元に戻す」を出す（知らせの文言） */
   removed?: string;
 }
 
-/** 書き換えなかった理由（知らせに出す） */
 export interface EditRefusal {
   refused: string;
 }
@@ -57,10 +50,6 @@ export function isRefusal(result: EditResult): result is EditRefusal {
   return !!result && "refused" in result;
 }
 
-// ---------------------------------------------------------------------------
-// 場所の読み取り
-
-/** 本人（["cast"]）か登場人物（["members", id]）のキャラクター設定 */
 interface CharacterSlot {
   base: Path;
   target: CastDocument | CastMember;
@@ -103,7 +92,6 @@ function isPlayGuideKey(key: unknown): key is PlayGuideKey {
   return PLAY_GUIDE_FIELDS.some((field) => field.key === key);
 }
 
-/** 空なら null、数でなければ null（Zetter の欄と同じく、整数かどうかは確認で見る） */
 function parseNumber(value: string): number | null {
   if (value.trim() === "") return null;
   const number = Number(value);
@@ -123,13 +111,9 @@ function edit(doc: CastDocument, recipe: (draft: CastDocument) => EditResult | v
   return result;
 }
 
-/** 書き換えた文書と、そのあとにフォーカスを移す欄 */
 function focusOn(draft: CastDocument, path: Path, selection: Selection | null = null): EditOutcome {
   return { doc: draft, focus: { path, selection } };
 }
-
-// ---------------------------------------------------------------------------
-// 文字・数・選択肢
 
 const CAST_TEXT = new Set([
   "name",
@@ -222,7 +206,6 @@ function inputCharacter(doc: CastDocument, path: Path, value: string): EditResul
   });
 }
 
-/** パートの種類と話者を 1 つの値で表す（"narration" か "speech:<登場人物の id。本体は空>"） */
 export function introRoleValue(part: Pick<IntroPart, "kind" | "speakerId">): string {
   return part.kind === "narration" ? "narration" : `speech:${part.speakerId ?? ""}`;
 }
@@ -230,7 +213,6 @@ export function introRoleValue(part: Pick<IntroPart, "kind" | "speakerId">): str
 function inputIntro(doc: CastDocument, path: Path, value: string): EditResult {
   const [, at, field] = path;
   if (at === "first" && field === "text") {
-    // 雑談モードの「最初のひとこと」は 1 つ目のパート。なければ作る
     return edit(doc, (draft) => {
       const part = draft.introScript[0];
       if (part) part.text = value;
@@ -271,7 +253,6 @@ function inputAffinity(doc: CastDocument, path: Path, value: string): EditResult
       if (field === "itemName") config.itemName = value;
       else if (field === "minValue" || field === "maxValue" || field === "initialValue") {
         config[field] = parseNumber(value);
-        // 最小値を変えると 1 段階目の開始値も一緒に変わる
         if (field === "minValue" && config.stages[0]) config.stages[0].startValue = config.minValue;
       } else if (field === "pace") {
         const pace = AFFINITY_PACES.find((candidate) => candidate.value === value);
@@ -285,7 +266,6 @@ function inputAffinity(doc: CastDocument, path: Path, value: string): EditResult
     if (position === null) return null;
     const stage = config.stages[position] as AffinityStage;
     if (stageField === "startValue") {
-      // 1 段階目は最小値から始まる（変えられない）
       if (position === 0) return null;
       stage.startValue = parseNumber(value);
       return undefined;
@@ -296,14 +276,10 @@ function inputAffinity(doc: CastDocument, path: Path, value: string): EditResult
   });
 }
 
-// ---------------------------------------------------------------------------
-// オン・オフ
-
 const CAST_SWITCHES: Record<string, (draft: CastDocument, checked: boolean) => void> = {
   avatarBlurred: (draft, checked) => void (draft.avatarBlurred = checked),
   coverBlurred: (draft, checked) => void (draft.coverBlurred = checked),
   public: (draft, checked) => void (draft.status = checked ? "public" : "private"),
-  // 画面では「公開する・出す」をオンにする。保存する値は「隠す」なので逆にする
   personaVisible: (draft, checked) => void (draft.personaHidden = !checked),
   toneExamplesVisible: (draft, checked) => void (draft.toneExamplesHidden = !checked),
   situationVisible: (draft, checked) => void (draft.situationHidden = !checked),
@@ -344,7 +320,6 @@ export function applyCheck(doc: CastDocument, path: Path, checked: boolean): Edi
         return undefined;
       }
       if (field === "disabled" && key !== AFFINITY_DEFAULT) {
-        // 「このキャラは好感度を使わない」。個別設定がなければ共通設定を写して作る
         const config =
           draft.affinity.overrides[key] ??
           (normalizeAffinityConfig(structuredClone(draft.affinity.default)) as AffinityConfig);
@@ -358,10 +333,6 @@ export function applyCheck(doc: CastDocument, path: Path, checked: boolean): Edi
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// 札・{{user}} の差し込み
-
-/** 「ふだんの1日」の札: カーソル位置に【朝】を入れる（行の途中なら改行してから）。 */
 export function insertTimeChip(value: string, selection: Selection, label: string) {
   const { start, end } = clampSelection(value, selection);
   const atLineStart = start === 0 || value[start - 1] === "\n";
@@ -372,7 +343,6 @@ export function insertTimeChip(value: string, selection: Selection, label: strin
   };
 }
 
-/** 「メッセージの癖」の札: 末尾に一文を足す（同じ文が既にあれば何もしない）。 */
 export function appendHabitChip(value: string, phrase: string): string {
   const trimmed = value.trimEnd();
   const sentence = `${phrase.replace(/[。.!！?？]*$/u, "")}。`;
@@ -406,7 +376,6 @@ export function applyInsert(
       next = appendHabitChip(settings.messageHabits, text);
       caret = next.length;
     } else return null;
-    // 札の途中で切れないよう、5 欄の合計に収まらないときは入れない
     if (limitPartnerSettingsValue(settings, field, next) !== next)
       return {
         refused: `パートナー設定は5つの欄の合計で${formatCount(LIMITS.partnerSettingsTotal)}字までなので、これ以上入りません。`,
@@ -429,7 +398,6 @@ function insertIntroPlaceholder(doc: CastDocument, path: Path, selection: Select
     const value = part?.text ?? "";
     const { start, end } = clampSelection(value, selection);
     const next = `${value.slice(0, start)}${USER_PLACEHOLDER}${value.slice(end)}`;
-    // 入りきらないときに後ろを切り捨てると、書いた文が消えてしまうので入れない
     if (utf16Length(next) > LIMITS.introPart)
       return {
         refused: `イントロのパートは${formatCount(LIMITS.introPart)}字までなので、${USER_PLACEHOLDER} が入りません。`,
@@ -440,9 +408,6 @@ function insertIntroPlaceholder(doc: CastDocument, path: Path, selection: Select
     return focusOn(draft, path, { start: caret, end: caret });
   });
 }
-
-// ---------------------------------------------------------------------------
-// 足す
 
 export function applyAdd(doc: CastDocument, path: Path): EditResult {
   const [head, key, field] = path;
@@ -503,7 +468,6 @@ export function applyAdd(doc: CastDocument, path: Path): EditResult {
       });
     }
     if (path.length === 2 && typeof key === "string" && key !== AFFINITY_DEFAULT) {
-      // 個別設定を作る（共通設定を写して始める）
       return edit(doc, (draft) => {
         if (!draft.affinity || draft.affinity.overrides[key]) return null;
         draft.affinity.overrides[key] = normalizeAffinityConfig(
@@ -532,10 +496,6 @@ export function applyAdd(doc: CastDocument, path: Path): EditResult {
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// 消す・外す（確かめてから消すもの以外。消したものは「元に戻す」で戻せる）
-
-/** remove で draft から消せたら、「元に戻す」の知らせの文言を付けて返す。消せなければ null */
 function removal(
   doc: CastDocument,
   message: string,
@@ -544,7 +504,6 @@ function removal(
   return edit(doc, (draft) => (remove(draft) ? { doc: draft, removed: message } : null));
 }
 
-/** 位置 at の要素を外す（items を書き換える）。範囲の外なら false */
 function removeAt(items: unknown[], at: unknown): boolean {
   const position = index(at, items.length);
   if (position === null) return false;
@@ -552,7 +511,6 @@ function removeAt(items: unknown[], at: unknown): boolean {
   return true;
 }
 
-/** id の要素を外す（items を書き換える）。1 つもなければ false */
 function removeById<T extends { id: string }>(items: T[], id: unknown): boolean {
   const kept = items.filter((item) => item.id !== id);
   if (kept.length === items.length) return false;
@@ -597,7 +555,6 @@ export function applyRemove(doc: CastDocument, path: Path, ui: { stage: number }
     typeof key === "string" &&
     key !== AFFINITY_DEFAULT
   ) {
-    // 個別設定をやめて共通設定に戻す
     return removal(doc, "個別設定をやめて、共通設定に戻しました。", (draft) => {
       if (!draft.affinity?.overrides[key]) return false;
       delete draft.affinity.overrides[key];
@@ -611,7 +568,6 @@ export function applyRemove(doc: CastDocument, path: Path, ui: { stage: number }
       const position = index(at, config.stages.length);
       if (position === null) return null;
       config.stages.splice(position, 1);
-      // 1 段階目を消したら、次の段階が最小値から始まる
       const first = config.stages[0];
       if (position === 0 && first) first.startValue = config.minValue;
       const stage =
@@ -622,7 +578,6 @@ export function applyRemove(doc: CastDocument, path: Path, ui: { stage: number }
   return null;
 }
 
-/** 確かめてから消すもの */
 export function removalNeedsConfirm(doc: CastDocument, path: Path): string | null {
   const [head, key] = path;
   if (head === "members" && path.length === 2) {
@@ -648,15 +603,11 @@ export function removeAffinity(doc: CastDocument): EditOutcome {
   };
 }
 
-/** 雑談モードで見えていない 2 つ目以降のパートを消す */
 export function trimIntro(doc: CastDocument): EditOutcome {
   const draft = structuredClone(doc);
   draft.introScript = draft.introScript.slice(0, 1);
   return { doc: draft };
 }
-
-// ---------------------------------------------------------------------------
-// 並べ替え・確定
 
 function moveItem<T>(items: T[], from: number, to: number): boolean {
   if (to < 0 || to >= items.length || from === to) return false;
@@ -691,7 +642,6 @@ export function applyMove(doc: CastDocument, path: Path, offset: -1 | 1): EditRe
   });
 }
 
-/** 好感度の開始値を確定したら小さい順に並べ直す（1 段階目は動かさない）。開いている段階はついていく。 */
 export function applyCommit(doc: CastDocument, path: Path, ui: { stage: number }): EditResult {
   const [head, subject, field, at, stageField] = path;
   if (head !== "affinity" || field !== "stages" || stageField !== "startValue") return null;
@@ -706,10 +656,6 @@ export function applyCommit(doc: CastDocument, path: Path, ui: { stage: number }
   });
 }
 
-// ---------------------------------------------------------------------------
-// 画像
-
-/** 画像を入れる場所か */
 export function isImagePath(path: Path): boolean {
   const [head, key, field] = path;
   if (head === "cast")
@@ -735,7 +681,6 @@ export function readImage(doc: CastDocument, path: Path): CastImage | null {
   return null;
 }
 
-/** 画像を差し替える（draft を書き換える）。場所がなければ false */
 function writeImage(draft: CastDocument, path: Path, image: CastImage | null): boolean {
   const [head, key, field] = path;
   if (head === "cast" && path.length === 2) {
@@ -757,7 +702,6 @@ function writeImage(draft: CastDocument, path: Path, image: CastImage | null): b
   return false;
 }
 
-/** 切り抜いた画像を入れる。ギャラリー（["gallery"]）なら末尾に足す */
 export function placeImage(doc: CastDocument, path: Path, image: CastImage): EditResult {
   return edit(doc, (draft) => {
     if (path.length === 1 && path[0] === "gallery") {
@@ -771,7 +715,6 @@ export function placeImage(doc: CastDocument, path: Path, image: CastImage): Edi
   });
 }
 
-/** 画像の枠の種類（切り抜きの比率・大きさ） */
 export function imageKindAt(path: Path): ImageKind | null {
   const [head, key] = path;
   if (head === "cast" && (key === "avatar" || key === "cover" || key === "background")) return key;

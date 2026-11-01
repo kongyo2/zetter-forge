@@ -9,7 +9,6 @@ import {
 } from "@shared/images";
 import { describe, expect, it } from "vitest";
 
-/** 画質に応じて dataURL の長さが変わるだけの擬似キャンバス */
 function fakeCanvas(
   width: number,
   height: number,
@@ -76,9 +75,7 @@ describe("encodeWithinLimit", () => {
         return make(width, height);
       },
     });
-    // 0.62 で 669,600 字 → 倍率 min(0.82, √(400000 / 669600) × 0.9) ≒ 0.6956 → 626×834
     expect(sizes).toEqual([[626, 834]]);
-    // 626×834 は画質 0.7 で収まる
     expect(result?.length).toBe(Math.round(626 * 834 * 0.7));
   });
 
@@ -128,9 +125,7 @@ describe("encodeWithinLimit", () => {
       });
       return { result, sizes };
     };
-    // 長さが上限の 12.5 倍なら倍率は約 0.25 で、幅も高さも下限で止まる。そこで短辺が 320 以下になって終わる
     expect(shrink(400, 1000, 5_000_000)).toEqual({ result: null, sizes: [[240, 320]] });
-    // 倍率 0.805 で、高さだけが下限の 320 で止まる
     expect(shrink(900, 330, 500000)).toEqual({ result: null, sizes: [[724, 320]] });
   });
 
@@ -197,7 +192,6 @@ describe("IMAGE_SPECS", () => {
       ["background", "チャット画面に敷かれる範囲", true, false, 400000],
       ["gallery", "残したい範囲（自由に切れます）", true, false, 400000],
     ]);
-    // ペルソナはアイコンと同じ 400×400。登場人物は Zetter が 1200×400 を指定している（正方形の枠から 400×400 になる）
     expect(IMAGE_SPECS.persona).toMatchObject({
       aspectRatio: 1,
       output: { width: 400, height: 400 },

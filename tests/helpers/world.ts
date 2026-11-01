@@ -1,5 +1,3 @@
-// 仲介役（Mediator）を、外とのやり取りを偽物にして動かす。頼まれた処理は止めておき、
-// テストが好きな順に結果を返せる（保存中に別の操作をする、などを再現するため）。
 import { type CastDocument, createEmptyCast } from "@shared/cast";
 import type { CopyLog } from "@shared/copyLog";
 import type { CroppedImage } from "@shared/images";
@@ -29,16 +27,12 @@ interface Call {
 export interface World {
   mediator: Mediator;
   calls: Call[];
-  /** まだ返していない method の呼び出しを 1 つ取り出す（なければ失敗） */
   take(method: string): Call;
-  /** まだ返していない呼び出しの名前 */
   pending(): string[];
-  /** 返した結果が仲介役に届くまで待つ */
   flush(): Promise<void>;
   dispatch(event: AppEvent): void;
   session(): Session;
   vm(): RootVM;
-  /** 時刻を進める（予約した知らせの片付けも行う） */
   advance(ms: number): void;
   now: number;
 }
@@ -54,7 +48,6 @@ export function createWorld(): World {
           method,
           args,
           resolve: resolve as (value: unknown) => void,
-          // メインプロセスからのエラーは contextBridge を越えると文言しか残らないので、同じにする
           reject: crossesBridge
             ? (error) => reject(new Error(error instanceof Error ? error.message : String(error)))
             : reject,
@@ -149,7 +142,6 @@ export function loadedCast(folder: string, doc: CastDocument, copyLog: CopyLog =
   return { folder, doc, imageUrls: {}, notices: [], copyLog };
 }
 
-/** saveCast に届いた中身を、メインプロセスが保存したときと同じ形で返す */
 export function savedFrom(
   request: SaveCastRequest,
   folder = request.folder ?? "saved-folder",
@@ -183,7 +175,6 @@ export const croppedImage: CroppedImage = {
   bytes: 3,
 };
 
-/** MCP サーバーの設定と様子（既定は使っていない） */
 export function mcpInfo(
   settings: Partial<McpSettings> = {},
   status: McpStatus = { state: "off" },
@@ -191,7 +182,6 @@ export function mcpInfo(
   return { settings: { ...DEFAULT_MCP_SETTINGS, ...settings }, status };
 }
 
-/** 起動して、一覧と MCP サーバーの設定が読めたところまで進める */
 export async function started(
   casts: Partial<CastSummary>[] = [],
   mcp: McpInfo = mcpInfo(),
@@ -204,7 +194,6 @@ export async function started(
   return world;
 }
 
-/** folder のキャストを開いたところまで進める */
 export async function opened(world: World, folder: string, doc: CastDocument): Promise<void> {
   world.dispatch({ type: "library/open", folder });
   world.take("loadCast").resolve(loadedCast(folder, doc));
