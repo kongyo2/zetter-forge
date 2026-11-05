@@ -79,11 +79,14 @@ export interface EncodableCanvas {
 
 export type CropCanvas = EncodableCanvas;
 
-export interface CroppedImage {
-  dataUrl: string;
+export interface ImageMetrics {
   width: number;
   height: number;
   bytes: number;
+}
+
+export interface CroppedImage extends ImageMetrics {
+  dataUrl: string;
 }
 
 export function dataUrlBytes(dataUrl: string): number {
@@ -96,26 +99,25 @@ export interface CanvasFactory<C extends EncodableCanvas> {
   resize(source: C, width: number, height: number): C | null;
 }
 
+function jpegWithin(canvas: EncodableCanvas, maxLength: number): string {
+  let dataUrl = "";
+  for (const quality of JPEG_QUALITIES) {
+    dataUrl = canvas.toDataURL("image/jpeg", quality);
+    if (dataUrl.length <= maxLength) break;
+  }
+  return dataUrl;
+}
+
 export function encodeWithinLimit<C extends EncodableCanvas>(
   canvas: C,
   spec: Pick<ImageSpec, "maxDataUrlLength" | "shrinkToFit">,
   factory?: CanvasFactory<C>,
 ): string | null {
-  if (!spec.shrinkToFit || !factory) {
-    let dataUrl = "";
-    for (const quality of JPEG_QUALITIES) {
-      dataUrl = canvas.toDataURL("image/jpeg", quality);
-      if (dataUrl.length <= spec.maxDataUrlLength) return dataUrl;
-    }
-    return null;
-  }
   let source = canvas;
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    let dataUrl = "";
-    for (const quality of JPEG_QUALITIES) {
-      dataUrl = source.toDataURL("image/jpeg", quality);
-      if (dataUrl.length <= spec.maxDataUrlLength) return dataUrl;
-    }
+    const dataUrl = jpegWithin(source, spec.maxDataUrlLength);
+    if (dataUrl.length <= spec.maxDataUrlLength) return dataUrl;
+    if (!spec.shrinkToFit || !factory) return null;
     if (Math.min(source.width, source.height) <= 320) return null;
     const scale = Math.min(0.82, Math.sqrt(spec.maxDataUrlLength / dataUrl.length) * 0.9);
     const width = Math.max(240, Math.floor(source.width * scale));
@@ -128,9 +130,10 @@ export function encodeWithinLimit<C extends EncodableCanvas>(
   return null;
 }
 
+const FIRST_SLOT_NUMBER: Partial<Record<ImageKind, number>> = { gallery: 1, member: 2, persona: 1 };
+
 export function imageSlotName(kind: ImageKind, index?: number): string {
-  if (kind === "gallery") return `gallery-${String((index ?? 0) + 1).padStart(2, "0")}`;
-  if (kind === "member") return `member-${String((index ?? 0) + 2).padStart(2, "0")}`;
-  if (kind === "persona") return `persona-${String((index ?? 0) + 1).padStart(2, "0")}`;
-  return kind;
+  const first = FIRST_SLOT_NUMBER[kind];
+  if (first === undefined) return kind;
+  return `${kind}-${String((index ?? 0) + first).padStart(2, "0")}`;
 }

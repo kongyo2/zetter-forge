@@ -1,36 +1,37 @@
 import {
   AFFINITY_BASE_SUBJECT,
   AFFINITY_PACES,
+  AFFINITY_RANGE_FIELDS,
   AFFINITY_STAGE_FIELDS,
   type AffinityConfig,
+  filledStageFields,
   sendableMembers,
 } from "@shared/cast";
 import { LIMITS } from "@shared/limits";
-import { codePointLength, formatCount } from "@shared/text";
+import { codePointLength, formatCount, numberText } from "@shared/text";
 import {
+  affinityRange,
   affinityStageTextLength,
   duplicateStageIndexes,
+  isIntegerWithin,
   validateAffinityConfig,
 } from "@shared/validate";
 
 import { castInk } from "../ink";
+import { memberLabel, selfLabel, stageLabel } from "../labels";
 import { AFFINITY_DEFAULT, type Path } from "../types";
 import type { AffinityConfigVM, AffinityTabVM, RulerVM, StageVM, TabItemVM } from "../viewModels";
-import { type Context, avatar, imageSrc, textField, toggle } from "./common";
+import { type Context, avatar, imageSrc, meterTone, textField, toggle } from "./common";
 
 function ruler(config: AffinityConfig, open: number): RulerVM | null {
-  const { minValue: min, maxValue: max, initialValue: initial } = config;
-  if (min === null || max === null || !Number.isSafeInteger(min) || !Number.isSafeInteger(max))
-    return null;
-  if (max <= min) return null;
+  const range = affinityRange(config);
+  if (!range) return null;
+  const { min, max } = range;
+  const initial = config.initialValue;
   const starts = config.stages.map((stage) => stage.startValue);
   const ordered = starts.every(
     (value, index) =>
-      value !== null &&
-      Number.isSafeInteger(value) &&
-      value >= min &&
-      value <= max &&
-      (index === 0 || value > (starts[index - 1] as number)),
+      isIntegerWithin(value, min, max) && (index === 0 || value > (starts[index - 1] as number)),
   );
   if (!ordered || starts.length === 0) return null;
   const percent = (value: number) => ((value - min) / (max - min)) * 100;
@@ -46,12 +47,12 @@ function ruler(config: AffinityConfig, open: number): RulerVM | null {
       label: `段階${index + 1}（${from}〜）`,
     };
   });
-  const showInitial =
-    initial !== null && Number.isSafeInteger(initial) && initial >= min && initial <= max;
   return {
     bands,
     max,
-    initial: showInitial ? { left: `${percent(initial)}%`, value: initial } : null,
+    initial: isIntegerWithin(initial, min, max)
+      ? { left: `${percent(initial)}%`, value: initial }
+      : null,
     caption: bands.map((band) => `段階${band.index + 1}は${band.from}から`).join("、"),
   };
 }
@@ -66,11 +67,10 @@ function configVM(
   const duplicates = duplicateStageIndexes(value);
   const current = openStage >= value.stages.length ? 0 : openStage;
   const itemNameLength = codePointLength(value.itemName);
-  const number = (input: number | null) => (input === null ? "" : String(input));
   const stages: StageVM[] = value.stages.map((stage, index) => {
     const stageScope = [...scope, "stages", index];
     const length = affinityStageTextLength(stage);
-    const filled = AFFINITY_STAGE_FIELDS.filter((field) => stage[field.key].trim());
+    const filled = filledStageFields(stage);
     return {
       index,
       open: index === current,
@@ -84,8 +84,8 @@ function configVM(
       filled: `${filled.length}/${AFFINITY_STAGE_FIELDS.length}欄`,
       start: textField(ctx, stageScope, ["startValue"], {
         label: "開始値",
-        ariaLabel: `段階${index + 1}の開始値`,
-        value: number(stage.startValue),
+        ariaLabel: stageLabel(index, "開始値"),
+        value: numberText(stage.startValue),
         plain: true,
         invalid: duplicates.has(index),
         commitOnBlur: index > 0,
@@ -96,7 +96,7 @@ function configVM(
       fields: AFFINITY_STAGE_FIELDS.map((field) =>
         textField(ctx, stageScope, [field.key], {
           label: field.label,
-          ariaLabel: `段階${index + 1}の${field.label}`,
+          ariaLabel: stageLabel(index, field.label),
           value: stage[field.key],
           placeholder: field.multiline ? "返事で分かるように書く" : "例: 名前で呼ぶ",
           multiline: field.multiline,
@@ -106,7 +106,7 @@ function configVM(
       canRemove: value.stages.length > 1,
       counter: {
         text: `6欄の合計 ${length}/${formatCount(LIMITS.affinityStageText)}字`,
-        tone: length > LIMITS.affinityStageText ? "over" : length >= 900 ? "near" : "normal",
+        tone: meterTone(length, LIMITS.affinityStageText),
         aside: null,
       },
     };
@@ -121,16 +121,10 @@ function configVM(
         aside: null,
       },
     }),
-    ranges: (
-      [
-        ["minValue", "最小値"],
-        ["maxValue", "最大値"],
-        ["initialValue", "初期値"],
-      ] as const
-    ).map(([key, label]) =>
-      textField(ctx, scope, [key], {
-        label,
-        value: number(value[key]),
+    ranges: AFFINITY_RANGE_FIELDS.map((field) =>
+      textField(ctx, scope, [field.key], {
+        label: field.label,
+        value: numberText(value[field.key]),
         plain: true,
         numeric: { min: null, max: null, readOnly: false },
       }),
@@ -172,7 +166,7 @@ export function presentAffinity(ctx: Context): AffinityTabVM {
     { key: AFFINITY_DEFAULT, label: "共通設定", ink: null, image: null, blurred: false },
     {
       key: AFFINITY_BASE_SUBJECT,
-      label: doc.name.trim() || "本体",
+      label: selfLabel(doc),
       ink: castInk(0),
       image: imageSrc(session, doc.avatar),
       blurred: doc.avatarBlurred,
@@ -181,7 +175,7 @@ export function presentAffinity(ctx: Context): AffinityTabVM {
       const index = doc.members.indexOf(member);
       return {
         key: member.id,
-        label: member.name.trim() || `${index + 2}人目`,
+        label: memberLabel(member, index),
         ink: castInk(index + 1),
         image: imageSrc(session, member.avatar),
         blurred: false,

@@ -3,37 +3,47 @@ import type { CopyLog } from "./copyLog";
 import type { McpInfo, McpSettings } from "./mcp";
 import type { RemoteReply, RemoteRequest } from "./remote";
 
-export interface CastSummary {
+export interface CastHeader {
   folder: string;
-  id: string;
   name: string;
   tagline: string;
   mode: CastMode;
   status: CastStatus;
   updatedAt: string;
+}
+
+export interface CastSummary extends CastHeader {
+  id: string;
   avatarUrl: string | null;
   avatarBlurred: boolean;
+}
+
+export interface FolderError {
+  folder: string;
+  message: string;
 }
 
 export interface LibraryListing {
   root: string;
   casts: CastSummary[];
-  errors: { folder: string; message: string }[];
+  errors: FolderError[];
 }
 
-export interface LoadedCast {
+export interface StoredCast {
   folder: string;
   doc: CastDocument;
-  imageUrls: Record<string, string>;
   notices: string[];
+}
+
+interface ShownCast extends StoredCast {
+  imageUrls: Record<string, string>;
+}
+
+export interface LoadedCast extends ShownCast {
   copyLog: CopyLog;
 }
 
-export interface SavedCast {
-  folder: string;
-  doc: CastDocument;
-  imageUrls: Record<string, string>;
-  notices: string[];
+export interface SavedCast extends ShownCast {
   replacedImages: Record<string, CastImage>;
 }
 

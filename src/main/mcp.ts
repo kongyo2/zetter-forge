@@ -12,6 +12,7 @@ import {
   createMcpHandler,
 } from "@modelcontextprotocol/server";
 import { PLAY_GUIDE_FIELDS } from "@shared/cast";
+import { errorMessage } from "@shared/errors";
 import type { JsonObject } from "@shared/json";
 import { LIMITS } from "@shared/limits";
 import { type McpSettings, type McpStatus, mcpUrl } from "@shared/mcp";
@@ -24,7 +25,7 @@ import {
 import { formatCount } from "@shared/text";
 import * as z from "zod";
 
-import { listCasts, loadCast } from "./library";
+import { listCasts, loadCast, summarize } from "./library";
 
 const MCP_PATH = "/mcp";
 
@@ -119,10 +120,6 @@ function fromReply(reply: RemoteReply): CallToolResult {
   return reply.ok ? jsonResult(reply.result) : errorResult(reply.error, reply.detail);
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 async function openEditor(deps: McpDeps): Promise<EditorReport | null> {
   const status = await deps.remote({ kind: "status" });
   return status.ok ? ((status.result.editor as EditorReport | null) ?? null) : null;
@@ -135,6 +132,13 @@ export function createZetterServer(deps: McpDeps): McpServer {
   );
   const local = { openWorldHint: false };
   const reading = { ...local, readOnlyHint: true };
+  const writing = (destructiveHint: boolean, idempotentHint: boolean) => ({
+    ...local,
+    readOnlyHint: false,
+    destructiveHint,
+    idempotentHint,
+  });
+  const relay = async (request: RemoteRequest) => fromReply(await deps.remote(request));
 
   server.registerTool(
     "get_status",
@@ -145,7 +149,7 @@ export function createZetterServer(deps: McpDeps): McpServer {
       inputSchema: noInput,
       annotations: reading,
     },
-    async () => fromReply(await deps.remote({ kind: "status" })),
+    async () => relay({ kind: "status" }),
   );
 
   server.registerTool(
@@ -163,14 +167,9 @@ export function createZetterServer(deps: McpDeps): McpServer {
         const [{ casts, errors }, editor] = await Promise.all([listCasts(root), openEditor(deps)]);
         return jsonResult({
           root,
-          casts: casts.map(({ folder, doc }) => ({
-            folder,
-            name: doc.name,
-            tagline: doc.tagline,
-            mode: doc.mode,
-            status: doc.status,
-            updatedAt: doc.updatedAt,
-            ...(editor?.folder === folder
+          casts: casts.map((cast) => ({
+            ...summarize(cast),
+            ...(editor?.folder === cast.folder
               ? { open: true, unsaved: editor.state === "unsaved" }
               : {}),
           })),
@@ -178,7 +177,7 @@ export function createZetterServer(deps: McpDeps): McpServer {
           editor,
         });
       } catch (error) {
-        return errorResult(`保存先のフォルダを読めませんでした: ${messageOf(error)}`);
+        return errorResult(`保存先のフォルダを読めませんでした: ${errorMessage(error)}`);
       }
     },
   );
@@ -193,7 +192,7 @@ export function createZetterServer(deps: McpDeps): McpServer {
       annotations: reading,
     },
     async ({ folder }) => {
-      if (folder === undefined) return fromReply(await deps.remote({ kind: "read" }));
+      if (folder === undefined) return relay({ kind: "read" });
       try {
         const loaded = await loadCast(deps.libraryRoot(), folder);
         const editor = await openEditor(deps);
@@ -211,7 +210,7 @@ export function createZetterServer(deps: McpDeps): McpServer {
             : {}),
         });
       } catch (error) {
-        return errorResult(`「${folder}」を読めませんでした: ${messageOf(error)}`);
+        return errorResult(`「${folder}」を読めませんでした: ${errorMessage(error)}`);
       }
     },
   );
@@ -225,7 +224,7 @@ export function createZetterServer(deps: McpDeps): McpServer {
       inputSchema: noInput,
       annotations: reading,
     },
-    async () => fromReply(await deps.remote({ kind: "transfer" })),
+    async () => relay({ kind: "transfer" }),
   );
 
   server.registerTool(
@@ -235,9 +234,9 @@ export function createZetterServer(deps: McpDeps): McpServer {
       description:
         "保存したキャストを編集画面で開く。いまのキャストに保存していない変更があると確かめのダイアログが出るので、answer_dialog で答える。",
       inputSchema: openInput,
-      annotations: { ...local, readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      annotations: writing(false, true),
     },
-    async ({ folder }) => fromReply(await deps.remote({ kind: "open", folder })),
+    async ({ folder }) => relay({ kind: "open", folder }),
   );
 
   server.registerTool(
@@ -247,9 +246,9 @@ export function createZetterServer(deps: McpDeps): McpServer {
       description:
         "新しいキャストを編集画面に作る（Zetter の新規作成と同じ既定値）。保存するまでフォルダはできない。いまのキャストに保存していない変更があると確かめのダイアログが出る。",
       inputSchema: noInput,
-      annotations: { ...local, readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+      annotations: writing(false, false),
     },
-    async () => fromReply(await deps.remote({ kind: "new" })),
+    async () => relay({ kind: "new" }),
   );
 
   server.registerTool(
@@ -258,17 +257,15 @@ export function createZetterServer(deps: McpDeps): McpServer {
       title: "キャストを書き換える",
       description: EDIT_DESCRIPTION,
       inputSchema: editInput,
-      annotations: { ...local, readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+      annotations: writing(true, false),
     },
     async ({ edits }) =>
-      fromReply(
-        await deps.remote({
-          kind: "edit",
-          edits: edits.map(({ value, ...edit }) =>
-            value === undefined ? edit : { ...edit, value: String(value) },
-          ),
-        }),
-      ),
+      relay({
+        kind: "edit",
+        edits: edits.map(({ value, ...edit }) =>
+          value === undefined ? edit : { ...edit, value: String(value) },
+        ),
+      }),
   );
 
   server.registerTool(
@@ -278,9 +275,9 @@ export function createZetterServer(deps: McpDeps): McpServer {
       description:
         "編集画面で開いているキャストを保存する。新しいキャストは保存先にフォルダができる（folder を返す）。保存のたびに前の版を history に残す。",
       inputSchema: noInput,
-      annotations: { ...local, readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+      annotations: writing(true, true),
     },
-    async () => fromReply(await deps.remote({ kind: "save" })),
+    async () => relay({ kind: "save" }),
   );
 
   server.registerTool(
@@ -290,9 +287,9 @@ export function createZetterServer(deps: McpDeps): McpServer {
       description:
         "画面に出ている確かめのダイアログに答える。choice は dialog.choices の id（save: 保存して続ける、discard: 保存しないで続ける、remove: 消す など）か、取りやめるなら cancel。",
       inputSchema: answerInput,
-      annotations: { ...local, readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+      annotations: writing(true, false),
     },
-    async ({ choice }) => fromReply(await deps.remote({ kind: "answer", choice })),
+    async ({ choice }) => relay({ kind: "answer", choice }),
   );
 
   return server;
@@ -303,7 +300,7 @@ function listenFailure(error: unknown, port: number): string {
   if (code === "EADDRINUSE")
     return `ポート ${port} はほかのアプリが使っています。別の番号にしてください。`;
   if (code === "EACCES") return `ポート ${port} は使えません。別の番号にしてください。`;
-  return messageOf(error);
+  return errorMessage(error);
 }
 
 export class McpHost {

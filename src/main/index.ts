@@ -2,8 +2,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { CastDocument } from "@shared/cast";
 import type { CopyLog } from "@shared/copyLog";
+import { errorMessage, failure } from "@shared/errors";
 import type {
   CastSummary,
   DeleteCastResult,
@@ -13,6 +13,7 @@ import type {
   MenuCommand,
   SaveCastRequest,
   SaveCastResult,
+  StoredCast,
 } from "@shared/ipc";
 import {
   DEFAULT_MCP_SETTINGS,
@@ -47,6 +48,7 @@ import {
   loadCast,
   referencedImages,
   saveCast,
+  summarize,
   writeCopyLog,
 } from "./library";
 import { McpHost, createZetterServer } from "./mcp";
@@ -124,22 +126,21 @@ function imageUrl(folder: string, relative: string): string {
   return `${IMAGE_SCHEME}://cast/${encodeURIComponent(folder)}/${parts}`;
 }
 
-function imageUrlsFor(folder: string, doc: CastDocument): Record<string, string> {
-  return Object.fromEntries(referencedImages(doc).map((file) => [file, imageUrl(folder, file)]));
+function withImageUrls<T extends StoredCast>(cast: T): T & { imageUrls: Record<string, string> } {
+  const files = referencedImages(cast.doc);
+  return {
+    ...cast,
+    imageUrls: Object.fromEntries(files.map((file) => [file, imageUrl(cast.folder, file)])),
+  };
 }
 
 async function listing(): Promise<LibraryListing> {
   const { casts, errors } = await listCasts(settings.libraryRoot);
-  const summaries: CastSummary[] = casts.map(({ folder, doc }) => ({
-    folder,
-    id: doc.id,
-    name: doc.name,
-    tagline: doc.tagline,
-    mode: doc.mode,
-    status: doc.status,
-    updatedAt: doc.updatedAt,
-    avatarUrl: doc.avatar ? imageUrl(folder, doc.avatar.file) : null,
-    avatarBlurred: doc.avatarBlurred,
+  const summaries: CastSummary[] = casts.map((cast) => ({
+    ...summarize(cast),
+    id: cast.doc.id,
+    avatarUrl: cast.doc.avatar ? imageUrl(cast.folder, cast.doc.avatar.file) : null,
+    avatarBlurred: cast.doc.avatarBlurred,
   }));
   return { root: settings.libraryRoot, casts: summaries, errors };
 }
@@ -150,7 +151,7 @@ function handle<A extends unknown[], T>(channel: string, task: (...args: A) => P
       return { ok: true, value: await task(...(args as A)) };
     } catch (error) {
       console.error(`[${channel}]`, error);
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return failure(error);
     }
   });
 }
@@ -189,10 +190,9 @@ function registerIpc(): void {
       throw error;
     }
   });
-  handle("cast:load", async (folder: string): Promise<LoadedCast> => {
-    const loaded = await loadCast(settings.libraryRoot, folder);
-    return { ...loaded, imageUrls: imageUrlsFor(loaded.folder, loaded.doc) };
-  });
+  handle("cast:load", async (folder: string): Promise<LoadedCast> =>
+    withImageUrls(await loadCast(settings.libraryRoot, folder)),
+  );
   handle("cast:save", async (request: SaveCastRequest): Promise<SaveCastResult> => {
     try {
       const saved = await saveCast(settings.libraryRoot, {
@@ -200,16 +200,7 @@ function registerIpc(): void {
         doc: request.doc,
         pendingImages: request.pendingImages,
       });
-      return {
-        kind: "saved",
-        cast: {
-          folder: saved.folder,
-          doc: saved.doc,
-          notices: saved.notices,
-          imageUrls: imageUrlsFor(saved.folder, saved.doc),
-          replacedImages: saved.replacedImages,
-        },
-      };
+      return { kind: "saved", cast: withImageUrls(saved) };
     } catch (error) {
       if (isCastMissing(error)) return { kind: "missing", message: error.message };
       throw error;
@@ -300,11 +291,16 @@ function showAbout(): void {
 
 function buildMenu(): void {
   const mac = process.platform === "darwin";
+  const settingsItem = {
+    label: "設定…",
+    accelerator: "CmdOrCtrl+,",
+    click: () => sendCommand("settings"),
+  };
   const openLibrary = () =>
     void openLibraryFolder().catch((error: unknown) =>
       dialog.showErrorBox(
         APP_NAME,
-        `ライブラリのフォルダを開けませんでした。\n${error instanceof Error ? error.message : String(error)}`,
+        `ライブラリのフォルダを開けませんでした。\n${errorMessage(error)}`,
       ),
     );
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -315,7 +311,7 @@ function buildMenu(): void {
             submenu: [
               { label: `${APP_NAME} について`, role: "about" as const },
               { type: "separator" as const },
-              { label: "設定…", accelerator: "CmdOrCtrl+,", click: () => sendCommand("settings") },
+              settingsItem,
               { type: "separator" as const },
               { label: "サービス", role: "services" as const },
               { type: "separator" as const },
@@ -335,12 +331,7 @@ function buildMenu(): void {
         { label: "保存", accelerator: "CmdOrCtrl+S", click: () => sendCommand("save") },
         { type: "separator" },
         { label: "ライブラリのフォルダを開く", click: openLibrary },
-        ...(mac
-          ? []
-          : [
-              { type: "separator" as const },
-              { label: "設定…", accelerator: "CmdOrCtrl+,", click: () => sendCommand("settings") },
-            ]),
+        ...(mac ? [] : [{ type: "separator" as const }, settingsItem]),
         { type: "separator" },
         mac ? { label: "ウィンドウを閉じる", role: "close" } : { label: "終了", role: "quit" },
       ],

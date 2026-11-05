@@ -6,17 +6,15 @@ import type { McpInfo } from "@shared/mcp";
 
 import {
   AFFINITY_DEFAULT,
+  type FocusTarget,
   MAIN_CHARACTER,
   type Path,
   type PickedFile,
-  type Selection,
   type ViewTab,
 } from "./types";
 
-interface FocusRequest {
-  path: Path;
+export interface FocusRequest extends FocusTarget {
   nonce: number;
-  selection: Selection | null;
 }
 
 export interface SessionUi {

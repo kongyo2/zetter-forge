@@ -1,10 +1,10 @@
 import type { CastDocument, CastImage } from "@shared/cast";
+import { type Path, pathText, samePath } from "@shared/path";
 import { formatCount, utf16Length } from "@shared/text";
 
-import { isPendingImage } from "../session";
+import { savedImageFile } from "../session";
 import type { AppState, Session } from "../state";
 import { type TransferItem, transferItems, transferStatus } from "../transfer";
-import { type Path, pathKey, samePath } from "../types";
 import type {
   AvatarVM,
   CopyVM,
@@ -28,10 +28,14 @@ export function makeContext(state: AppState, session: Session): Context {
   return { state, session, doc: session.doc, items };
 }
 
+export function meterTone(length: number, max: number): CounterVM["tone"] {
+  return length > max ? "over" : length >= max * 0.9 ? "near" : "normal";
+}
+
 export function counter(length: number, max: number, unit = ""): CounterVM {
   return {
     text: `${formatCount(length)}/${formatCount(max)}${unit}`,
-    tone: length > max ? "over" : length >= max * 0.9 ? "near" : "normal",
+    tone: meterTone(length, max),
     aside: null,
   };
 }
@@ -51,13 +55,17 @@ export function moveVM(index: number, length: number, removeLabel: string | null
   return { canUp: index > 0, canDown: index < length - 1, removeLabel };
 }
 
+export function flashOf(ctx: Context, key: string): number | null {
+  const flash = ctx.session.ui.flash;
+  return flash?.key === key ? flash.nonce : null;
+}
+
 export function copyVM(ctx: Context, path: Path): CopyVM | null {
-  const item = ctx.items.get(pathKey(path));
+  const item = ctx.items.get(pathText(path));
   if (!item || item.kind === "setting" || item.skip === "empty") return null;
-  if (item.kind === "image" && (!ctx.session.folder || isPendingImage(item.image))) return null;
+  if (item.kind === "image" && !savedImageFile(ctx.session.folder, item.image)) return null;
   const status = transferStatus({ ...item, skip: null }, ctx.session.copyLog);
   const what = item.kind === "image" ? "ファイルの場所" : "内容";
-  const flash = ctx.session.ui.flash;
   return {
     state: status === "done" ? "done" : status === "changed" ? "changed" : "todo",
     title:
@@ -66,7 +74,7 @@ export function copyVM(ctx: Context, path: Path): CopyVM | null {
         : status === "changed"
           ? `コピーしたあとに書き換えました（${what}をコピーし直す）`
           : `Zetter に貼るために${what}をコピー`,
-    flash: flash?.key === item.key ? flash.nonce : null,
+    flash: flashOf(ctx, item.key),
   };
 }
 
@@ -75,6 +83,11 @@ function focusVM(ctx: Context, path: Path): FocusVM | null {
   return focus && samePath(focus.path, path)
     ? { nonce: focus.nonce, selection: focus.selection }
     : null;
+}
+
+function fieldLinks(ctx: Context, scope: Path, name: Path) {
+  const path = [...scope, ...name];
+  return { copy: copyVM(ctx, path), focus: focusVM(ctx, path) };
 }
 
 type TextOptions = Partial<Omit<TextFieldVM, "name" | "label" | "value">> & {
@@ -88,7 +101,7 @@ export function textField(
   name: Path,
   options: TextOptions,
 ): TextFieldVM {
-  const path = [...scope, ...name];
+  const { copy, focus } = fieldLinks(ctx, scope, name);
   return {
     name,
     ariaLabel: null,
@@ -105,9 +118,9 @@ export function textField(
     error: null,
     warning: null,
     counter: null,
-    copy: copyVM(ctx, path),
+    copy,
     chips: null,
-    focus: focusVM(ctx, path),
+    focus,
     commitOnBlur: false,
     numeric: null,
     ...options,
@@ -136,7 +149,7 @@ export function imageField(
   options: Pick<ImageFieldVM, "label" | "shape"> &
     Partial<Pick<ImageFieldVM, "blurred" | "removeLabel">>,
 ): ImageFieldVM {
-  const path = [...scope, ...name];
+  const { copy, focus } = fieldLinks(ctx, scope, name);
   return {
     name,
     src: imageSrc(ctx.session, image),
@@ -146,10 +159,22 @@ export function imageField(
       : null,
     removeLabel: "画像を外す",
     multiple: false,
-    copy: copyVM(ctx, path),
-    canShowFile: !!image && !!ctx.session.folder && !isPendingImage(image),
-    focus: focusVM(ctx, path),
+    copy,
+    canShowFile: savedImageFile(ctx.session.folder, image) !== null,
+    focus,
     ...options,
+  };
+}
+
+export function castAvatar(ctx: Context): { avatar: ImageFieldVM; blurred: ToggleVM } {
+  const { doc } = ctx;
+  return {
+    avatar: imageField(ctx, ["cast"], ["avatar"], doc.avatar, {
+      label: "アイコン",
+      shape: "circle",
+      blurred: doc.avatarBlurred,
+    }),
+    blurred: toggle(["avatarBlurred"], "この画像をぼかして表示する", doc.avatarBlurred),
   };
 }
 

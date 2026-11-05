@@ -1,4 +1,4 @@
-import { isRecord } from "./json";
+import { asRecord, booleanOr, isRecord } from "./json";
 
 export interface McpSettings {
   enabled: boolean;
@@ -41,9 +41,9 @@ export function isMcpSettings(value: unknown): value is McpSettings {
 }
 
 export function normalizeMcpSettings(raw: unknown): McpSettings {
-  const source = isRecord(raw) ? raw : {};
+  const source = asRecord(raw);
   return {
-    enabled: source.enabled === true,
+    enabled: booleanOr(source.enabled, DEFAULT_MCP_SETTINGS.enabled),
     port: isPort(source.port) ? source.port : DEFAULT_MCP_SETTINGS.port,
   };
 }

@@ -1,8 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { isRecord } from "@shared/json";
+import { isRecord, stringOr } from "@shared/json";
 import { type McpSettings, normalizeMcpSettings } from "@shared/mcp";
+
+import { readJson, writeJson } from "./files";
 
 export interface AppSettings {
   libraryRoot: string;
@@ -11,13 +13,10 @@ export interface AppSettings {
 
 export async function readSettings(file: string, defaults: AppSettings): Promise<AppSettings> {
   try {
-    const raw: unknown = JSON.parse(await fs.readFile(file, "utf8"));
+    const raw = await readJson(file);
     if (isRecord(raw)) {
       return {
-        libraryRoot:
-          typeof raw.libraryRoot === "string" && raw.libraryRoot
-            ? raw.libraryRoot
-            : defaults.libraryRoot,
+        libraryRoot: stringOr(raw.libraryRoot) || defaults.libraryRoot,
         mcp: "mcp" in raw ? normalizeMcpSettings(raw.mcp) : defaults.mcp,
       };
     }
@@ -27,7 +26,5 @@ export async function readSettings(file: string, defaults: AppSettings): Promise
 
 export async function writeSettings(file: string, settings: AppSettings): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.tmp`;
-  await fs.writeFile(temp, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
-  await fs.rename(temp, file);
+  await writeJson(file, settings);
 }

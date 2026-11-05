@@ -1,6 +1,17 @@
 import type { GalleryItemVM, LorebookTabVM, MemoTabVM, PublishTabVM } from "../../app/viewModels";
 import { Link, useEmit } from "../chain";
-import { AddButton, CopyButton, Disclosure, Section, SortableRow, Toggle } from "../parts/basics";
+import {
+  AddButton,
+  CopyButton,
+  Disclosure,
+  EmitButton,
+  MiniCheck,
+  RowList,
+  Section,
+  SortableRow,
+  Subsection,
+  Toggle,
+} from "../parts/basics";
 import { IconFolder, IconPlus, IconRemove } from "../parts/icons";
 import { FilePicker, ImageField } from "../parts/ImageField";
 import { TextField } from "../parts/TextField";
@@ -8,20 +19,14 @@ import { TextField } from "../parts/TextField";
 function Lorebooks({ vm }: { vm: LorebookTabVM }) {
   return (
     <>
-      {vm.rows.length === 0 ? (
-        <p className="note empty">連動させる設定集はまだありません。</p>
-      ) : (
-        <ol className="rows">
-          {vm.rows.map((row) => (
-            <Link key={row.id} scope={[row.id]}>
-              <SortableRow index={row.index} move={row.move}>
-                <TextField vm={row.title} />
-                <TextField vm={row.note} />
-              </SortableRow>
-            </Link>
-          ))}
-        </ol>
-      )}
+      <RowList rows={vm.rows} empty="連動させる設定集はまだありません。" keyOf={(row) => row.id}>
+        {(row) => (
+          <SortableRow index={row.index} move={row.move}>
+            <TextField vm={row.title} />
+            <TextField vm={row.note} />
+          </SortableRow>
+        )}
+      </RowList>
       <div>
         <AddButton disabled={!vm.canAdd}>設定集を追加</AddButton>
       </div>
@@ -56,39 +61,33 @@ function GalleryItem({ vm }: { vm: GalleryItemVM }) {
       </div>
       <figcaption>
         <span className="gallery-size">{vm.size}</span>
-        <label className="mini-check">
-          <input
-            type="checkbox"
-            checked={vm.blur.checked}
-            onChange={(event) =>
-              emit({ type: "check", path: vm.blur.name, checked: event.target.checked })
-            }
-          />
+        <MiniCheck
+          checked={vm.blur.checked}
+          onChange={(checked) => emit({ type: "check", path: vm.blur.name, checked })}
+        >
           {vm.blur.label}
-        </label>
-        <button
-          type="button"
+        </MiniCheck>
+        <EmitButton
+          event={{ type: "remove", path: [] }}
           className="icon-button"
-          aria-label={`ギャラリー画像${vm.index + 1}を外す`}
+          ariaLabel={`ギャラリー画像${vm.index + 1}を外す`}
           title="外す"
-          onClick={() => emit({ type: "remove", path: [] })}
         >
           <IconRemove />
-        </button>
+        </EmitButton>
       </figcaption>
       {vm.copy || vm.canShowFile ? (
         <div className="gallery-actions">
           {vm.copy ? <CopyButton vm={vm.copy} name={[]} label="場所をコピー" /> : null}
           {vm.canShowFile ? (
-            <button
-              type="button"
+            <EmitButton
+              event={{ type: "show-file", path: [] }}
               className="icon-button"
-              aria-label={`ギャラリー画像${vm.index + 1}をフォルダで見る`}
+              ariaLabel={`ギャラリー画像${vm.index + 1}をフォルダで見る`}
               title="フォルダで見る"
-              onClick={() => emit({ type: "show-file", path: [] })}
             >
               <IconFolder />
-            </button>
+            </EmitButton>
           ) : null}
         </div>
       ) : null}
@@ -97,7 +96,6 @@ function GalleryItem({ vm }: { vm: GalleryItemVM }) {
 }
 
 function Tags({ vm }: { vm: PublishTabVM["tags"] }) {
-  const emit = useEmit();
   return (
     <>
       {vm.rows.length > 0 ? (
@@ -105,15 +103,14 @@ function Tags({ vm }: { vm: PublishTabVM["tags"] }) {
           {vm.rows.map((row) => (
             <li key={row.index} className="tag">
               <TextField vm={row.field} />
-              <button
-                type="button"
+              <EmitButton
+                event={{ type: "remove", path: [row.index] }}
                 className="icon-button"
-                aria-label={`タグ${row.index + 1}を外す`}
+                ariaLabel={`タグ${row.index + 1}を外す`}
                 title="外す"
-                onClick={() => emit({ type: "remove", path: [row.index] })}
               >
                 <IconRemove />
-              </button>
+              </EmitButton>
             </li>
           ))}
         </ul>
@@ -221,23 +218,17 @@ export function PublishTab({ vm }: { vm: PublishTabVM }) {
 
       <Disclosure summary="オプション設定" hint="設定の公開範囲・ページに出す情報">
         <Link scope={vm.scope}>
-          <div className="subsection">
-            <div className="subhead">
-              <h3>設定の公開範囲</h3>
-            </div>
+          <Subsection title="設定の公開範囲">
             <p className="note">既定では、キャストの中身は作者だけが見られます。</p>
             {vm.visibility.map((item) => (
               <Toggle key={item.name.join("/")} vm={item} />
             ))}
-          </div>
-          <div className="subsection">
-            <div className="subhead">
-              <h3>ページに出す情報</h3>
-            </div>
+          </Subsection>
+          <Subsection title="ページに出す情報">
             {vm.pageInfo.map((item) => (
               <Toggle key={item.name.join("/")} vm={item} />
             ))}
-          </div>
+          </Subsection>
         </Link>
       </Disclosure>
     </div>
@@ -245,19 +236,17 @@ export function PublishTab({ vm }: { vm: PublishTabVM }) {
 }
 
 function Memo({ vm }: { vm: MemoTabVM }) {
-  const emit = useEmit();
   return (
     <>
       <div className="inline-row url-row">
         <TextField vm={vm.url} />
-        <button
-          type="button"
+        <EmitButton
+          event={{ type: "open-url", path: vm.url.name }}
           className="btn btn-outline"
           disabled={!vm.canOpenUrl}
-          onClick={() => emit({ type: "open-url", path: vm.url.name })}
         >
           ブラウザで開く
-        </button>
+        </EmitButton>
       </div>
       <TextField vm={vm.memo} />
     </>
@@ -265,7 +254,6 @@ function Memo({ vm }: { vm: MemoTabVM }) {
 }
 
 export function MemoTab({ vm }: { vm: MemoTabVM }) {
-  const emit = useEmit();
   return (
     <div className="tab-body">
       <Section title="メモ" description="このアプリの中だけで使う欄です。Zetter には送られません。">
@@ -288,13 +276,9 @@ export function MemoTab({ vm }: { vm: MemoTabVM }) {
         </p>
         {vm.canOpenFolder ? (
           <div>
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={() => emit({ type: "editor/open-folder" })}
-            >
+            <EmitButton event={{ type: "editor/open-folder" }} className="btn btn-outline">
               フォルダを開く
-            </button>
+            </EmitButton>
           </div>
         ) : null}
       </Section>

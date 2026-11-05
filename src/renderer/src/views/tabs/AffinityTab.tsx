@@ -4,6 +4,7 @@ import {
   AddButton,
   CastTabs,
   Counter,
+  EmitButton,
   RemoveButton,
   Section,
   Select,
@@ -14,15 +15,10 @@ import { IconError } from "../parts/icons";
 import { TextField } from "../parts/TextField";
 
 function ResetToCommon() {
-  const emit = useEmit();
   return (
-    <button
-      type="button"
-      className="btn btn-plain"
-      onClick={() => emit({ type: "remove", path: [] })}
-    >
+    <EmitButton event={{ type: "remove", path: [] }} className="btn btn-plain">
       共通設定に戻す
-    </button>
+    </EmitButton>
   );
 }
 
@@ -159,7 +155,6 @@ export function AffinityTab({ vm }: { vm: AffinityTabVM }) {
 }
 
 function Affinity({ vm }: { vm: AffinityTabVM }) {
-  const emit = useEmit();
   const description =
     "会話の積み重ねに合わせて、キャラクターごとの態度を変えます。共通設定は、個別設定のないキャラ全員に使われます。本体や登場人物ごとに個別設定を作ったり、好感度を使わない設定にもできます。";
   const notice = vm.notice ? <p className="inline-notice">{vm.notice}</p> : null;
@@ -175,13 +170,9 @@ function Affinity({ vm }: { vm: AffinityTabVM }) {
             まだ設定されていません。設定を始めると4段階のひな形が入ります。
           </p>
           <div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => emit({ type: "add", path: [] })}
-            >
+            <EmitButton event={{ type: "add", path: [] }} className="btn btn-primary">
               好感度を設定する
-            </button>
+            </EmitButton>
           </div>
         </Section>
       ) : (
@@ -213,7 +204,6 @@ function Affinity({ vm }: { vm: AffinityTabVM }) {
 }
 
 function Subject({ sheet }: { sheet: NonNullable<AffinityTabVM["setup"]>["sheet"] }) {
-  const emit = useEmit();
   if (sheet.kind === "config") return <Config vm={sheet.config} />;
   if (sheet.kind === "disabled") {
     return (
@@ -238,20 +228,15 @@ function Subject({ sheet }: { sheet: NonNullable<AffinityTabVM["setup"]>["sheet"
         共通設定を使っています。このキャラだけ変えたいときは、個別設定を作ってください。
       </p>
       <div className="button-row">
-        <button
-          type="button"
-          className="btn btn-outline"
-          onClick={() => emit({ type: "add", path: [] })}
-        >
+        <EmitButton event={{ type: "add", path: [] }} className="btn btn-outline">
           個別設定を作る
-        </button>
-        <button
-          type="button"
+        </EmitButton>
+        <EmitButton
+          event={{ type: "check", path: ["disabled"], checked: true }}
           className="btn btn-plain"
-          onClick={() => emit({ type: "check", path: ["disabled"], checked: true })}
         >
           このキャラは好感度を使わない
-        </button>
+        </EmitButton>
       </div>
     </>
   );

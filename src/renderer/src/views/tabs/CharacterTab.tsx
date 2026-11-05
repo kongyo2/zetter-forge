@@ -1,16 +1,19 @@
 import type { CSSProperties } from "react";
 
 import type { CharacterSheetVM, CharacterTabVM, PartnerVM, ToneListVM } from "../../app/viewModels";
-import { Link, useEmit } from "../chain";
+import { Link } from "../chain";
 import { Allowance } from "../parts/Allowance";
 import {
   AddButton,
   CastTabs,
   Counter,
   Disclosure,
+  EmitButton,
   RemoveButton,
+  RowList,
   Section,
   SortableRow,
+  Subsection,
   TabMeaning,
   Toggle,
 } from "../parts/basics";
@@ -20,11 +23,7 @@ import { TextField } from "../parts/TextField";
 
 function Partner({ vm }: { vm: PartnerVM }) {
   return (
-    <div className="subsection">
-      <div className="subhead">
-        <h3>パートナー設定</h3>
-        <Counter vm={vm.counter} />
-      </div>
+    <Subsection title="パートナー設定" meta={<Counter vm={vm.counter} />}>
       <p className="note">
         パートナー（DM
         のようなやり取り）での、このキャラクターのふるまいです。5つの欄の合計で5,000字まで書けます。
@@ -32,34 +31,28 @@ function Partner({ vm }: { vm: PartnerVM }) {
       {vm.fields.map((field) => (
         <TextField key={field.name.join("/")} vm={field} />
       ))}
-    </div>
+    </Subsection>
   );
 }
 
 function Tones({ vm }: { vm: ToneListVM }) {
   return (
-    <div className="subsection">
-      <div className="subhead">
-        <h3>口調サンプル</h3>
-        <span className="counter">{vm.meta}</span>
-      </div>
+    <Subsection title="口調サンプル" meta={<span className="counter">{vm.meta}</span>}>
       <p className="note">口調例は基本の話し方の見本です。好感度の段階の話し方が優先されます。</p>
-      {vm.rows.length === 0 ? (
-        <p className="note empty">まだありません。3〜5件あると声が安定します。</p>
-      ) : (
-        <ol className="rows">
-          {vm.rows.map((row) => (
-            <Link key={row.index} scope={[row.index]}>
-              <SortableRow index={row.index} move={row.move} className="tone-row">
-                <TextField vm={row.situation} />
-                <TextField vm={row.example} />
-              </SortableRow>
-            </Link>
-          ))}
-        </ol>
-      )}
+      <RowList
+        rows={vm.rows}
+        empty="まだありません。3〜5件あると声が安定します。"
+        keyOf={(row) => row.index}
+      >
+        {(row) => (
+          <SortableRow index={row.index} move={row.move} className="tone-row">
+            <TextField vm={row.situation} />
+            <TextField vm={row.example} />
+          </SortableRow>
+        )}
+      </RowList>
       <AddButton disabled={!vm.canAdd}>口調サンプルを追加</AddButton>
-    </div>
+    </Subsection>
   );
 }
 
@@ -92,7 +85,6 @@ function Sheet({ vm }: { vm: CharacterSheetVM }) {
 }
 
 export function CharacterTab({ vm }: { vm: CharacterTabVM }) {
-  const emit = useEmit();
   const allowances = (
     <div className="allowances">
       {vm.allowances.map((allowance) => (
@@ -121,15 +113,14 @@ export function CharacterTab({ vm }: { vm: CharacterTabVM }) {
             <TabMeaning to={(id) => ({ type: "editor/character", id })}>
               <CastTabs items={vm.castTabs.items} label="編集するキャラクター" />
             </TabMeaning>
-            <button
-              type="button"
+            <EmitButton
+              event={{ type: "add", path: ["members"] }}
               className="btn btn-plain btn-small"
               disabled={!vm.castTabs.canAdd}
-              onClick={() => emit({ type: "add", path: ["members"] })}
             >
               <IconPlus />
               登場人物を追加
-            </button>
+            </EmitButton>
           </div>
         ) : null}
 

@@ -1,5 +1,6 @@
-import { type CastDocument, createEmptyCast } from "@shared/cast";
+import { type CastDocument, castImage, createEmptyCast, isPendingImage } from "@shared/cast";
 import type { CopyLog } from "@shared/copyLog";
+import { errorMessage } from "@shared/errors";
 import type { CroppedImage } from "@shared/images";
 import type {
   CastSummary,
@@ -48,9 +49,7 @@ export function createWorld(): World {
           method,
           args,
           resolve: resolve as (value: unknown) => void,
-          reject: crossesBridge
-            ? (error) => reject(new Error(error instanceof Error ? error.message : String(error)))
-            : reject,
+          reject: crossesBridge ? (error) => reject(new Error(errorMessage(error))) : reject,
         }),
       );
   const forge = (method: string) => call(method, true);
@@ -151,14 +150,9 @@ export function savedFrom(
   const swap = <T extends { file: string; width: number; height: number; bytes: number }>(
     image: T | null,
   ) => {
-    if (!image?.file.startsWith("pending:")) return image;
+    if (!image || !isPendingImage(image)) return image;
     const file = `images/${image.file.slice("pending:".length)}.jpg`;
-    replacedImages[image.file] = {
-      file,
-      width: image.width,
-      height: image.height,
-      bytes: image.bytes,
-    };
+    replacedImages[image.file] = castImage(file, image);
     return { ...image, file };
   };
   doc.avatar = swap(doc.avatar);

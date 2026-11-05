@@ -1,10 +1,14 @@
-import { type CSSProperties, Fragment, useId, useLayoutEffect, useRef } from "react";
+import { type CSSProperties, Fragment, useId, useRef } from "react";
 
 import type { ChipsVM, HintPart, TextFieldVM } from "../../app/viewModels";
 import { useEmit } from "../chain";
-import { Counter, CopyButton } from "./basics";
+import { Counter, CopyButton, useFocusRequest } from "./basics";
 
 type Element = HTMLInputElement | HTMLTextAreaElement;
+
+function isNumberInput(element: Element): boolean {
+  return element instanceof HTMLInputElement && element.type === "number";
+}
 
 function Hint({ parts }: { parts: HintPart[] }) {
   return (
@@ -47,25 +51,18 @@ export function TextField({ vm, className }: { vm: TextFieldVM; className?: stri
   const ref = useRef<Element | null>(null);
   const touched = useRef(false);
 
-  const nonce = vm.focus?.nonce;
-  useLayoutEffect(() => {
-    const element = ref.current;
-    const focus = vm.focus;
-    if (!element || !focus) return;
-    emit({ type: "reveal" });
+  useFocusRequest(vm.focus, ref, (element, focus) => {
     element.focus({ preventScroll: true });
     element.scrollIntoView({ block: "center" });
-    if (focus.selection && !(element instanceof HTMLInputElement && element.type === "number"))
+    if (focus.selection && !isNumberInput(element))
       element.setSelectionRange(focus.selection.start, focus.selection.end);
-  }, [nonce]);
+  });
 
   const onChip = (text: string) => {
     const element = ref.current;
     const end = vm.value.length;
     const selection =
-      element &&
-      touched.current &&
-      !(element instanceof HTMLInputElement && element.type === "number")
+      element && touched.current && !isNumberInput(element)
         ? { start: element.selectionStart ?? end, end: element.selectionEnd ?? end }
         : { start: end, end };
     emit({ type: "insert", path: vm.name, text, selection });

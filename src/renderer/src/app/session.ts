@@ -1,4 +1,4 @@
-import type { CastDocument, CastImage } from "@shared/cast";
+import { type CastDocument, type CastImage, imageSlots, isPendingImage } from "@shared/cast";
 
 export function canonicalJson(value: unknown): string {
   const normalize = (item: unknown): unknown => {
@@ -16,13 +16,10 @@ export function canonicalJson(value: unknown): string {
 }
 
 export function mapImages(doc: CastDocument, map: (image: CastImage) => CastImage): void {
-  if (doc.avatar) doc.avatar = map(doc.avatar);
-  if (doc.cover) doc.cover = map(doc.cover);
-  if (doc.background) doc.background = map(doc.background);
-  doc.gallery = doc.gallery.map((image) => ({ ...image, ...map(image) }));
-  for (const member of doc.members) if (member.avatar) member.avatar = map(member.avatar);
-  for (const persona of doc.recommendedPersonas)
-    if (persona.avatar) persona.avatar = map(persona.avatar);
+  for (const slot of imageSlots(doc)) {
+    const image = slot.get();
+    if (image) slot.set(map(image));
+  }
 }
 
 function imageFiles(doc: CastDocument): string[] {
@@ -46,22 +43,19 @@ export function usedPendingImages(
   return used;
 }
 
-export function isPendingImage(image: CastImage | null | undefined): boolean {
-  return !!image?.file.startsWith("pending:");
+export function savedImageFile(
+  folder: string | null,
+  image: CastImage | null | undefined,
+): { folder: string; file: string } | null {
+  return folder && image && !isPendingImage(image) ? { folder, file: image.file } : null;
 }
 
 export function dropSavedImages(doc: CastDocument): number {
-  let dropped = 0;
-  const keep = <T extends CastImage>(image: T | null): T | null => {
-    if (!image || isPendingImage(image)) return image;
-    dropped += 1;
-    return null;
-  };
-  doc.avatar = keep(doc.avatar);
-  doc.cover = keep(doc.cover);
-  doc.background = keep(doc.background);
-  doc.gallery = doc.gallery.filter((image) => keep(image) !== null);
-  for (const member of doc.members) member.avatar = keep(member.avatar);
-  for (const persona of doc.recommendedPersonas) persona.avatar = keep(persona.avatar);
-  return dropped;
+  const saved = imageSlots(doc).filter((slot) => {
+    const image = slot.get();
+    return !!image && !isPendingImage(image);
+  });
+  doc.gallery = doc.gallery.filter((image) => isPendingImage(image));
+  for (const slot of saved) if (slot.kind !== "gallery") slot.set(null);
+  return saved.length;
 }

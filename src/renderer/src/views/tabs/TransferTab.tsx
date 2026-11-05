@@ -2,8 +2,8 @@ import { useLayoutEffect, useRef } from "react";
 
 import type { TransferItemVM, TransferTabVM } from "../../app/viewModels";
 import { Link, useEmit } from "../chain";
-import { CopyButton, Section } from "../parts/basics";
-import { IconCheck, IconFolder, IconWarning } from "../parts/icons";
+import { CopyButton, EmitButton, MiniCheck, Section, ShowFileButton } from "../parts/basics";
+import { IconCheck, IconWarning } from "../parts/icons";
 
 function Item({ vm }: { vm: TransferItemVM }) {
   const emit = useEmit();
@@ -40,25 +40,14 @@ function Item({ vm }: { vm: TransferItemVM }) {
                 label={vm.kind === "image" ? "場所をコピー" : "コピー"}
               />
             ) : null}
-            {vm.canShowFile ? (
-              <button
-                type="button"
-                className="btn btn-plain btn-small"
-                onClick={() => emit({ type: "show-file", path: [] })}
-              >
-                <IconFolder />
-                フォルダで見る
-              </button>
-            ) : null}
+            {vm.canShowFile ? <ShowFileButton /> : null}
             {vm.kind === "setting" ? (
-              <label className="mini-check">
-                <input
-                  type="checkbox"
-                  checked={done}
-                  onChange={(event) => emit({ type: "mark", path: [], done: event.target.checked })}
-                />
+              <MiniCheck
+                checked={done}
+                onChange={(checked) => emit({ type: "mark", path: [], done: checked })}
+              >
                 設定した
-              </label>
+              </MiniCheck>
             ) : null}
           </div>
         </div>
@@ -75,7 +64,6 @@ function Item({ vm }: { vm: TransferItemVM }) {
 }
 
 export function TransferTab({ vm }: { vm: TransferTabVM }) {
-  const emit = useEmit();
   return (
     <div className="tab-body transfer">
       <Section
@@ -87,29 +75,20 @@ export function TransferTab({ vm }: { vm: TransferTabVM }) {
           {vm.progress.text}
         </p>
         <div className="button-row">
-          <button
-            type="button"
+          <EmitButton
+            event={{ type: "transfer/next" }}
             className="btn btn-primary"
             disabled={!vm.next}
-            onClick={() => emit({ type: "transfer/next" })}
             title={vm.shortcut}
           >
             {vm.next ? `次の項目をコピー（${vm.next.label}）` : "コピーする項目はありません"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={() => emit({ type: "transfer/open-zetter" })}
-          >
+          </EmitButton>
+          <EmitButton event={{ type: "transfer/open-zetter" }} className="btn btn-outline">
             {vm.openLabel}
-          </button>
-          <button
-            type="button"
-            className="btn btn-plain btn-small"
-            onClick={() => emit({ type: "transfer/reset" })}
-          >
+          </EmitButton>
+          <EmitButton event={{ type: "transfer/reset" }} className="btn btn-plain btn-small">
             コピーの記録を消す
-          </button>
+          </EmitButton>
         </div>
         <p className="note">
           このアプリの窓で {vm.shortcut}（Mac は ⌘⇧C）を押しても、次の項目をコピーできます。Zetter

@@ -1,10 +1,9 @@
-import { type ReactNode, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useRef } from "react";
 
 import type { Path, PickedFile } from "../../app/types";
 import type { ImageFieldVM } from "../../app/viewModels";
 import { useEmit } from "../chain";
-import { CopyButton } from "./basics";
-import { IconFolder } from "./icons";
+import { CopyButton, EmitButton, ShowFileButton, useFocusRequest } from "./basics";
 
 export function FilePicker({
   name,
@@ -37,14 +36,8 @@ export function FilePicker({
 }
 
 export function ImageField({ vm }: { vm: ImageFieldVM }) {
-  const emit = useEmit();
   const button = useRef<HTMLButtonElement | null>(null);
-  const nonce = vm.focus?.nonce;
-  useLayoutEffect(() => {
-    if (!vm.focus || !button.current) return;
-    emit({ type: "reveal" });
-    button.current.focus();
-  }, [nonce]);
+  useFocusRequest(vm.focus, button, (element) => element.focus());
   return (
     <div className={`image-field image-${vm.shape}`}>
       <FilePicker name={vm.name} multiple={vm.multiple}>
@@ -73,23 +66,14 @@ export function ImageField({ vm }: { vm: ImageFieldVM }) {
           <div className="image-actions">
             {vm.copy ? <CopyButton vm={vm.copy} name={vm.name} label="場所をコピー" /> : null}
             {vm.canShowFile ? (
-              <button
-                type="button"
-                className="btn btn-plain btn-small"
-                title="画像のファイルをフォルダで見る"
-                onClick={() => emit({ type: "show-file", path: vm.name })}
-              >
-                <IconFolder />
-                フォルダで見る
-              </button>
+              <ShowFileButton path={vm.name} title="画像のファイルをフォルダで見る" />
             ) : null}
-            <button
-              type="button"
+            <EmitButton
+              event={{ type: "remove", path: vm.name }}
               className="btn btn-plain btn-small"
-              onClick={() => emit({ type: "remove", path: vm.name })}
             >
               {vm.removeLabel}
-            </button>
+            </EmitButton>
           </div>
         </div>
       ) : null}

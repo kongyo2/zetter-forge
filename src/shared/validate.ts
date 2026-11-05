@@ -8,20 +8,24 @@ import {
   PLAY_GUIDE_FIELDS,
   type PartnerSettings,
   type ToneExample,
+  filledStageFields,
+  isAffinityPace,
+  isHalfFilledTone,
+  isNamelessPersona,
+  overrideTitle,
   sendableMembers,
 } from "./cast";
 import { LIMITS } from "./limits";
-import { codePointLength, formatCount, utf16Length } from "./text";
+import type { Path } from "./path";
+import { codePointLength, formatCount, quoted, sumLengths, utf16Length } from "./text";
 
 export type EditorTab = "character" | "experience" | "affinity" | "lorebook" | "publish" | "memo";
-
-type FieldPath = readonly (string | number)[];
 
 export interface CastIssue {
   level: "error" | "warning" | "info";
   tab: EditorTab;
   message: string;
-  path?: FieldPath;
+  path?: Path;
 }
 
 export interface BudgetUsage {
@@ -35,9 +39,12 @@ export interface UsageShare {
   length: number;
 }
 
-function usage(shares: readonly UsageShare[], max: number): BudgetUsage {
-  const total = shares.reduce((sum, share) => sum + share.length, 0);
+function budget(total: number, max: number): BudgetUsage {
   return { total, remaining: Math.max(0, max - total), over: Math.max(0, total - max) };
+}
+
+function usage(shares: readonly UsageShare[], max: number): BudgetUsage {
+  return budget(sumLengths(shares), max);
 }
 
 function countedMembers(doc: CastDocument) {
@@ -91,12 +98,7 @@ export function introUsage(doc: CastDocument): IntroUsage {
     total += utf16Length(part.text.trim());
     if (crossing === null && total > LIMITS.introTotal) crossing = index;
   });
-  return {
-    total,
-    remaining: Math.max(0, LIMITS.introTotal - total),
-    over: Math.max(0, total - LIMITS.introTotal),
-    crossing,
-  };
+  return { ...budget(total, LIMITS.introTotal), crossing };
 }
 
 export function partnerSettingsLength(settings: PartnerSettings): number {
@@ -142,46 +144,41 @@ export function limitPartnerSettingsValue(
   ].join("");
 }
 
+export function affinityRange(config: AffinityConfig): { min: number; max: number } | null {
+  const { minValue: min, maxValue: max } = config;
+  if (min === null || max === null || !Number.isSafeInteger(min) || !Number.isSafeInteger(max))
+    return null;
+  return min < max ? { min, max } : null;
+}
+
+export function isIntegerWithin(value: number | null, min: number, max: number): value is number {
+  return value !== null && Number.isSafeInteger(value) && value >= min && value <= max;
+}
+
 export function validateAffinityConfig(config: AffinityConfig): string {
   const itemName = config.itemName.trim();
   if (!itemName || codePointLength(itemName) > LIMITS.affinityItemName)
     return "項目名は1～20文字で入力してください。";
-  const { minValue, maxValue, initialValue } = config;
-  if (
-    minValue === null ||
-    maxValue === null ||
-    !Number.isSafeInteger(minValue) ||
-    !Number.isSafeInteger(maxValue) ||
-    minValue >= maxValue
-  ) {
-    return "好感度の範囲は整数で、最小値より最大値を大きくしてください。";
-  }
-  if (
-    initialValue === null ||
-    !Number.isSafeInteger(initialValue) ||
-    initialValue < minValue ||
-    initialValue > maxValue
-  ) {
+  const range = affinityRange(config);
+  if (!range) return "好感度の範囲は整数で、最小値より最大値を大きくしてください。";
+  const { min, max } = range;
+  if (!isIntegerWithin(config.initialValue, min, max))
     return "初期値は範囲内の整数にしてください。";
-  }
-  if (!["gentle", "normal", "rapid"].includes(config.pace)) return "変化の速さを選択してください。";
+  if (!isAffinityPace(config.pace)) return "変化の速さを選択してください。";
   if (config.stages.length < 1 || config.stages.length > LIMITS.affinityStages)
     return "段階は1～10段階にしてください。";
   let previous = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < config.stages.length; index += 1) {
     const stage = config.stages[index] as AffinityStage;
     const start = stage.startValue;
-    if (start === null || !Number.isSafeInteger(start) || start < minValue || start > maxValue) {
-      return "段階の開始値は範囲内の整数にしてください。";
-    }
+    if (!isIntegerWithin(start, min, max)) return "段階の開始値は範囲内の整数にしてください。";
     if (index > 0 && start === previous)
       return "段階の開始値が重複しています。段階ごとに異なる値を入力してください。";
     if (start < previous) return "段階の開始値は小さい順にしてください。";
-    if (index === 0 && start !== minValue) return "最初の段階の開始値は最小値にしてください。";
+    if (index === 0 && start !== min) return "最初の段階の開始値は最小値にしてください。";
     if (affinityStageTextLength(stage) > LIMITS.affinityStageText)
       return "各段階の6欄は合計1000文字以内にしてください。";
-    if (AFFINITY_STAGE_FIELDS.every((field) => !stage[field.key].trim()))
-      return "各段階に態度文を1つ以上入力してください。";
+    if (filledStageFields(stage).length === 0) return "各段階に態度文を1つ以上入力してください。";
     previous = start;
   }
   return "";
@@ -200,18 +197,29 @@ function overLimit(value: string, max: number): boolean {
   return utf16Length(value) > max;
 }
 
-function issue(
-  level: CastIssue["level"],
-  tab: EditorTab,
-  message: string,
-  path?: FieldPath,
-): CastIssue {
+function overTotal(total: number, max: number): string {
+  return `${formatCount(max)}字までです。いまは${formatCount(total)}字で、${formatCount(total - max)}字ぶん超えています。`;
+}
+
+function blanks<T>(
+  items: readonly T[],
+  text: (item: T) => string,
+): { count: number; first: number } {
+  const blank = (item: T) => !text(item).trim();
+  return { count: items.filter(blank).length, first: items.findIndex(blank) };
+}
+
+function isUnnamed(member: CastMember): boolean {
+  return !member.name.trim();
+}
+
+function issue(level: CastIssue["level"], tab: EditorTab, message: string, path?: Path): CastIssue {
   return path ? { level, tab, message, path } : { level, tab, message };
 }
 
 function toneIssues(
   owner: string,
-  base: FieldPath,
+  base: Path,
   list: readonly ToneExample[],
   issues: CastIssue[],
 ): void {
@@ -230,11 +238,9 @@ function toneIssues(
       const message = `${label}の発話例は3500文字までです。`;
       issues.push(issue("error", "character", message, [...row, "example"]));
     }
-    const hasSituation = !!tone.situation.trim();
-    const hasExample = !!tone.example.trim();
-    if (hasSituation !== hasExample) {
+    if (isHalfFilledTone(tone)) {
       const message = `${label}は状況と発話例の片方が空なので、Zetter では保存されません。`;
-      const empty = [...row, hasSituation ? "example" : "situation"];
+      const empty = [...row, tone.situation.trim() ? "example" : "situation"];
       issues.push(issue("warning", "character", message, empty));
     }
   });
@@ -242,7 +248,7 @@ function toneIssues(
 
 function partnerIssues(
   owner: string,
-  base: FieldPath,
+  base: Path,
   settings: PartnerSettings,
   issues: CastIssue[],
 ): void {
@@ -266,7 +272,7 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     issues.push(issue("error", "character", "性格・設定を入力してください。", ["cast", "persona"]));
   if (story && doc.members.length > LIMITS.members)
     issues.push(issue("error", "character", "登場人物は本人を含めて10人までです。"));
-  const unnamed = members.find((member) => !member.name.trim());
+  const unnamed = members.find(isUnnamed);
   if (unnamed) {
     const message = "登場人物の名前を入力してください。";
     issues.push(issue("error", "character", message, ["members", unnamed.id, "name"]));
@@ -292,8 +298,7 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     utf16Length(doc.persona.trim()),
   );
   if (settingsTotal > LIMITS.settingsTotal) {
-    const over = settingsTotal - LIMITS.settingsTotal;
-    const message = `キャラクター設定（本人の性格・設定と登場人物のプロフィール）は合わせて${formatCount(LIMITS.settingsTotal)}字までです。いまは${formatCount(settingsTotal)}字で、${formatCount(over)}字ぶん超えています。誰の設定を削るかはお任せします（「いまの状況」は別枠です）。`;
+    const message = `キャラクター設定（本人の性格・設定と登場人物のプロフィール）は合わせて${overTotal(settingsTotal, LIMITS.settingsTotal)}誰の設定を削るかはお任せします（「いまの状況」は別枠です）。`;
     issues.push(issue("error", "character", message, ["cast", "persona"]));
   }
   const sentTone = (list: readonly ToneExample[]) =>
@@ -305,14 +310,13 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     toneExamplesLength(sentTone(doc.toneExamples)),
   );
   if (toneTotal > LIMITS.toneTotal) {
-    const over = toneTotal - LIMITS.toneTotal;
-    const message = `口調サンプルは全員の合計で${formatCount(LIMITS.toneTotal)}字までです。いまは${formatCount(toneTotal)}字で、${formatCount(over)}字ぶん超えています。誰の口調サンプルを削るかはお任せします。`;
+    const message = `口調サンプルは全員の合計で${overTotal(toneTotal, LIMITS.toneTotal)}誰の口調サンプルを削るかはお任せします。`;
     issues.push(issue("error", "character", message));
   }
   toneIssues("本人", ["cast"], doc.toneExamples, issues);
   partnerIssues("本人", ["cast"], doc.partnerSettings, issues);
   for (const member of members) {
-    const owner = member.name.trim() ? `「${member.name.trim()}」` : "名前のない登場人物";
+    const owner = quoted(member.name) || "名前のない登場人物";
     toneIssues(owner, ["members", member.id], member.toneExamples, issues);
     partnerIssues(owner, ["members", member.id], member.partnerSettings, issues);
   }
@@ -333,7 +337,7 @@ export function validateCast(doc: CastDocument): CastIssue[] {
   }
   if (doc.introScript.length > LIMITS.introParts)
     issues.push(issue("error", "experience", "イントロは12パートまでです。"));
-  const introPath = (index: number): FieldPath =>
+  const introPath = (index: number): Path =>
     !story && index === 0 ? ["intro", "first", "text"] : ["intro", index, "text"];
   doc.introScript.forEach((part, index) => {
     if (overLimit(part.text, LIMITS.introPart)) {
@@ -343,14 +347,13 @@ export function validateCast(doc: CastDocument): CastIssue[] {
   });
   const intro = introUsage(doc);
   if (story && intro.crossing !== null) {
-    const message = `イントロは全部のパートを合わせて${formatCount(LIMITS.introTotal)}字までです。いまは${formatCount(intro.total)}字で、${formatCount(intro.over)}字ぶん超えています。どのパートを削るかはお任せします。`;
+    const message = `イントロは全部のパートを合わせて${overTotal(intro.total, LIMITS.introTotal)}どのパートを削るかはお任せします。`;
     issues.push(issue("error", "experience", message, ["intro", intro.crossing, "text"]));
   }
-  const emptyParts = doc.introScript.filter((part) => !part.text.trim()).length;
-  if (emptyParts > 0) {
-    const firstEmpty = doc.introScript.findIndex((part) => !part.text.trim());
-    const message = `中身が空のイントロのパートが${emptyParts}件あります。Zetter では保存されません。`;
-    issues.push(issue("warning", "experience", message, introPath(firstEmpty)));
+  const emptyParts = blanks(doc.introScript, (part) => part.text);
+  if (emptyParts.count > 0) {
+    const message = `中身が空のイントロのパートが${emptyParts.count}件あります。Zetter では保存されません。`;
+    issues.push(issue("warning", "experience", message, introPath(emptyParts.first)));
   }
   const spokenParts = story
     ? doc.introScript.filter((part) => part.kind === "speech" && part.text.trim())
@@ -401,7 +404,7 @@ export function validateCast(doc: CastDocument): CastIssue[] {
       const message = `${label}のキャストに伝わるものは2000文字までです。`;
       issues.push(issue("error", "experience", message, [...base, "note"]));
     }
-    if (!persona.name.trim() && !persona.useViewerName) {
+    if (isNamelessPersona(persona)) {
       const message = `${label}は名前が空なので、Zetter では保存されません（「遊ぶ人の名前を使う」をオンにすれば名前なしでも保存されます）。`;
       issues.push(issue("warning", "experience", message, [...base, "name"]));
     }
@@ -409,7 +412,7 @@ export function validateCast(doc: CastDocument): CastIssue[] {
 
   if (doc.affinity) {
     const { overrides } = doc.affinity;
-    const suffix = doc.mode === "story" ? "" : "（雑談モードでは効きません）";
+    const suffix = story ? "" : "（雑談モードでは効きません）";
     const checkConfig = (key: string, config: AffinityConfig | undefined, prefix: string) => {
       const error = config ? validateAffinityConfig(config) : "";
       if (error)
@@ -418,8 +421,7 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     checkConfig("default", doc.affinity.default, "");
     checkConfig(AFFINITY_BASE_SUBJECT, overrides[AFFINITY_BASE_SUBJECT], "本体の個別設定: ");
     for (const member of members) {
-      const prefix = `${member.name.trim() || "登場人物"}の個別設定: `;
-      checkConfig(member.id, overrides[member.id], prefix);
+      checkConfig(member.id, overrides[member.id], `${overrideTitle(member)}: `);
     }
   }
 
@@ -431,11 +433,10 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     if (overLimit(tag, LIMITS.tag))
       issues.push(issue("error", "publish", `タグ${index + 1}は20文字までです。`, ["tags", index]));
   });
-  const emptyTags = doc.tags.filter((tag) => !tag.trim()).length;
-  if (emptyTags > 0) {
-    const firstEmpty = doc.tags.findIndex((tag) => !tag.trim());
-    const message = `空のタグが${emptyTags}個あります。Zetter では保存されません。`;
-    issues.push(issue("warning", "publish", message, ["tags", firstEmpty]));
+  const emptyTags = blanks(doc.tags, (tag) => tag);
+  if (emptyTags.count > 0) {
+    const message = `空のタグが${emptyTags.count}個あります。Zetter では保存されません。`;
+    issues.push(issue("warning", "publish", message, ["tags", emptyTags.first]));
   }
   if (story && overLimit(doc.hook, LIMITS.hook))
     issues.push(issue("error", "publish", "一言セリフは40文字までです。", ["cast", "hook"]));
@@ -448,8 +449,7 @@ export function missingRequired(doc: CastDocument): { character: boolean; experi
   const story = doc.mode === "story";
   const members = sendableMembers(doc);
   return {
-    character:
-      !doc.name.trim() || !doc.persona.trim() || members.some((member) => !member.name.trim()),
+    character: !doc.name.trim() || !doc.persona.trim() || members.some(isUnnamed),
     experience: story && !doc.tagline.trim(),
   };
 }

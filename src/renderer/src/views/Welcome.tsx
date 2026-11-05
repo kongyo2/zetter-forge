@@ -1,9 +1,8 @@
-import { useEmit } from "./chain";
+import { EmitButton } from "./parts/basics";
 
 const WELCOME_HEADLINE = "キャストを、手元で育てる。";
 
 export function Welcome({ hasCasts }: { hasCasts: boolean }) {
-  const emit = useEmit();
   return (
     <div className="welcome">
       <h1 className="manuscript" aria-label={WELCOME_HEADLINE}>
@@ -32,13 +31,9 @@ export function Welcome({ hasCasts }: { hasCasts: boolean }) {
         <li>保存するたびに前の版を残します。</li>
       </ul>
       <div className="welcome-actions">
-        <button
-          type="button"
-          className="btn btn-primary btn-large"
-          onClick={() => emit({ type: "library/new" })}
-        >
+        <EmitButton event={{ type: "library/new" }} className="btn btn-primary btn-large">
           新しいキャストを作る
-        </button>
+        </EmitButton>
         {hasCasts ? <p className="note">左の一覧から保存したキャストを開けます。</p> : null}
       </div>
     </div>

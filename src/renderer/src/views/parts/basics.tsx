@@ -2,8 +2,10 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -14,13 +16,14 @@ import type {
   AvatarVM,
   CopyVM,
   CounterVM,
+  FocusVM,
   MoveVM,
   SelectVM,
   TabItemVM,
   ToggleVM,
 } from "../../app/viewModels";
 import { Link, useEmit } from "../chain";
-import { IconCheck, IconCopy, IconDown, IconPlus, IconRemove, IconUp } from "./icons";
+import { IconCheck, IconCopy, IconDown, IconFolder, IconPlus, IconRemove, IconUp } from "./icons";
 
 export function Section({
   title,
@@ -49,6 +52,94 @@ export function Section({
       {children}
     </section>
   );
+}
+
+export function Subsection({
+  title,
+  meta,
+  children,
+}: {
+  title?: string;
+  meta?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="subsection">
+      {title ? (
+        <div className="subhead">
+          <h3>{title}</h3>
+          {meta}
+        </div>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
+export function EmitButton({
+  event,
+  className,
+  disabled,
+  ariaLabel,
+  title,
+  children,
+}: {
+  event: ViewEvent;
+  className: string;
+  disabled?: boolean;
+  ariaLabel?: string;
+  title?: string;
+  children: ReactNode;
+}) {
+  const emit = useEmit();
+  return (
+    <button
+      type="button"
+      className={className}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      title={title}
+      onClick={() => emit(event)}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function MiniCheck({
+  checked,
+  onChange,
+  children,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="mini-check">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      {children}
+    </label>
+  );
+}
+
+export function useFocusRequest<E extends HTMLElement>(
+  focus: FocusVM | null,
+  ref: RefObject<E | null>,
+  apply: (element: E, focus: FocusVM) => void,
+): void {
+  const emit = useEmit();
+  const nonce = focus?.nonce;
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || !focus) return;
+    emit({ type: "reveal" });
+    apply(element, focus);
+  }, [nonce]);
 }
 
 export function toneClass(tone: CounterVM["tone"]): string {
@@ -165,41 +256,65 @@ export function Avatar({ vm, size = "medium" }: { vm: AvatarVM; size?: "small" |
 }
 
 export function MoveButtons({ vm }: { vm: MoveVM }) {
-  const emit = useEmit();
   return (
     <div className="row-actions">
-      <button
-        type="button"
+      <EmitButton
+        event={{ type: "move", path: [], offset: -1 }}
         className="icon-button"
         disabled={!vm.canUp}
-        aria-label="上へ移動"
+        ariaLabel="上へ移動"
         title="上へ移動"
-        onClick={() => emit({ type: "move", path: [], offset: -1 })}
       >
         <IconUp />
-      </button>
-      <button
-        type="button"
+      </EmitButton>
+      <EmitButton
+        event={{ type: "move", path: [], offset: 1 }}
         className="icon-button"
         disabled={!vm.canDown}
-        aria-label="下へ移動"
+        ariaLabel="下へ移動"
         title="下へ移動"
-        onClick={() => emit({ type: "move", path: [], offset: 1 })}
       >
         <IconDown />
-      </button>
+      </EmitButton>
       {vm.removeLabel ? (
-        <button
-          type="button"
+        <EmitButton
+          event={{ type: "remove", path: [] }}
           className="icon-button is-danger"
-          aria-label={vm.removeLabel}
+          ariaLabel={vm.removeLabel}
           title={vm.removeLabel}
-          onClick={() => emit({ type: "remove", path: [] })}
         >
           <IconRemove />
-        </button>
+        </EmitButton>
       ) : null}
     </div>
+  );
+}
+
+export function RowList<Row>({
+  rows,
+  empty,
+  className = "rows",
+  keyOf,
+  children,
+}: {
+  rows: readonly Row[];
+  empty: string;
+  className?: string;
+  keyOf: (row: Row) => string | number;
+  children: (row: Row) => ReactNode;
+}) {
+  if (rows.length === 0) return <p className="note empty">{empty}</p>;
+  return (
+    <ol className={className}>
+      {rows.map((row) => {
+        const key = keyOf(row);
+        return (
+          <Link key={key} scope={[key]}>
+            {children(row)}
+          </Link>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -234,30 +349,32 @@ export function AddButton({
   disabled: boolean;
   children: ReactNode;
 }) {
-  const emit = useEmit();
   return (
-    <button
-      type="button"
-      className="btn btn-outline"
-      disabled={disabled}
-      onClick={() => emit({ type: "add", path })}
-    >
+    <EmitButton event={{ type: "add", path }} className="btn btn-outline" disabled={disabled}>
       <IconPlus />
       {children}
-    </button>
+    </EmitButton>
   );
 }
 
 export function RemoveButton({ children }: { children: ReactNode }) {
-  const emit = useEmit();
   return (
-    <button
-      type="button"
-      className="btn btn-plain btn-small btn-danger"
-      onClick={() => emit({ type: "remove", path: [] })}
-    >
+    <EmitButton event={{ type: "remove", path: [] }} className="btn btn-plain btn-small btn-danger">
       {children}
-    </button>
+    </EmitButton>
+  );
+}
+
+export function ShowFileButton({ path = [], title }: { path?: Path; title?: string }) {
+  return (
+    <EmitButton
+      event={{ type: "show-file", path }}
+      className="btn btn-plain btn-small"
+      title={title}
+    >
+      <IconFolder />
+      フォルダで見る
+    </EmitButton>
   );
 }
 

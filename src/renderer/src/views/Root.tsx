@@ -6,24 +6,20 @@ import type { RootVM, ToastVM } from "../app/viewModels";
 import { ChainRoot, useEmit } from "./chain";
 import { Dialog } from "./Dialogs";
 import { Editor } from "./Editor";
+import { EmitButton } from "./parts/basics";
 import { Sidebar } from "./Sidebar";
 import { Welcome } from "./Welcome";
 
 function Toasts({ vms }: { vms: ToastVM[] }) {
-  const emit = useEmit();
   return (
     <div className="toasts" role="status" aria-live="polite">
       {vms.map((toast) => (
         <div key={toast.id} className={`toast toast-${toast.tone}`}>
           <span>{toast.message}</span>
           {toast.undoable ? (
-            <button
-              type="button"
-              className="toast-action"
-              onClick={() => emit({ type: "toast/undo", id: toast.id })}
-            >
+            <EmitButton event={{ type: "toast/undo", id: toast.id }} className="toast-action">
               元に戻す
-            </button>
+            </EmitButton>
           ) : null}
         </div>
       ))}

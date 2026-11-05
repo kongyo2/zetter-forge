@@ -1,23 +1,17 @@
 import type { SidebarVM } from "../app/viewModels";
 import { useEmit } from "./chain";
-import { Avatar } from "./parts/basics";
+import { Avatar, EmitButton } from "./parts/basics";
 import { IconPlus, IconSettings } from "./parts/icons";
 
 function ChooseRootButton() {
-  const emit = useEmit();
   return (
-    <button
-      type="button"
-      className="btn btn-plain btn-small"
-      onClick={() => emit({ type: "library/choose-root" })}
-    >
+    <EmitButton event={{ type: "library/choose-root" }} className="btn btn-plain btn-small">
       保存先を変える
-    </button>
+    </EmitButton>
   );
 }
 
 function Status({ vm }: { vm: NonNullable<SidebarVM["status"]> }) {
-  const emit = useEmit();
   switch (vm.kind) {
     case "loading":
       return <p className="note">読み込み中…</p>;
@@ -31,13 +25,9 @@ function Status({ vm }: { vm: NonNullable<SidebarVM["status"]> }) {
           <p className="note error-note">保存先のフォルダを読めませんでした。</p>
           <p className="note">{vm.message}</p>
           <div className="button-row">
-            <button
-              type="button"
-              className="btn btn-outline btn-small"
-              onClick={() => emit({ type: "library/retry" })}
-            >
+            <EmitButton event={{ type: "library/retry" }} className="btn btn-outline btn-small">
               読み直す
-            </button>
+            </EmitButton>
             <ChooseRootButton />
           </div>
         </div>
@@ -51,24 +41,19 @@ export function Sidebar({ vm }: { vm: SidebarVM }) {
     <aside className="sidebar">
       <div className="brand-row">
         <div className="brand">Zetter Forge</div>
-        <button
-          type="button"
+        <EmitButton
+          event={{ type: "settings/open" }}
           className="icon-button"
-          aria-label="設定"
+          ariaLabel="設定"
           title="設定（Ctrl+,）"
-          onClick={() => emit({ type: "settings/open" })}
         >
           <IconSettings />
-        </button>
+        </EmitButton>
       </div>
-      <button
-        type="button"
-        className="btn btn-outline btn-block"
-        onClick={() => emit({ type: "library/new" })}
-      >
+      <EmitButton event={{ type: "library/new" }} className="btn btn-outline btn-block">
         <IconPlus />
         新しいキャスト
-      </button>
+      </EmitButton>
       <input
         className="input search"
         type="search"
@@ -134,13 +119,9 @@ export function Sidebar({ vm }: { vm: SidebarVM }) {
         {vm.mcp ? <p className={`mcp-status is-${vm.mcp.tone}`}>{vm.mcp.text}</p> : null}
         <div className="button-row">
           <ChooseRootButton />
-          <button
-            type="button"
-            className="btn btn-plain btn-small"
-            onClick={() => emit({ type: "library/open-root" })}
-          >
+          <EmitButton event={{ type: "library/open-root" }} className="btn btn-plain btn-small">
             フォルダを開く
-          </button>
+          </EmitButton>
         </div>
       </div>
     </aside>

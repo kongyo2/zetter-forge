@@ -1,6 +1,7 @@
 import {
   AFFINITY_BASE_SUBJECT,
   AFFINITY_PACES,
+  AFFINITY_RANGE_FIELDS,
   AFFINITY_STAGE_FIELDS,
   type AffinityConfig,
   type AffinityStage,
@@ -15,16 +16,21 @@ import {
   createDefaultAffinityConfig,
   createEmptyCast,
   filledPlayGuideFields,
+  isHalfFilledTone,
+  isNamelessPersona,
+  isPendingImage,
+  overrideTitle,
   sendableMembers,
 } from "@shared/cast";
 import { type CopyLog, textHash } from "@shared/copyLog";
 import { LIMITS } from "@shared/limits";
-import { codePointLength, formatCount, utf16Length } from "@shared/text";
+import { pathText } from "@shared/path";
+import { codePointLength, formatCount, numberText, quoted, utf16Length } from "@shared/text";
 import { type EditorTab, introUsage } from "@shared/validate";
 
+import { memberOrdinal, selfLabel, stageLabel, toneLabel } from "./labels";
 import { perDocument } from "./memo";
-import { isPendingImage } from "./session";
-import { AFFINITY_DEFAULT, type Path, pathKey } from "./types";
+import { AFFINITY_DEFAULT, type Path } from "./types";
 
 type TransferKind = "text" | "image" | "setting";
 
@@ -55,6 +61,11 @@ export function transferStatus(item: TransferItem, log: CopyLog): TransferStatus
   const record = log[item.key];
   if (!record) return "todo";
   return record.hash === textHash(item.value) ? "done" : "changed";
+}
+
+export function isOutstanding(item: TransferItem, log: CopyLog): boolean {
+  const status = transferStatus(item, log);
+  return status === "todo" || status === "changed";
 }
 
 export function isCopyable(item: TransferItem): boolean {
@@ -120,7 +131,7 @@ class Builder {
       kind: "image",
       value: image?.file ?? "",
       skip: image ? null : "empty",
-      notes: image && isPendingImage(image) ? ["保存すると、ファイルの場所をコピーできます。"] : [],
+      notes: isPendingImage(image) ? ["保存すると、ファイルの場所をコピーできます。"] : [],
       image,
     });
   }
@@ -148,7 +159,7 @@ class Builder {
     if (!group) return;
     group.items.push({
       ...item,
-      key: pathKey(item.path),
+      key: pathText(item.path),
       tab: group.tab,
       group: group.title,
       section: this.section,
@@ -180,14 +191,15 @@ function partnerItems(builder: Builder, base: Path, settings: PartnerSettings): 
 
 function toneItems(builder: Builder, base: Path, list: readonly ToneExample[]): void {
   list.forEach((tone, index) => {
-    const half = !!tone.situation.trim() !== !!tone.example.trim();
-    const notes = half ? ["状況と発話例の片方が空なので、Zetter では保存されません。"] : [];
+    const notes = isHalfFilledTone(tone)
+      ? ["状況と発話例の片方が空なので、Zetter では保存されません。"]
+      : [];
     const row = [...base, "toneExamples", index];
-    builder.text([...row, "situation"], `口調サンプル${index + 1}の状況`, tone.situation, {
+    builder.text([...row, "situation"], toneLabel(index, "状況"), tone.situation, {
       max: LIMITS.toneSituation,
       notes,
     });
-    builder.text([...row, "example"], `口調サンプル${index + 1}の発話例`, tone.example, {
+    builder.text([...row, "example"], toneLabel(index, "発話例"), tone.example, {
       max: LIMITS.toneExample,
       notes,
     });
@@ -220,9 +232,8 @@ function memberItems(
   member: CastMember,
   first: boolean,
 ): void {
-  const position = doc.members.indexOf(member) + 2;
   const base = ["members", member.id];
-  builder.sectionOf(`${position}人目${member.name.trim() ? `「${member.name.trim()}」` : ""}`);
+  builder.sectionOf(`${memberOrdinal(doc.members.indexOf(member))}${quoted(member.name)}`);
   builder.text([...base, "name"], "名前", member.name, {
     max: LIMITS.memberName,
     notes: first ? ["Zetter の「登場人物を追加」で人数分の枠を足してから写します。"] : [],
@@ -254,16 +265,11 @@ function affinityItems(
     codePoints: true,
     skipDefault: unchanged((target) => target.itemName),
   });
-  const number = (value: number | null) => (value === null ? "" : String(value));
-  builder.text([...base, "minValue"], "最小値", number(config.minValue), {
-    skipDefault: unchanged((target) => target.minValue),
-  });
-  builder.text([...base, "maxValue"], "最大値", number(config.maxValue), {
-    skipDefault: unchanged((target) => target.maxValue),
-  });
-  builder.text([...base, "initialValue"], "初期値", number(config.initialValue), {
-    skipDefault: unchanged((target) => target.initialValue),
-  });
+  for (const field of AFFINITY_RANGE_FIELDS) {
+    builder.text([...base, field.key], field.label, numberText(config[field.key]), {
+      skipDefault: unchanged((target) => target[field.key]),
+    });
+  }
   const pace =
     AFFINITY_PACES.find((candidate) => candidate.value === config.pace)?.label ?? config.pace;
   builder.setting(
@@ -289,12 +295,17 @@ function affinityItems(
         const same = baseline.stages[index];
         return !!same && same[key] === stage[key];
       });
-    builder.text([...row, "startValue"], `段階${index + 1}の開始値`, number(stage.startValue), {
-      skipDefault: index === 0 || stageUnchanged("startValue"),
-      notes: stageNotes,
-    });
+    builder.text(
+      [...row, "startValue"],
+      stageLabel(index, "開始値"),
+      numberText(stage.startValue),
+      {
+        skipDefault: index === 0 || stageUnchanged("startValue"),
+        notes: stageNotes,
+      },
+    );
     for (const field of AFFINITY_STAGE_FIELDS) {
-      builder.text([...row, field.key], `段階${index + 1}の${field.label}`, stage[field.key], {
+      builder.text([...row, field.key], stageLabel(index, field.label), stage[field.key], {
         skipDefault: stageUnchanged(field.key),
       });
     }
@@ -368,7 +379,7 @@ function build(doc: CastDocument): TransferGroup[] {
     if (!persona.useViewerName) {
       builder.text([...base, "name"], "名前", persona.name, {
         max: LIMITS.personaName,
-        notes: persona.name.trim() ? [] : ["名前が空なので、Zetter では保存されません。"],
+        notes: isNamelessPersona(persona) ? ["名前が空なので、Zetter では保存されません。"] : [],
       });
     }
     builder.text([...base, "tagline"], "紹介文", persona.tagline, { max: LIMITS.personaTagline });
@@ -383,23 +394,10 @@ function build(doc: CastDocument): TransferGroup[] {
     affinityItems(builder, AFFINITY_DEFAULT, "共通設定", common, null);
     const base = doc.affinity.overrides[AFFINITY_BASE_SUBJECT];
     if (base)
-      affinityItems(
-        builder,
-        AFFINITY_BASE_SUBJECT,
-        `${doc.name.trim() || "本体"}の個別設定`,
-        base,
-        common,
-      );
+      affinityItems(builder, AFFINITY_BASE_SUBJECT, `${selfLabel(doc)}の個別設定`, base, common);
     for (const member of sendableMembers(doc)) {
       const config = doc.affinity.overrides[member.id];
-      if (config)
-        affinityItems(
-          builder,
-          member.id,
-          `${member.name.trim() || "登場人物"}の個別設定`,
-          config,
-          common,
-        );
+      if (config) affinityItems(builder, member.id, overrideTitle(member), config, common);
     }
   }
 
@@ -494,16 +492,10 @@ export function transferItems(doc: CastDocument): TransferItem[] {
 }
 
 export function findTransferItem(doc: CastDocument, path: Path): TransferItem | null {
-  const key = pathKey(path);
+  const key = pathText(path);
   return transferItems(doc).find((item) => item.key === key) ?? null;
 }
 
 export function nextTransferItem(doc: CastDocument, log: CopyLog): TransferItem | null {
-  return (
-    transferItems(doc).find((item) => {
-      if (!isCopyable(item)) return false;
-      const status = transferStatus(item, log);
-      return status === "todo" || status === "changed";
-    }) ?? null
-  );
+  return transferItems(doc).find((item) => isCopyable(item) && isOutstanding(item, log)) ?? null;
 }

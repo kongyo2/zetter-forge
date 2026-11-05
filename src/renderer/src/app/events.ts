@@ -3,7 +3,7 @@ import type { LibraryListing, LoadedCast, MenuCommand, SavedCast } from "@shared
 import type { McpInfo } from "@shared/mcp";
 import type { EditorTab } from "@shared/validate";
 
-import type { Path, PickedFile, Selection, ViewTab } from "./types";
+import type { CopyMark, Path, PickedFile, Selection, ViewTab } from "./types";
 
 export type FieldEvent =
   | { type: "input"; path: Path; value: string }
@@ -71,7 +71,7 @@ type SystemEvent =
   | { type: "image/read-failed"; token: number; message: string }
   | { type: "image/encoded"; token: number; image: CroppedImage }
   | { type: "image/encode-failed"; token: number; message: string }
-  | { type: "copy/done"; sessionKey: number; key: string; hash: string; label: string }
+  | ({ type: "copy/done" } & CopyMark)
   | { type: "copy/failed"; message: string }
   | { type: "task/failed"; message: string }
   | { type: "toast/expire"; id: number }

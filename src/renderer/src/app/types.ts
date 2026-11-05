@@ -1,11 +1,23 @@
+import type { Path } from "@shared/path";
 import type { EditorTab } from "@shared/validate";
 
-type Segment = string | number;
-export type Path = readonly Segment[];
+export type { Path };
 
 export interface Selection {
   start: number;
   end: number;
+}
+
+export interface FocusTarget {
+  path: Path;
+  selection: Selection | null;
+}
+
+export interface CopyMark {
+  sessionKey: number;
+  key: string;
+  hash: string;
+  label: string;
 }
 
 export interface PickedFile {
@@ -19,11 +31,3 @@ export type ViewTab = EditorTab | "transfer";
 export const MAIN_CHARACTER = "main";
 
 export const AFFINITY_DEFAULT = "default";
-
-export function samePath(left: Path, right: Path): boolean {
-  return left.length === right.length && left.every((segment, index) => segment === right[index]);
-}
-
-export function pathKey(path: Path): string {
-  return path.join("/");
-}

@@ -9,7 +9,7 @@ import {
   transferStatus,
 } from "../transfer";
 import type { TransferItemVM, TransferTabVM } from "../viewModels";
-import { type Context, copyVM, imageSrc } from "./common";
+import { type Context, copyVM, flashOf, imageSrc } from "./common";
 
 const STATUS_LABELS = {
   skip: "",
@@ -28,7 +28,6 @@ function preview(item: TransferItem): string {
 
 function itemVM(ctx: Context, item: TransferItem): TransferItemVM {
   const status = transferStatus(item, ctx.session.copyLog);
-  const flash = ctx.session.ui.flash;
   return {
     key: item.key,
     path: item.path,
@@ -44,14 +43,26 @@ function itemVM(ctx: Context, item: TransferItem): TransferItemVM {
     copy: isCopyable(item) ? copyVM(ctx, item.path) : null,
     canShowFile: item.kind === "image" && isCopyable(item),
     thumbnail: item.kind === "image" ? imageSrc(ctx.session, item.image) : null,
-    flash: flash?.key === item.key ? flash.nonce : null,
+    flash: flashOf(ctx, item.key),
   };
 }
 
 export function presentTransfer(ctx: Context): TransferTabVM {
-  const groups = transferGroups(ctx.doc);
-  const items = groups.flatMap((group) => group.items);
-  const statuses = items.map((item) => transferStatus(item, ctx.session.copyLog));
+  const groups = transferGroups(ctx.doc).map((group) => {
+    const sections: TransferTabVM["groups"][number]["sections"] = [];
+    for (const item of group.items) {
+      let section = sections.at(-1);
+      if (!section || section.title !== item.section) {
+        section = { title: item.section, items: [] };
+        sections.push(section);
+      }
+      section.items.push(itemVM(ctx, item));
+    }
+    return { title: group.title, tab: group.tab, sections };
+  });
+  const statuses = groups.flatMap((group) =>
+    group.sections.flatMap((section) => section.items.map((item) => item.status)),
+  );
   const total = statuses.filter((status) => status !== "skip").length;
   const done = statuses.filter((status) => status === "done").length;
   const changed = statuses.filter((status) => status === "changed").length;
@@ -70,18 +81,7 @@ export function presentTransfer(ctx: Context): TransferTabVM {
     openLabel: isZetterUrl(ctx.doc.zetterUrl.trim())
       ? "Zetter のこのキャストのページを開く"
       : "Zetter を開く",
-    groups: groups.map((group) => {
-      const sections: TransferTabVM["groups"][number]["sections"] = [];
-      for (const item of group.items) {
-        let section = sections.at(-1);
-        if (!section || section.title !== item.section) {
-          section = { title: item.section, items: [] };
-          sections.push(section);
-        }
-        section.items.push(itemVM(ctx, item));
-      }
-      return { title: group.title, tab: group.tab, sections };
-    }),
+    groups,
     shortcut: "Ctrl+Shift+C",
   };
 }

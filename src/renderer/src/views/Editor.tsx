@@ -2,7 +2,7 @@ import { type KeyboardEvent, type RefObject, useEffect, useRef } from "react";
 
 import type { ChecksVM, EditorVM, PanelVM } from "../app/viewModels";
 import { useEmit } from "./chain";
-import { TabList, TabMeaning } from "./parts/basics";
+import { EmitButton, TabList, TabMeaning } from "./parts/basics";
 import { IconCheck, IconError, IconInfo, IconRemove, IconWarning } from "./parts/icons";
 import { AffinityTab } from "./tabs/AffinityTab";
 import { CharacterTab } from "./tabs/CharacterTab";
@@ -88,17 +88,16 @@ function Checks({
           <ul>
             {group.issues.map((issue) => (
               <li key={issue.key}>
-                <button
-                  type="button"
+                <EmitButton
+                  event={{ type: "editor/jump", tab: issue.tab, target: issue.path }}
                   className="issue"
-                  onClick={() => emit({ type: "editor/jump", tab: issue.tab, target: issue.path })}
                 >
                   <span className="issue-icon">{LEVEL_ICONS[issue.level]}</span>
                   <span className="issue-text">
                     <span className="issue-tab">{issue.tabLabel}</span>
                     <span>{issue.message}</span>
                   </span>
-                </button>
+                </EmitButton>
               </li>
             ))}
           </ul>
@@ -158,34 +157,28 @@ export function Editor({ vm }: { vm: EditorVM }) {
             ) : null}
           </button>
           {vm.deletion ? (
-            <button
-              type="button"
+            <EmitButton
+              event={{ type: "editor/delete" }}
               className="btn btn-plain btn-danger"
               disabled={vm.deletion.disabled}
               title="このキャストを、フォルダごとゴミ箱に移します"
-              onClick={() => emit({ type: "editor/delete" })}
             >
               削除
-            </button>
+            </EmitButton>
           ) : null}
           {vm.canOpenFolder ? (
-            <button
-              type="button"
-              className="btn btn-plain"
-              onClick={() => emit({ type: "editor/open-folder" })}
-            >
+            <EmitButton event={{ type: "editor/open-folder" }} className="btn btn-plain">
               フォルダを開く
-            </button>
+            </EmitButton>
           ) : null}
-          <button
-            type="button"
+          <EmitButton
+            event={{ type: "editor/save" }}
             className="btn btn-primary"
             disabled={vm.saving}
-            onClick={() => emit({ type: "editor/save" })}
             title="Ctrl+S"
           >
             保存
-          </button>
+          </EmitButton>
         </div>
       </header>
       {vm.notices.map((notice) => (
