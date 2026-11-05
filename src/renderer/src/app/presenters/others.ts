@@ -2,10 +2,11 @@ import { castDisplayTitle } from "@shared/cast";
 import { LIMITS } from "@shared/limits";
 
 import { isZetterUrl } from "../machine";
-import { isPendingImage } from "../session";
+import { savedImageFile } from "../session";
 import type { LorebookTabVM, MemoTabVM, PublishTabVM } from "../viewModels";
 import {
   type Context,
+  castAvatar,
   copyVM,
   imageField,
   imageSrc,
@@ -73,16 +74,7 @@ export function presentPublish(ctx: Context): PublishTabVM {
       sub: sub || null,
       hook: story && doc.hook.trim() ? doc.hook : null,
     },
-    chatAvatar: story
-      ? null
-      : {
-          avatar: imageField(ctx, scope, ["avatar"], doc.avatar, {
-            label: "アイコン",
-            shape: "circle",
-            blurred: doc.avatarBlurred,
-          }),
-          blurred: toggle(["avatarBlurred"], "この画像をぼかして表示する", doc.avatarBlurred),
-        },
+    chatAvatar: story ? null : castAvatar(ctx),
     tags: {
       scope: ["tags"],
       rows: doc.tags.map((tag, index) => ({
@@ -121,7 +113,7 @@ export function presentPublish(ctx: Context): PublishTabVM {
         size: `${index + 1}. ${image.width}×${image.height}`,
         blur: toggle(["blurred"], "ぼかす", image.blurred),
         copy: copyVM(ctx, ["gallery", image.id]),
-        canShowFile: !!session.folder && !isPendingImage(image),
+        canShowFile: savedImageFile(session.folder, image) !== null,
       })),
       canAdd: doc.gallery.length < LIMITS.gallery,
     },

@@ -1,6 +1,7 @@
-import { formatCount } from "@shared/text";
+import { formatCount, sumLengths } from "@shared/text";
 
 import type { AllowanceVM } from "../viewModels";
+import { meterTone } from "./common";
 
 export const CHARS_PER_CELL = 400;
 const CELLS_PER_ROW = 25;
@@ -18,9 +19,9 @@ export function allowance(
   max: number,
   note: string | null,
 ): AllowanceVM {
-  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const total = sumLengths(parts);
   const over = total - max;
-  const near = over <= 0 && max - total <= max * 0.1;
+  const tone = meterTone(total, max);
   const cells = Math.max(1, Math.ceil(Math.max(total, max) / CHARS_PER_CELL - 1e-9));
   const limitCell = max / CHARS_PER_CELL;
   const rowCount = Math.ceil(cells / CELLS_PER_ROW);
@@ -65,7 +66,7 @@ export function allowance(
 
   return {
     title,
-    tone: over > 0 ? "over" : near ? "near" : "normal",
+    tone,
     rows,
     meterLabel: `${formatCount(max)}字のうち${formatCount(total)}字`,
     total: formatCount(total),
@@ -83,7 +84,7 @@ export function allowance(
     rest:
       over > 0
         ? { text: `${formatCount(over)}字オーバー`, icon: "error" }
-        : { text: `あと${formatCount(max - total)}字`, icon: near ? "warning" : null },
+        : { text: `あと${formatCount(max - total)}字`, icon: tone === "near" ? "warning" : null },
     note,
   };
 }

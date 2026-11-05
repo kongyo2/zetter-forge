@@ -5,10 +5,11 @@ import {
   PARTNER_TIME_CHIPS,
   type PartnerSettings,
   type ToneExample,
+  isHalfFilledTone,
   sendableMembers,
 } from "@shared/cast";
 import { LIMITS } from "@shared/limits";
-import { formatCount, utf16Length } from "@shared/text";
+import { formatCount, sumLengths, utf16Length } from "@shared/text";
 import {
   partnerSettingsLength,
   settingsShares,
@@ -18,6 +19,7 @@ import {
 } from "@shared/validate";
 
 import { castInk, INKED_CHARACTERS } from "../ink";
+import { memberLabel, memberOrdinal, toneLabel } from "../labels";
 import { MAIN_CHARACTER, type Path } from "../types";
 import type {
   CharacterSheetVM,
@@ -31,26 +33,28 @@ import { type AllowancePart, CHARS_PER_CELL, allowance } from "./allowance";
 import {
   type Context,
   avatar,
+  castAvatar,
   imageField,
   imageSrc,
   limit,
+  meterTone,
   moveVM,
   required,
   textField,
-  toggle,
 } from "./common";
 
 function partner(ctx: Context, base: Path, settings: PartnerSettings): PartnerVM {
   const scope = [...base, "partnerSettings"];
   const total = partnerSettingsLength(settings);
-  const near = total >= LIMITS.partnerSettingsTotal * 0.9;
+  const tone = meterTone(total, LIMITS.partnerSettingsTotal);
   return {
     scope: ["partnerSettings"],
     counter: {
-      text: near
-        ? `残り${formatCount(Math.max(0, LIMITS.partnerSettingsTotal - total))}字`
-        : `${formatCount(total)}/${formatCount(LIMITS.partnerSettingsTotal)}字`,
-      tone: total > LIMITS.partnerSettingsTotal ? "over" : near ? "near" : "normal",
+      text:
+        tone === "normal"
+          ? `${formatCount(total)}/${formatCount(LIMITS.partnerSettingsTotal)}字`
+          : `残り${formatCount(Math.max(0, LIMITS.partnerSettingsTotal - total))}字`,
+      tone,
       aside: null,
     },
     fields: PARTNER_SETTINGS_FIELDS.map((field) =>
@@ -88,25 +92,24 @@ function tones(ctx: Context, base: Path, list: readonly ToneExample[]): ToneList
     meta: `${list.length} / ${LIMITS.toneItemsPerCharacter}件`,
     rows: list.map((item, index) => {
       const row = [...scope, index];
-      const half = !!item.situation.trim() !== !!item.example.trim();
       return {
         index,
         situation: textField(ctx, row, ["situation"], {
           label: "状況",
-          ariaLabel: `口調サンプル${index + 1}の状況`,
+          ariaLabel: toneLabel(index, "状況"),
           value: item.situation,
           placeholder: "例: 元気がないと相談された",
           ...limit(item.situation, LIMITS.toneSituation),
         }),
         example: textField(ctx, row, ["example"], {
           label: "発話例",
-          ariaLabel: `口調サンプル${index + 1}の発話例`,
+          ariaLabel: toneLabel(index, "発話例"),
           value: item.example,
           placeholder: "そのときどう返すか",
           multiline: true,
           rows: 2,
           ...limit(item.example, LIMITS.toneExample),
-          warning: half ? "状況と発話例の両方を書くと保存されます" : null,
+          warning: isHalfFilledTone(item) ? "状況と発話例の両方を書くと保存されます" : null,
         }),
         move: moveVM(index, list.length, "この話し方の例を削除"),
       };
@@ -128,7 +131,7 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
   const nameOf = (memberId: string | null) => {
     if (memberId === null) return doc.name.trim() || "本人";
     const index = doc.members.findIndex((candidate) => candidate.id === memberId);
-    return doc.members[index]?.name.trim() || `${index + 2}人目`;
+    return memberLabel(doc.members[index], index);
   };
   const toParts = (shares: UsageShare[]): AllowancePart[] => {
     const parts = shares.slice(0, INKED_CHARACTERS).map((share, index) => ({
@@ -142,7 +145,7 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
       parts.push({
         key: "rest",
         label: `ほか${rest.length}人`,
-        length: rest.reduce((sum, share) => sum + share.length, 0),
+        length: sumLengths(rest),
         ink: castInk(INKED_CHARACTERS),
       });
     }
@@ -150,17 +153,10 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
   };
   const settingsParts = toParts(settingsShares(doc));
   const toneParts = toParts(toneShares(doc));
-  const settingsTotal = settingsParts.reduce((sum, part) => sum + part.length, 0);
-  const toneTotal = toneParts.reduce((sum, part) => sum + part.length, 0);
 
   const settingsCounter = (length: number): CounterVM => ({
     text: `${formatCount(length)}字`,
-    tone:
-      settings.over > 0
-        ? "over"
-        : settings.remaining <= LIMITS.settingsTotal * 0.1
-          ? "near"
-          : "normal",
+    tone: meterTone(settings.total, LIMITS.settingsTotal),
     aside: story ? `全体の残り${formatCount(settings.remaining)}字` : null,
   });
 
@@ -177,7 +173,7 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
       id: item.id,
       domId: `cast-tab-${item.id}`,
       label: item.name.trim() || "名前未設定",
-      sub: `${index + 2}人目`,
+      sub: memberOrdinal(index),
       avatar: avatar(imageSrc(session, item.avatar), item.name, castInk(index + 1)),
       selected: member?.id === item.id,
     })),
@@ -191,7 +187,7 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
         "性格・設定",
         settingsParts,
         LIMITS.settingsTotal,
-        settingsTotal > LIMITS.settingsTotal
+        sumLengths(settingsParts) > LIMITS.settingsTotal
           ? "誰の設定を削るかはお任せします。"
           : story
             ? "本人と登場人物の合計です。配分は自由です（「いまの状況」は別枠で20,000字）。"
@@ -201,7 +197,7 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
         "口調サンプル",
         toneParts,
         LIMITS.toneTotal,
-        toneTotal > LIMITS.toneTotal
+        sumLengths(toneParts) > LIMITS.toneTotal
           ? "誰の口調サンプルを削るかはお任せします。"
           : "状況と発話例の字数の合計です。",
       ),
@@ -222,15 +218,12 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
 function mainSheet(ctx: Context, settingsCounter: (length: number) => CounterVM): CharacterSheetVM {
   const { doc } = ctx;
   const scope = ["cast"];
+  const own = castAvatar(ctx);
   return {
     scope,
     ink: castInk(0),
     removeLabel: null,
-    avatar: imageField(ctx, scope, ["avatar"], doc.avatar, {
-      label: "アイコン",
-      shape: "circle",
-      blurred: doc.avatarBlurred,
-    }),
+    avatar: own.avatar,
     name: textField(ctx, scope, ["name"], {
       label: "名前",
       value: doc.name,
@@ -238,7 +231,7 @@ function mainSheet(ctx: Context, settingsCounter: (length: number) => CounterVM)
       ...required(!doc.name.trim(), "名前を入力してください"),
       ...limit(doc.name, LIMITS.name),
     }),
-    avatarBlurred: toggle(["avatarBlurred"], "この画像をぼかして表示する", doc.avatarBlurred),
+    avatarBlurred: own.blurred,
     profile: textField(ctx, scope, ["persona"], {
       label: "性格・設定",
       value: doc.persona,
@@ -264,7 +257,8 @@ function memberSheet(
   settingsCounter: (length: number) => CounterVM,
 ): CharacterSheetVM {
   const sendable = sendableMembers(ctx.doc).includes(member);
-  const label = member.name.trim() || `${index + 2}人目`;
+  const ordinal = memberOrdinal(index);
+  const label = memberLabel(member, index);
   const scope = ["members", member.id];
   const missingName = sendable && !member.name.trim();
   return {
@@ -277,7 +271,7 @@ function memberSheet(
     }),
     name: textField(ctx, scope, ["name"], {
       label: "名前",
-      ariaLabel: `${index + 2}人目の名前`,
+      ariaLabel: `${ordinal}の名前`,
       value: member.name,
       placeholder: "この人の名前",
       ...required(missingName, "名前を入力してください"),
@@ -286,7 +280,7 @@ function memberSheet(
     avatarBlurred: null,
     profile: textField(ctx, scope, ["profile"], {
       label: "性格・設定",
-      ariaLabel: `${index + 2}人目の性格・設定`,
+      ariaLabel: `${ordinal}の性格・設定`,
       value: member.profile,
       placeholder: "性格・話し方・ほかの人との関係",
       hint: ["性格・話し方・ほかの登場人物との関係。AIに渡ります。"],

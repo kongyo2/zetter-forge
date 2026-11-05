@@ -13,7 +13,7 @@ import type { ViewEvent } from "../app/events";
 import type { DialogVM, SettingsDialogVM } from "../app/viewModels";
 import { createCropper } from "../runtime/crop";
 import { type Emit, Link, useEmit } from "./chain";
-import { Toggle } from "./parts/basics";
+import { EmitButton, Toggle } from "./parts/basics";
 import { IconCopy } from "./parts/icons";
 
 function Modal({
@@ -149,13 +149,9 @@ function CropDialog({ vm }: { vm: Extract<DialogVM, { kind: "crop" }> }) {
       </div>
       <p className="note">Zetter のキャスト作成画面と同じ比率・大きさで切り抜きます。</p>
       <div className="modal-actions">
-        <button
-          type="button"
-          className="btn btn-plain"
-          onClick={() => emit({ type: "crop/cancel" })}
-        >
+        <EmitButton event={{ type: "crop/cancel" }} className="btn btn-plain">
           キャンセル
-        </button>
+        </EmitButton>
         <button
           type="button"
           className="btn btn-primary"
@@ -228,14 +224,10 @@ function SettingsDialog({ vm }: { vm: SettingsDialogVM }) {
                   aria-label="MCP サーバーの URL"
                   onFocus={(event) => event.target.select()}
                 />
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => emit({ type: "settings/copy-url" })}
-                >
+                <EmitButton event={{ type: "settings/copy-url" }} className="btn btn-outline">
                   <IconCopy />
                   コピー
-                </button>
+                </EmitButton>
               </div>
             ) : null}
           </div>
@@ -251,13 +243,9 @@ function SettingsDialog({ vm }: { vm: SettingsDialogVM }) {
           </p>
         ) : null}
         <div className="modal-actions">
-          <button
-            type="button"
-            className="btn btn-plain"
-            onClick={() => emit({ type: "dialog/cancel" })}
-          >
+          <EmitButton event={{ type: "dialog/cancel" }} className="btn btn-plain">
             {vm.closeLabel}
-          </button>
+          </EmitButton>
           <button type="submit" className="btn btn-primary" disabled={!vm.canApply}>
             この設定にする
           </button>

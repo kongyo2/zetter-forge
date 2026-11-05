@@ -6,10 +6,13 @@ import {
   AddButton,
   Counter,
   Disclosure,
+  EmitButton,
   MoveButtons,
   RemoveButton,
+  RowList,
   Section,
   Select,
+  Subsection,
   Toggle,
 } from "../parts/basics";
 import { ImageField } from "../parts/ImageField";
@@ -99,19 +102,14 @@ function StoryIntro({ vm }: { vm: NonNullable<ExperienceTabVM["story"]>["intro"]
       }
       description="会話が始まったとき、相手に最初に見せる一幕です。情景のナレーション→第一声、が鉄板。"
     >
-      {vm.parts.length === 0 ? (
-        <p className="note empty">
-          まだパートがありません。ナレーションで情景を置いてから、第一声のセリフを足してみてください。
-        </p>
-      ) : (
-        <ol className="script">
-          {vm.parts.map((part) => (
-            <Link key={part.index} scope={[part.index]}>
-              <IntroLine vm={part} />
-            </Link>
-          ))}
-        </ol>
-      )}
+      <RowList
+        rows={vm.parts}
+        empty="まだパートがありません。ナレーションで情景を置いてから、第一声のセリフを足してみてください。"
+        className="script"
+        keyOf={(part) => part.index}
+      >
+        {(part) => <IntroLine vm={part} />}
+      </RowList>
       <div>
         <AddButton disabled={!vm.canAdd}>パートを追加</AddButton>
       </div>
@@ -120,20 +118,18 @@ function StoryIntro({ vm }: { vm: NonNullable<ExperienceTabVM["story"]>["intro"]
 }
 
 function ChatIntro({ vm }: { vm: NonNullable<ExperienceTabVM["chat"]> }) {
-  const emit = useEmit();
   return (
     <Section title="イントロ" description="会話が始まったとき、相手に最初に見せるひとことです。">
       <TextField vm={vm.first} />
       {vm.hidden ? (
         <div className="inline-notice">
           <span>{vm.hidden}</span>
-          <button
-            type="button"
+          <EmitButton
+            event={{ type: "remove", path: ["rest"] }}
             className="btn btn-plain btn-small"
-            onClick={() => emit({ type: "remove", path: ["rest"] })}
           >
             まとめて削除
-          </button>
+          </EmitButton>
         </div>
       ) : null}
     </Section>
@@ -149,10 +145,10 @@ function PlayGuide({ vm }: { vm: PlayGuideVM }) {
       </p>
       {vm.fields.map((field) => (
         <Link key={field.key} scope={[field.key]}>
-          <div className="subsection">
+          <Subsection>
             <TextField vm={field.text} />
             <Toggle vm={field.hidden} />
-          </div>
+          </Subsection>
         </Link>
       ))}
     </Disclosure>
@@ -183,29 +179,19 @@ function Persona({ vm }: { vm: PersonaVM }) {
 
 function Personas({ vm }: { vm: ExperienceTabVM["personas"] }) {
   return (
-    <div className="subsection">
-      <div className="subhead">
-        <h3>この会話でのあなた</h3>
-        <span className="counter">{vm.meta}</span>
-      </div>
+    <Subsection title="この会話でのあなた" meta={<span className="counter">{vm.meta}</span>}>
       <p className="note">
         作者が用意する、推奨の役どころです。遊ぶ人はここから選んで会話を始められます。キャスト本体の文字数には含まれません。
       </p>
-      {vm.rows.length === 0 ? (
-        <p className="note empty">
-          まだありません。設定しなければ、遊ぶ人は自分のペルソナで始めます。
-        </p>
-      ) : (
-        <ol className="rows">
-          {vm.rows.map((row) => (
-            <Link key={row.id} scope={[row.id]}>
-              <Persona vm={row} />
-            </Link>
-          ))}
-        </ol>
-      )}
+      <RowList
+        rows={vm.rows}
+        empty="まだありません。設定しなければ、遊ぶ人は自分のペルソナで始めます。"
+        keyOf={(row) => row.id}
+      >
+        {(row) => <Persona vm={row} />}
+      </RowList>
       <AddButton disabled={!vm.canAdd}>ペルソナを追加</AddButton>
-    </div>
+    </Subsection>
   );
 }
 
@@ -242,7 +228,7 @@ export function ExperienceTab({ vm }: { vm: ExperienceTabVM }) {
         <PlayGuide vm={vm.playGuide} />
       </Link>
       <Disclosure summary="オプション設定" hint="このキャストについて・この会話でのあなた">
-        <div className="subsection">
+        <Subsection>
           <details className="format-guide">
             <summary>このキャストについてで使える書式を見る</summary>
             <dl>
@@ -257,7 +243,7 @@ export function ExperienceTab({ vm }: { vm: ExperienceTabVM }) {
           <Link scope={vm.scope}>
             <TextField vm={vm.about} />
           </Link>
-        </div>
+        </Subsection>
         <Link scope={vm.personas.scope}>
           <Personas vm={vm.personas} />
         </Link>

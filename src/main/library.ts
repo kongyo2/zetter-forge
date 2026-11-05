@@ -7,11 +7,25 @@ import {
   type CastDocument,
   type CastImage,
   CastFormatError,
+  castImage,
+  imageSlots,
+  isPendingFile,
+  isPendingImage,
   normalizeCastDocument,
 } from "@shared/cast";
 import { type CopyLog, copyLogFile, normalizeCopyLog } from "@shared/copyLog";
-import { type ImageKind, imageSlotName } from "@shared/images";
-import type { SaveCastRequest } from "@shared/ipc";
+import { errorMessage } from "@shared/errors";
+import { imageSlotName } from "@shared/images";
+import type {
+  CastHeader,
+  FolderError,
+  LoadedCast,
+  SaveCastRequest,
+  SavedCast,
+  StoredCast,
+} from "@shared/ipc";
+
+import { exists, readJson, removeAll, writeFileAtomic, writeJson } from "./files";
 
 const CAST_FILE = "cast.json";
 const IMAGES_DIR = "images";
@@ -19,19 +33,7 @@ const HISTORY_DIR = "history";
 const HISTORY_LIMIT = 30;
 const COPY_LOG_FILE = "copied.json";
 
-interface StoredCast {
-  folder: string;
-  doc: CastDocument;
-  notices: string[];
-}
-
-export interface LoadedCast extends StoredCast {
-  copyLog: CopyLog;
-}
-
-export interface SavedCast extends StoredCast {
-  replacedImages: Record<string, CastImage>;
-}
+type FromDisk<T> = Omit<T, "imageUrls">;
 
 export const CAST_MISSING = "CAST_MISSING";
 
@@ -50,7 +52,7 @@ function castMissing(): Error {
 
 export interface CastListing {
   casts: StoredCast[];
-  errors: { folder: string; message: string }[];
+  errors: FolderError[];
 }
 
 export function castDir(root: string, folder: string): string {
@@ -68,13 +70,12 @@ export function castFilePath(root: string, folder: string, relative: string): st
   return full;
 }
 
-async function exists(file: string): Promise<boolean> {
-  try {
-    await fs.access(file);
-    return true;
-  } catch {
-    return false;
-  }
+function hasCastFile(dir: string): Promise<boolean> {
+  return exists(path.join(dir, CAST_FILE));
+}
+
+async function requireCastFile(dir: string): Promise<void> {
+  if (!(await hasCastFile(dir))) throw castMissing();
 }
 
 async function readCastFile(dir: string): Promise<CastDocument> {
@@ -96,6 +97,21 @@ function noticesFor(doc: CastDocument): string[] {
     : [];
 }
 
+function stored(folder: string, doc: CastDocument): StoredCast {
+  return { folder, doc, notices: noticesFor(doc) };
+}
+
+export function summarize({ folder, doc }: StoredCast): CastHeader {
+  return {
+    folder,
+    name: doc.name,
+    tagline: doc.tagline,
+    mode: doc.mode,
+    status: doc.status,
+    updatedAt: doc.updatedAt,
+  };
+}
+
 export async function listCasts(root: string): Promise<CastListing> {
   await fs.mkdir(root, { recursive: true });
   const entries = await fs.readdir(root, { withFileTypes: true });
@@ -104,17 +120,11 @@ export async function listCasts(root: string): Promise<CastListing> {
       .filter((entry) => entry.isDirectory())
       .map(async (entry) => {
         const dir = path.join(root, entry.name);
-        if (!(await exists(path.join(dir, CAST_FILE)))) return null;
+        if (!(await hasCastFile(dir))) return null;
         try {
-          const doc = await readCastFile(dir);
-          return { cast: { folder: entry.name, doc, notices: noticesFor(doc) } };
+          return { cast: stored(entry.name, await readCastFile(dir)) };
         } catch (error) {
-          return {
-            error: {
-              folder: entry.name,
-              message: error instanceof Error ? error.message : String(error),
-            },
-          };
+          return { error: { folder: entry.name, message: errorMessage(error) } };
         }
       }),
   );
@@ -128,16 +138,16 @@ export async function listCasts(root: string): Promise<CastListing> {
   return { casts, errors };
 }
 
-export async function loadCast(root: string, folder: string): Promise<LoadedCast> {
+export async function loadCast(root: string, folder: string): Promise<FromDisk<LoadedCast>> {
   const dir = castDir(root, folder);
-  if (!(await exists(path.join(dir, CAST_FILE)))) throw castMissing();
+  await requireCastFile(dir);
   const doc = await readCastFile(dir);
-  return { folder, doc, notices: noticesFor(doc), copyLog: await readCopyLog(dir) };
+  return { ...stored(folder, doc), copyLog: await readCopyLog(dir) };
 }
 
 async function readCopyLog(dir: string): Promise<CopyLog> {
   try {
-    return normalizeCopyLog(JSON.parse(await fs.readFile(path.join(dir, COPY_LOG_FILE), "utf8")));
+    return normalizeCopyLog(await readJson(path.join(dir, COPY_LOG_FILE)));
   } catch {
     return {};
   }
@@ -148,11 +158,8 @@ const copyLogWrites = new Map<string, Promise<void>>();
 export function writeCopyLog(root: string, folder: string, log: CopyLog): Promise<void> {
   const dir = castDir(root, folder);
   const write = async () => {
-    if (!(await exists(path.join(dir, CAST_FILE)))) throw castMissing();
-    await writeFileAtomic(
-      path.join(dir, COPY_LOG_FILE),
-      `${JSON.stringify(copyLogFile(log), null, 2)}\n`,
-    );
+    await requireCastFile(dir);
+    await writeJson(path.join(dir, COPY_LOG_FILE), copyLogFile(log));
   };
   const previous = copyLogWrites.get(dir) ?? Promise.resolve();
   const next = previous.catch(() => undefined).then(write);
@@ -171,7 +178,7 @@ export async function deleteCast(
   trash: (dir: string) => Promise<void>,
 ): Promise<void> {
   const dir = castDir(root, folder);
-  if (!(await exists(path.join(dir, CAST_FILE)))) throw castMissing();
+  await requireCastFile(dir);
   await trash(dir);
 }
 
@@ -216,60 +223,24 @@ function decodeDataUrl(dataUrl: string): { bytes: Buffer; extension: string } {
   return { bytes: Buffer.from(match[2] as string, "base64"), extension };
 }
 
-interface ImageSlot {
-  kind: ImageKind;
-  index?: number;
-  get(): CastImage | null;
-  set(image: CastImage | null): void;
-}
-
-function imageSlots(doc: CastDocument): ImageSlot[] {
-  const slots: ImageSlot[] = [
-    { kind: "avatar", get: () => doc.avatar, set: (image) => (doc.avatar = image) },
-    { kind: "cover", get: () => doc.cover, set: (image) => (doc.cover = image) },
-    { kind: "background", get: () => doc.background, set: (image) => (doc.background = image) },
-  ];
-  doc.gallery.forEach((image, index) => {
-    slots.push({
-      kind: "gallery",
-      index,
-      get: () => image,
-      set: (next) => {
-        if (next) Object.assign(image, next);
-      },
-    });
-  });
-  const avatars = (kind: ImageKind, owners: readonly { avatar: CastImage | null }[]) => {
-    owners.forEach((owner, index) => {
-      slots.push({ kind, index, get: () => owner.avatar, set: (image) => (owner.avatar = image) });
-    });
-  };
-  avatars("member", doc.members);
-  avatars("persona", doc.recommendedPersonas);
-  return slots;
-}
-
 export function referencedImages(doc: CastDocument): string[] {
   return imageSlots(doc)
     .map((slot) => slot.get()?.file)
-    .filter((file): file is string => !!file && !file.startsWith("pending:"));
+    .filter((file): file is string => !!file && !isPendingFile(file));
 }
 
 export interface SaveCastInput extends SaveCastRequest {
   now?: Date;
 }
 
-export async function saveCast(root: string, input: SaveCastInput): Promise<SavedCast> {
+export async function saveCast(root: string, input: SaveCastInput): Promise<FromDisk<SavedCast>> {
   await fs.mkdir(root, { recursive: true });
   const working = normalizeCastDocument(JSON.parse(JSON.stringify(input.doc)), {
     keepPendingImages: true,
   });
   let folder = input.folder;
-  if (folder) {
-    if (!(await exists(path.join(castDir(root, folder), CAST_FILE)))) throw castMissing();
-  } else {
-    folder = await newFolderName(root, working);
-  }
+  if (folder) await requireCastFile(castDir(root, folder));
+  else folder = await newFolderName(root, working);
   const dir = castDir(root, folder);
   const imagesDir = path.join(dir, IMAGES_DIR);
   const historyDir = path.join(dir, HISTORY_DIR);
@@ -278,7 +249,7 @@ export async function saveCast(root: string, input: SaveCastInput): Promise<Save
   const replacedImages: Record<string, CastImage> = {};
   const writes = imageSlots(working).map(async (slot) => {
     const image = slot.get();
-    if (!image?.file.startsWith("pending:")) return;
+    if (!image || !isPendingImage(image)) return;
     const dataUrl = input.pendingImages[image.file];
     if (!dataUrl) return;
     const { bytes, extension } = decodeDataUrl(dataUrl);
@@ -287,12 +258,7 @@ export async function saveCast(root: string, input: SaveCastInput): Promise<Save
     const full = path.join(dir, relative);
     if (!(await exists(full))) await writeFileAtomic(full, bytes);
     const saved = { ...image, file: relative, bytes: bytes.length };
-    replacedImages[image.file] = {
-      file: saved.file,
-      width: saved.width,
-      height: saved.height,
-      bytes: saved.bytes,
-    };
+    replacedImages[image.file] = castImage(relative, saved);
     slot.set(saved);
   });
   await Promise.all(writes);
@@ -309,57 +275,44 @@ export async function saveCast(root: string, input: SaveCastInput): Promise<Save
       "utf8",
     );
   }
-  await writeFileAtomic(castFile, `${JSON.stringify(doc, null, 2)}\n`);
+  await writeJson(castFile, doc);
   await pruneHistory(historyDir);
-  await collectUnusedImages(dir);
-  return { folder, doc, notices: noticesFor(doc), replacedImages };
+  await collectUnusedImages(dir, imagesDir, historyDir);
+  return { ...stored(folder, doc), replacedImages };
 }
 
 function historyStamp(date: Date): string {
   return date.toISOString().replace(/[:.]/gu, "-");
 }
 
-let tempCounter = 0;
-
-async function writeFileAtomic(file: string, data: string | Buffer): Promise<void> {
-  tempCounter += 1;
-  const temp = `${file}.${process.pid}.${Date.now()}.${tempCounter}.tmp`;
-  await fs.writeFile(temp, data);
-  try {
-    await fs.rename(temp, file);
-  } catch (error) {
-    await fs.rm(temp, { force: true });
-    throw error;
-  }
+async function historyFiles(historyDir: string): Promise<string[]> {
+  if (!(await exists(historyDir))) return [];
+  return (await fs.readdir(historyDir)).filter((name) => name.endsWith(".json"));
 }
 
 async function pruneHistory(historyDir: string): Promise<void> {
-  if (!(await exists(historyDir))) return;
-  const files = (await fs.readdir(historyDir)).filter((name) => name.endsWith(".json")).sort();
-  const stale = files.slice(0, Math.max(0, files.length - HISTORY_LIMIT));
-  await Promise.all(stale.map((name) => fs.rm(path.join(historyDir, name), { force: true })));
+  const files = (await historyFiles(historyDir)).sort();
+  await removeAll(historyDir, files.slice(0, Math.max(0, files.length - HISTORY_LIMIT)));
 }
 
-async function collectUnusedImages(dir: string): Promise<void> {
+async function collectUnusedImages(
+  dir: string,
+  imagesDir: string,
+  historyDir: string,
+): Promise<void> {
   const used = new Set(referencedImages(await readCastFile(dir)));
-  const historyDir = path.join(dir, HISTORY_DIR);
-  if (await exists(historyDir)) {
-    const names = (await fs.readdir(historyDir)).filter((name) => name.endsWith(".json"));
-    const snapshots = await Promise.all(
-      names.map(async (name) => {
-        try {
-          const text = await fs.readFile(path.join(historyDir, name), "utf8");
-          return referencedImages(normalizeCastDocument(JSON.parse(text)));
-        } catch {
-          return [];
-        }
-      }),
-    );
-    for (const file of snapshots.flat()) used.add(file);
-  }
-  const imagesDir = path.join(dir, IMAGES_DIR);
+  const snapshots = await Promise.all(
+    (await historyFiles(historyDir)).map(async (name) => {
+      try {
+        return referencedImages(normalizeCastDocument(await readJson(path.join(historyDir, name))));
+      } catch {
+        return [];
+      }
+    }),
+  );
+  for (const file of snapshots.flat()) used.add(file);
   const unused = (await fs.readdir(imagesDir)).filter(
     (name) => !name.endsWith(".tmp") && !used.has(`${IMAGES_DIR}/${name}`),
   );
-  await Promise.all(unused.map((name) => fs.rm(path.join(imagesDir, name), { force: true })));
+  await removeAll(imagesDir, unused);
 }

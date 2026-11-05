@@ -33,16 +33,18 @@ import {
 } from "../src/renderer/src/app/edits";
 import { AFFINITY_DEFAULT, MAIN_CHARACTER } from "../src/renderer/src/app/types";
 
-function docOf(result: EditResult): CastDocument {
+function outcomeOf(result: EditResult) {
   if (!result || "refused" in result)
     throw new Error(`書き換えられませんでした: ${JSON.stringify(result)}`);
-  return result.doc;
+  return result;
+}
+
+function docOf(result: EditResult): CastDocument {
+  return outcomeOf(result).doc;
 }
 
 function extrasOf(result: EditResult) {
-  if (!result || "refused" in result)
-    throw new Error(`書き換えられませんでした: ${JSON.stringify(result)}`);
-  const { doc: _doc, ...extras } = result;
+  const { doc: _doc, ...extras } = outcomeOf(result);
   return extras;
 }
 

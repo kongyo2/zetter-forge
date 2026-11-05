@@ -1,4 +1,5 @@
-import { type JsonObject, isRecord } from "./json";
+import type { ImageKind, ImageMetrics } from "./images";
+import { type JsonObject, asRecord, booleanOr, isRecord, stringOr } from "./json";
 import { LIMITS } from "./limits";
 
 export const CAST_FILE_FORMAT = "zetter-forge/cast";
@@ -11,11 +12,8 @@ export type AffinityPace = "gentle" | "normal" | "rapid";
 
 export const AFFINITY_BASE_SUBJECT = "__cast_base__";
 
-export interface CastImage {
+export interface CastImage extends ImageMetrics {
   file: string;
-  width: number;
-  height: number;
-  bytes: number;
 }
 
 export interface GalleryImage extends CastImage {
@@ -193,14 +191,43 @@ export const AFFINITY_STAGE_FIELDS = [
   { key: "freeText", label: "自由記述", multiline: true },
 ] as const satisfies readonly { key: keyof AffinityStage; label: string; multiline: boolean }[];
 
+export const AFFINITY_RANGE_FIELDS = [
+  { key: "minValue", label: "最小値" },
+  { key: "maxValue", label: "最大値" },
+  { key: "initialValue", label: "初期値" },
+] as const satisfies readonly { key: keyof AffinityConfig; label: string }[];
+
+export function isFieldKey<K extends string>(
+  fields: readonly { key: K }[],
+  key: unknown,
+): key is K {
+  return fields.some((field) => field.key === key);
+}
+
 export const AFFINITY_PACES: readonly { value: AffinityPace; label: string }[] = [
   { value: "gentle", label: "緩やか" },
   { value: "normal", label: "普通" },
   { value: "rapid", label: "急接近" },
 ];
 
+export function isAffinityPace(value: unknown): value is AffinityPace {
+  return AFFINITY_PACES.some((pace) => pace.value === value);
+}
+
 export function newId(): string {
   return globalThis.crypto.randomUUID();
+}
+
+export function castImage(file: string, image: ImageMetrics): CastImage {
+  return { file, width: image.width, height: image.height, bytes: image.bytes };
+}
+
+export function isPendingFile(file: string): boolean {
+  return file.startsWith("pending:");
+}
+
+export function isPendingImage(image: CastImage | null | undefined): boolean {
+  return !!image && isPendingFile(image.file);
 }
 
 export function createEmptyPartnerSettings(): PartnerSettings {
@@ -310,14 +337,6 @@ export function createEmptyCast(now = new Date()): CastDocument {
   };
 }
 
-function str(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
-function bool(value: unknown, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback;
-}
-
 function intOrNull(value: unknown, fallback: number | null): number | null {
   if (value === null || value === "") return null;
   const number = Number(value);
@@ -326,6 +345,10 @@ function intOrNull(value: unknown, fallback: number | null): number | null {
 
 function list(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function idOf(source: JsonObject): string {
+  return stringOr(source.id) || newId();
 }
 
 function keepExtras<T extends object>(raw: unknown, known: T): T {
@@ -339,12 +362,13 @@ function keepExtras<T extends object>(raw: unknown, known: T): T {
 
 function normalizeImage(raw: unknown, keepPending = false): CastImage | null {
   if (!isRecord(raw) || typeof raw.file !== "string" || !raw.file) return null;
-  if (!keepPending && raw.file.startsWith("pending:")) return null;
+  if (!keepPending && isPendingFile(raw.file)) return null;
+  const size = (value: unknown) => (Number.isFinite(value) ? Number(value) : 0);
   return keepExtras(raw, {
     file: raw.file,
-    width: Number.isFinite(raw.width) ? Number(raw.width) : 0,
-    height: Number.isFinite(raw.height) ? Number(raw.height) : 0,
-    bytes: Number.isFinite(raw.bytes) ? Number(raw.bytes) : 0,
+    width: size(raw.width),
+    height: size(raw.height),
+    bytes: size(raw.bytes),
   });
 }
 
@@ -353,33 +377,36 @@ function normalizeGalleryImage(raw: unknown, keepPending = false): GalleryImage 
   if (!image || !isRecord(raw)) return null;
   return keepExtras(raw, {
     ...image,
-    id: str(raw.id) || newId(),
-    blurred: bool(raw.blurred, false),
+    id: idOf(raw),
+    blurred: booleanOr(raw.blurred, false),
   });
 }
 
 function normalizeToneExample(raw: unknown): ToneExample {
-  const source = isRecord(raw) ? raw : {};
-  return keepExtras(raw, { situation: str(source.situation), example: str(source.example) });
+  const source = asRecord(raw);
+  return keepExtras(raw, {
+    situation: stringOr(source.situation),
+    example: stringOr(source.example),
+  });
 }
 
 function normalizePartnerSettings(raw: unknown): PartnerSettings {
-  const source = isRecord(raw) ? raw : {};
+  const source = asRecord(raw);
   return keepExtras(raw, {
-    dailyRoutine: str(source.dailyRoutine),
-    messageHabits: str(source.messageHabits),
-    proactiveMessages: str(source.proactiveMessages),
-    distanceWhenApart: str(source.distanceWhenApart),
-    freeform: str(source.freeform),
+    dailyRoutine: stringOr(source.dailyRoutine),
+    messageHabits: stringOr(source.messageHabits),
+    proactiveMessages: stringOr(source.proactiveMessages),
+    distanceWhenApart: stringOr(source.distanceWhenApart),
+    freeform: stringOr(source.freeform),
   });
 }
 
 function normalizeMember(raw: unknown, keepPending = false): CastMember {
-  const source = isRecord(raw) ? raw : {};
+  const source = asRecord(raw);
   return keepExtras(raw, {
-    id: str(source.id) || newId(),
-    name: str(source.name),
-    profile: str(source.profile),
+    id: idOf(source),
+    name: stringOr(source.name),
+    profile: stringOr(source.profile),
     toneExamples: list(source.toneExamples).map(normalizeToneExample),
     partnerSettings: normalizePartnerSettings(source.partnerSettings),
     avatar: normalizeImage(source.avatar, keepPending),
@@ -387,69 +414,65 @@ function normalizeMember(raw: unknown, keepPending = false): CastMember {
 }
 
 function normalizePersona(raw: unknown, keepPending = false): RecommendedPersona {
-  const source = isRecord(raw) ? raw : {};
+  const source = asRecord(raw);
   return keepExtras(raw, {
-    id: str(source.id) || newId(),
-    name: str(source.name),
-    useViewerName: bool(source.useViewerName, false),
-    tagline: str(source.tagline),
-    note: str(source.note),
+    id: idOf(source),
+    name: stringOr(source.name),
+    useViewerName: booleanOr(source.useViewerName, false),
+    tagline: stringOr(source.tagline),
+    note: stringOr(source.note),
     avatar: normalizeImage(source.avatar, keepPending),
   });
 }
 
 function normalizeIntroPart(raw: unknown): IntroPart {
-  const source = isRecord(raw) ? raw : {};
+  const source = asRecord(raw);
   const kind: IntroKind = source.kind === "speech" ? "speech" : "narration";
   return keepExtras(raw, {
     kind,
-    text: str(source.text),
-    speakerId: typeof source.speakerId === "string" && source.speakerId ? source.speakerId : null,
+    text: stringOr(source.text),
+    speakerId: stringOr(source.speakerId) || null,
   });
 }
 
 function normalizePlayGuide(raw: unknown): PlayGuide {
-  const source = isRecord(raw) ? raw : {};
+  const source = asRecord(raw);
   const guide = createEmptyPlayGuide();
   for (const field of PLAY_GUIDE_FIELDS) {
     const entry = source[field.key];
     if (!isRecord(entry)) continue;
     guide[field.key] = keepExtras(entry, {
-      text: str(entry.text),
-      hidden: bool(entry.hidden, field.hiddenByDefault),
+      text: stringOr(entry.text),
+      hidden: booleanOr(entry.hidden, field.hiddenByDefault),
     });
   }
   return keepExtras(raw, guide);
 }
 
 function normalizeStage(raw: unknown): AffinityStage {
-  const source = isRecord(raw) ? raw : {};
+  const source = asRecord(raw);
   return keepExtras(raw, {
     startValue: intOrNull(source.startValue, null),
-    callText: str(source.callText),
-    speechText: str(source.speechText),
-    distanceText: str(source.distanceText),
-    agencyText: str(source.agencyText),
-    avoidText: str(source.avoidText),
-    freeText: str(source.freeText),
+    callText: stringOr(source.callText),
+    speechText: stringOr(source.speechText),
+    distanceText: stringOr(source.distanceText),
+    agencyText: stringOr(source.agencyText),
+    avoidText: stringOr(source.avoidText),
+    freeText: stringOr(source.freeText),
   });
 }
 
 export function normalizeAffinityConfig(raw: unknown): AffinityConfig | null {
   if (!isRecord(raw)) return null;
   const defaults = createDefaultAffinityConfig();
-  const pace =
-    raw.pace === "gentle" || raw.pace === "normal" || raw.pace === "rapid"
-      ? raw.pace
-      : defaults.pace;
   return keepExtras(raw, {
-    itemName: typeof raw.itemName === "string" ? raw.itemName : defaults.itemName,
+    itemName: stringOr(raw.itemName, defaults.itemName),
     minValue: intOrNull(raw.minValue, defaults.minValue),
     maxValue: intOrNull(raw.maxValue, defaults.maxValue),
     initialValue: intOrNull(raw.initialValue, defaults.initialValue),
-    pace,
-    showInChat: raw.showInChat !== false,
-    enabled: raw.enabled !== false,
+    pace: isAffinityPace(raw.pace) ? raw.pace : defaults.pace,
+    showInChat: booleanOr(raw.showInChat, defaults.showInChat),
+    enabled: booleanOr(raw.enabled, defaults.enabled),
     stages: list(raw.stages).map(normalizeStage),
   });
 }
@@ -469,11 +492,11 @@ function normalizeAffinity(raw: unknown): CastAffinity | null {
 }
 
 function normalizeLorebook(raw: unknown): LorebookNote {
-  const source = isRecord(raw) ? raw : {};
+  const source = asRecord(raw);
   return keepExtras(raw, {
-    id: str(source.id) || newId(),
-    title: str(source.title),
-    note: str(source.note),
+    id: idOf(source),
+    title: stringOr(source.title),
+    note: stringOr(source.note),
   });
 }
 
@@ -503,22 +526,22 @@ export function normalizeCastDocument(raw: unknown, options: NormalizeOptions = 
     formatVersion: Number.isSafeInteger(raw.formatVersion)
       ? Number(raw.formatVersion)
       : CAST_FILE_VERSION,
-    id: str(raw.id) || empty.id,
-    createdAt: str(raw.createdAt) || empty.createdAt,
-    updatedAt: str(raw.updatedAt) || empty.updatedAt,
+    id: stringOr(raw.id) || empty.id,
+    createdAt: stringOr(raw.createdAt) || empty.createdAt,
+    updatedAt: stringOr(raw.updatedAt) || empty.updatedAt,
     mode: raw.mode === "chat" ? "chat" : "story",
     status: raw.status === "public" ? "public" : "private",
-    name: str(raw.name),
-    persona: str(raw.persona),
+    name: stringOr(raw.name),
+    persona: stringOr(raw.persona),
     avatar: normalizeImage(raw.avatar, keep),
-    avatarBlurred: bool(raw.avatarBlurred, empty.avatarBlurred),
+    avatarBlurred: booleanOr(raw.avatarBlurred, empty.avatarBlurred),
     partnerSettings: normalizePartnerSettings(raw.partnerSettings),
     toneExamples: list(raw.toneExamples).map(normalizeToneExample),
     members,
-    tagline: str(raw.tagline),
-    situation: str(raw.situation),
+    tagline: stringOr(raw.tagline),
+    situation: stringOr(raw.situation),
     introScript,
-    aboutText: str(raw.aboutText),
+    aboutText: stringOr(raw.aboutText),
     playGuide: normalizePlayGuide(raw.playGuide),
     recommendedPersonas: list(raw.recommendedPersonas).map((persona) =>
       normalizePersona(persona, keep),
@@ -526,22 +549,55 @@ export function normalizeCastDocument(raw: unknown, options: NormalizeOptions = 
     affinity: normalizeAffinity(raw.affinity),
     lorebooks: list(raw.lorebooks).map(normalizeLorebook),
     cover: normalizeImage(raw.cover, keep),
-    coverBlurred: bool(raw.coverBlurred, empty.coverBlurred),
+    coverBlurred: booleanOr(raw.coverBlurred, empty.coverBlurred),
     tags: list(raw.tags).filter((tag): tag is string => typeof tag === "string"),
-    hook: str(raw.hook),
+    hook: stringOr(raw.hook),
     background: normalizeImage(raw.background, keep),
     gallery: list(raw.gallery)
       .map((image) => normalizeGalleryImage(image, keep))
       .filter((image): image is GalleryImage => image !== null),
-    personaHidden: bool(raw.personaHidden, empty.personaHidden),
-    toneExamplesHidden: bool(raw.toneExamplesHidden, empty.toneExamplesHidden),
-    situationHidden: bool(raw.situationHidden, empty.situationHidden),
-    authorHidden: bool(raw.authorHidden, empty.authorHidden),
-    showFavoriteCount: bool(raw.showFavoriteCount, empty.showFavoriteCount),
-    showTalkCount: bool(raw.showTalkCount, empty.showTalkCount),
-    zetterUrl: str(raw.zetterUrl),
-    memo: str(raw.memo),
+    personaHidden: booleanOr(raw.personaHidden, empty.personaHidden),
+    toneExamplesHidden: booleanOr(raw.toneExamplesHidden, empty.toneExamplesHidden),
+    situationHidden: booleanOr(raw.situationHidden, empty.situationHidden),
+    authorHidden: booleanOr(raw.authorHidden, empty.authorHidden),
+    showFavoriteCount: booleanOr(raw.showFavoriteCount, empty.showFavoriteCount),
+    showTalkCount: booleanOr(raw.showTalkCount, empty.showTalkCount),
+    zetterUrl: stringOr(raw.zetterUrl),
+    memo: stringOr(raw.memo),
   });
+}
+
+interface ImageSlot {
+  kind: ImageKind;
+  index?: number;
+  get(): CastImage | null;
+  set(image: CastImage | null): void;
+}
+
+export function imageSlots(doc: CastDocument): ImageSlot[] {
+  const slots: ImageSlot[] = [
+    { kind: "avatar", get: () => doc.avatar, set: (image) => (doc.avatar = image) },
+    { kind: "cover", get: () => doc.cover, set: (image) => (doc.cover = image) },
+    { kind: "background", get: () => doc.background, set: (image) => (doc.background = image) },
+  ];
+  doc.gallery.forEach((image, index) => {
+    slots.push({
+      kind: "gallery",
+      index,
+      get: () => image,
+      set: (next) => {
+        if (next) Object.assign(image, next);
+      },
+    });
+  });
+  const avatars = (kind: ImageKind, owners: readonly { avatar: CastImage | null }[]) => {
+    owners.forEach((owner, index) => {
+      slots.push({ kind, index, get: () => owner.avatar, set: (image) => (owner.avatar = image) });
+    });
+  };
+  avatars("member", doc.members);
+  avatars("persona", doc.recommendedPersonas);
+  return slots;
 }
 
 export function sendableMembers(doc: CastDocument): CastMember[] {
@@ -571,18 +627,30 @@ export function filledPlayGuideFields(guide: PlayGuide): (typeof PLAY_GUIDE_FIEL
   return PLAY_GUIDE_FIELDS.filter((field) => guide[field.key].text.trim());
 }
 
+export function filledStageFields(stage: AffinityStage): (typeof AFFINITY_STAGE_FIELDS)[number][] {
+  return AFFINITY_STAGE_FIELDS.filter((field) => stage[field.key].trim());
+}
+
+export function isHalfFilledTone(tone: ToneExample): boolean {
+  return !tone.situation.trim() !== !tone.example.trim();
+}
+
+export function overrideTitle(member: Pick<CastMember, "name">): string {
+  return `${member.name.trim() || "登場人物"}の個別設定`;
+}
+
+export function isNamelessPersona(persona: RecommendedPersona): boolean {
+  return !persona.useViewerName && !persona.name.trim();
+}
+
 export function sortAffinityStages(config: AffinityConfig): void {
   if (config.stages.length < 2) return;
   const [first, ...rest] = config.stages;
-  rest.sort((left, right) => {
-    const leftValue = Number.isSafeInteger(left.startValue)
-      ? (left.startValue as number)
+  const order = (stage: AffinityStage) =>
+    Number.isSafeInteger(stage.startValue)
+      ? (stage.startValue as number)
       : Number.POSITIVE_INFINITY;
-    const rightValue = Number.isSafeInteger(right.startValue)
-      ? (right.startValue as number)
-      : Number.POSITIVE_INFINITY;
-    return leftValue - rightValue;
-  });
+  rest.sort((left, right) => order(left) - order(right));
   config.stages.splice(0, config.stages.length, first as AffinityStage, ...rest);
 }
 

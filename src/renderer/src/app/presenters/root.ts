@@ -4,8 +4,9 @@ import { MCP_PORT_MAX, MCP_PORT_MIN, type McpInfo, parsePort } from "@shared/mcp
 import { type CastIssue, type EditorTab, missingRequired } from "@shared/validate";
 
 import { issuesOf } from "../checks";
+import { displayTitle } from "../labels";
 import type { AppState, Session, SettingsDialog } from "../state";
-import { transferItems, transferStatus } from "../transfer";
+import { isOutstanding, transferItems } from "../transfer";
 import type { ViewTab } from "../types";
 import type {
   ChecksVM,
@@ -169,7 +170,7 @@ function presentEditor(state: AppState, session: Session): EditorVM {
   const { doc } = session;
   const issues = issuesOf(doc);
   const missing = missingRequired(doc);
-  const { title, sub } = castDisplayTitle(doc);
+  const { sub } = castDisplayTitle(doc);
   const people = 1 + sendableMembers(doc).length;
   const saving = state.task.kind === "saving" && state.task.sessionKey === session.key;
   const deleting = state.task.kind === "deleting" && state.task.folder === session.folder;
@@ -177,14 +178,11 @@ function presentEditor(state: AppState, session: Session): EditorVM {
     issues.filter((issue) => issue.tab === tab && issue.level === level).length;
   const logged = Object.keys(session.copyLog).length > 0;
   const remaining = logged
-    ? transferItems(doc).filter((item) => {
-        const status = transferStatus(item, session.copyLog);
-        return status === "todo" || status === "changed";
-      }).length
+    ? transferItems(doc).filter((item) => isOutstanding(item, session.copyLog)).length
     : 0;
   return {
     key: session.key,
-    title: title || "名前未設定のキャスト",
+    title: displayTitle(doc),
     meta: [
       sub,
       doc.mode === "chat" ? "雑談" : "ストーリー",
@@ -321,8 +319,7 @@ function presentToasts(state: AppState): ToastVM[] {
 
 function windowTitle(session: Session | null): string {
   if (!session) return "Zetter Forge";
-  const title = castDisplayTitle(session.doc).title || "名前未設定のキャスト";
-  return `${session.dirty ? "● " : ""}${title} — Zetter Forge`;
+  return `${session.dirty ? "● " : ""}${displayTitle(session.doc)} — Zetter Forge`;
 }
 
 export function presentRoot(state: AppState): RootVM {

@@ -1,3 +1,4 @@
+import { failure } from "@shared/errors";
 import type { ForgeApi, InvokeResult, MenuCommand } from "@shared/ipc";
 import type { RemoteReply, RemoteRequest } from "@shared/remote";
 import { contextBridge, ipcRenderer } from "electron";
@@ -33,10 +34,7 @@ const api: ForgeApi = {
   onRemote: (handle) => {
     const handler = (_event: Electron.IpcRendererEvent, id: number, request: RemoteRequest) => {
       void handle(request)
-        .catch((error: unknown): RemoteReply => ({
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        }))
+        .catch((error: unknown): RemoteReply => failure(error))
         .then((reply) => ipcRenderer.send("remote:reply", id, reply));
     };
     ipcRenderer.on("remote:request", handler);

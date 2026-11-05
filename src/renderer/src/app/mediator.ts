@@ -1,4 +1,5 @@
 import type { CopyLog } from "@shared/copyLog";
+import { errorMessage } from "@shared/errors";
 import type { CroppedImage, CropCanvas, ImageKind } from "@shared/images";
 import type { ForgeApi } from "@shared/ipc";
 
@@ -20,10 +21,6 @@ export interface Ports {
   now(): number;
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 type FailureType =
   | "library/failed"
   | "root/failed"
@@ -35,7 +32,11 @@ type FailureType =
   | "mcp/save-failed";
 
 function toFailure(type: FailureType, token: number): (error: unknown) => AppEvent {
-  return (error) => ({ type, token, message: messageOf(error) });
+  return (error) => ({ type, token, message: errorMessage(error) });
+}
+
+function copyFailed(error: unknown): AppEvent {
+  return { type: "copy/failed", message: errorMessage(error) };
 }
 
 export class Mediator {
@@ -85,7 +86,7 @@ export class Mediator {
 
   private attempt(task: Promise<unknown>, failure: string): void {
     task.catch((error: unknown) =>
-      this.dispatch({ type: "task/failed", message: `${failure}: ${messageOf(error)}` }),
+      this.dispatch({ type: "task/failed", message: `${failure}: ${errorMessage(error)}` }),
     );
   }
 
@@ -135,7 +136,7 @@ export class Mediator {
           (error) => ({
             type: "cast/save-failed",
             token: effect.token,
-            message: messageOf(error),
+            message: errorMessage(error),
             missing: false,
           }),
         );
@@ -192,7 +193,7 @@ export class Mediator {
             hash: effect.hash,
             label: effect.label,
           }),
-          (error) => ({ type: "copy/failed", message: messageOf(error) }),
+          copyFailed,
         );
         return;
       }
@@ -217,7 +218,7 @@ export class Mediator {
         this.settle(
           forge.copyText(effect.text),
           () => ({ type: "notice", message: effect.message }),
-          (error) => ({ type: "copy/failed", message: messageOf(error) }),
+          copyFailed,
         );
         return;
       case "toast/expire":

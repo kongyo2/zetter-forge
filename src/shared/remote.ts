@@ -1,24 +1,8 @@
 import type { CastDocument } from "./cast";
 import type { JsonObject } from "./json";
 import { LIMITS } from "./limits";
+import { pathText } from "./path";
 import { type CastIssue, settingsUsage, toneUsage, validateCast } from "./validate";
-
-type Segment = string | number;
-
-const INDEXED_LISTS = new Set(["toneExamples", "intro", "tags", "stages"]);
-
-export function parsePath(text: string): Segment[] {
-  const parts = text.split("/").filter(Boolean);
-  return parts.map((part, index) =>
-    index > 0 && INDEXED_LISTS.has(parts[index - 1] as string) && /^\d+$/u.test(part)
-      ? Number(part)
-      : part,
-  );
-}
-
-export function pathText(path: readonly Segment[]): string {
-  return path.join("/");
-}
 
 export interface RemoteEdit {
   action: "set" | "switch" | "add" | "remove" | "move";

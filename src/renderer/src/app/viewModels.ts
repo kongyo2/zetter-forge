@@ -1,12 +1,10 @@
 import type { ImageSpec } from "@shared/images";
 import type { EditorTab } from "@shared/validate";
 
-import type { Path, Selection, ViewTab } from "./types";
+import type { FocusRequest } from "./state";
+import type { Path, ViewTab } from "./types";
 
-export interface FocusVM {
-  nonce: number;
-  selection: Selection | null;
-}
+export type FocusVM = Pick<FocusRequest, "nonce" | "selection">;
 
 export interface CounterVM {
   text: string;

@@ -1,4 +1,10 @@
-import { type CastDocument, createEmptyCast } from "@shared/cast";
+import {
+  type CastDocument,
+  castDisplayTitle,
+  castImage,
+  createEmptyCast,
+  isPendingImage,
+} from "@shared/cast";
 import { type CopyLog, textHash } from "@shared/copyLog";
 import type { CroppedImage } from "@shared/images";
 import type { LoadedCast, SavedCast } from "@shared/ipc";
@@ -11,6 +17,7 @@ import {
   type McpSettings,
   parsePort,
 } from "@shared/mcp";
+import { pathText } from "@shared/path";
 import type { EditorTab } from "@shared/validate";
 
 import {
@@ -37,8 +44,8 @@ import type { AppEvent, FieldEvent } from "./events";
 import {
   canonicalJson,
   dropSavedImages,
-  isPendingImage,
   mapImages,
+  savedImageFile,
   usedPendingImages,
 } from "./session";
 import {
@@ -54,7 +61,7 @@ import {
   initialUi,
 } from "./state";
 import { findTransferItem, nextTransferItem, transferItems } from "./transfer";
-import { MAIN_CHARACTER, type Path, type PickedFile } from "./types";
+import { type CopyMark, MAIN_CHARACTER, type Path, type PickedFile, type Selection } from "./types";
 
 export interface Transition {
   state: AppState;
@@ -89,6 +96,10 @@ class Step {
     this.effects.push(effect);
   }
 
+  closeDialog(): void {
+    this.set({ dialog: null });
+  }
+
   finish<K extends Exclude<Task["kind"], "idle">>(
     kind: K,
     token: number,
@@ -117,7 +128,7 @@ class Step {
     this.effect({ type: "toast/expire", id, after: undoPoint ? TOAST_MS.undo : TOAST_MS[tone] });
   }
 
-  focus(path: Path, selection: { start: number; end: number } | null = null): void {
+  focus(path: Path, selection: Selection | null = null): void {
     const nonce = this.next();
     this.ui({ focus: { path, nonce, selection } });
   }
@@ -299,7 +310,7 @@ function handle(step: Step, event: AppEvent): void {
       });
       return;
     case "copy/done":
-      copied(step, event.sessionKey, event.key, event.hash, event.label);
+      copied(step, event);
       return;
     case "copy/failed":
       step.toast(`コピーできませんでした: ${event.message}`, "error");
@@ -310,7 +321,7 @@ function handle(step: Step, event: AppEvent): void {
       if (dialog?.kind !== "confirm") return;
       const choice = dialog.choices.find((candidate) => candidate.id === event.choice);
       if (!choice) return;
-      step.set({ dialog: null });
+      step.closeDialog();
       if (choice.intent) perform(step, choice.intent);
       return;
     }
@@ -319,7 +330,7 @@ function handle(step: Step, event: AppEvent): void {
         state.dialog?.kind === "confirm" ||
         (state.dialog?.kind === "settings" && !state.dialog.busy)
       )
-        step.set({ dialog: null });
+        step.closeDialog();
       return;
     case "image/read":
       withCrop(step, event.token, (dialog) => ({ ...dialog, source: event.source }));
@@ -350,7 +361,7 @@ function handle(step: Step, event: AppEvent): void {
       withCrop(step, event.token, (dialog) => ({ ...dialog, busy: false, error: event.message }));
       return;
     case "crop/cancel":
-      if (state.dialog?.kind === "crop") step.set({ dialog: null });
+      if (state.dialog?.kind === "crop") step.closeDialog();
       return;
 
     case "settings/open":
@@ -378,21 +389,21 @@ function handle(step: Step, event: AppEvent): void {
       return;
     case "mcp/load-failed":
       if (event.token !== state.mcpToken) return;
-      withSettings(step, (dialog) =>
-        dialog.token === event.token
-          ? { ...dialog, busy: false, error: `設定を読めませんでした: ${event.message}` }
-          : dialog,
-      );
+      settleSettings(step, event.token, (dialog) => ({
+        ...dialog,
+        busy: false,
+        error: `設定を読めませんでした: ${event.message}`,
+      }));
       return;
     case "mcp/saved":
       mcpSaved(step, event.token, event.info);
       return;
     case "mcp/save-failed":
-      withSettings(step, (dialog) =>
-        dialog.token === event.token
-          ? { ...dialog, busy: false, error: `保存できませんでした: ${event.message}` }
-          : dialog,
-      );
+      settleSettings(step, event.token, (dialog) => ({
+        ...dialog,
+        busy: false,
+        error: `保存できませんでした: ${event.message}`,
+      }));
       return;
     case "remote/edit":
       fieldEvent(step, event.edit);
@@ -461,7 +472,24 @@ function switchSession(step: Step, session: Session | null): void {
   step.set({ session, dialog });
 }
 
-function mayLeave(state: AppState, intent: { discard: boolean }): boolean {
+type LeavingIntent = Extract<Intent, { discard: boolean }>;
+
+function isLeaving(intent: Intent): intent is LeavingIntent {
+  return intent.kind === "open" || intent.kind === "new" || intent.kind === "choose-root";
+}
+
+function stopOpening(step: Step): void {
+  if (step.state.task.kind === "opening") step.set({ task: { kind: "idle" } });
+}
+
+function saveOrDiscard(verb: string, then: Intent, discard: Intent): ConfirmDialog["choices"] {
+  return [
+    { id: "save", label: `保存して${verb}`, tone: "primary", intent: { kind: "save-then", then } },
+    { id: "discard", label: `保存しないで${verb}`, tone: "danger", intent: discard },
+  ];
+}
+
+function mayLeave(state: AppState, intent: LeavingIntent): boolean {
   const session = state.session;
   if (!session || !session.dirty || intent.discard) return true;
   const task = state.task;
@@ -472,8 +500,7 @@ function mayLeave(state: AppState, intent: { discard: boolean }): boolean {
 
 function castTitle(state: AppState, folder: string): string {
   const cast = state.library.listing?.casts.find((candidate) => candidate.folder === folder);
-  const title = cast ? (cast.mode === "story" && cast.tagline.trim()) || cast.name.trim() : "";
-  return title || folder;
+  return (cast && castDisplayTitle(cast).title) || folder;
 }
 
 function request(step: Step, intent: Intent): void {
@@ -483,7 +510,7 @@ function request(step: Step, intent: Intent): void {
     step.set({ task: { ...state.task, then: intent } });
     return;
   }
-  if (intent.kind !== "open" && intent.kind !== "new" && intent.kind !== "choose-root") {
+  if (!isLeaving(intent)) {
     perform(step, intent);
     return;
   }
@@ -491,36 +518,24 @@ function request(step: Step, intent: Intent): void {
   if (state.task.kind === "deleting") return;
   if (intent.kind === "open") {
     if (state.session?.folder === intent.folder) {
-      if (state.task.kind === "opening") step.set({ task: { kind: "idle" } });
+      stopOpening(step);
       return;
     }
     if (state.task.kind === "opening" && state.task.folder === intent.folder) return;
   }
   if (!mayLeave(state, intent)) {
-    if (state.task.kind === "opening") step.set({ task: { kind: "idle" } });
+    stopOpening(step);
     const what =
       intent.kind === "open"
         ? `「${castTitle(state, intent.folder)}」を開く`
         : intent.kind === "new"
           ? "新しいキャストを作る"
           : "保存先を変える";
+    const leave = { ...intent, discard: true };
     showConfirm(step, {
       title: "保存していない変更があります",
       message: `${what}前に、いまのキャストを保存しますか？保存しないで続けると、最後に保存したあとの変更は失われます。`,
-      choices: [
-        {
-          id: "save",
-          label: "保存して続ける",
-          tone: "primary",
-          intent: { kind: "save-then", then: { ...intent, discard: true } },
-        },
-        {
-          id: "discard",
-          label: "保存しないで続ける",
-          tone: "danger",
-          intent: { ...intent, discard: true },
-        },
-      ],
+      choices: saveOrDiscard("続ける", leave, leave),
     });
     return;
   }
@@ -529,9 +544,9 @@ function request(step: Step, intent: Intent): void {
 
 function perform(step: Step, intent: Intent): void {
   const { state } = step;
+  if (isLeaving(intent) && !mayLeave(state, intent)) return request(step, intent);
   switch (intent.kind) {
     case "open": {
-      if (!mayLeave(state, intent)) return request(step, intent);
       const token = step.next();
       step.set({
         task: {
@@ -546,14 +561,12 @@ function perform(step: Step, intent: Intent): void {
       return;
     }
     case "new": {
-      if (!mayLeave(state, intent)) return request(step, intent);
       const key = step.next();
-      if (state.task.kind === "opening") step.set({ task: { kind: "idle" } });
+      stopOpening(step);
       switchSession(step, newSession(key, createEmptyCast(new Date(step.now))));
       return;
     }
     case "choose-root": {
-      if (!mayLeave(state, intent)) return request(step, intent);
       const token = step.next();
       step.set({ task: { kind: "choosing-root", token } });
       step.effect({ type: "library/choose", token });
@@ -624,23 +637,11 @@ function castLoaded(step: Step, token: number, cast: LoadedCast): void {
     showConfirm(step, {
       title: "読み込みのあいだに書き換えた内容があります",
       message: `「${castTitle(state, cast.folder)}」を開く前に、いまのキャストを保存しますか？保存しないで開くと、書き換えた内容は失われます。`,
-      choices: [
-        {
-          id: "save",
-          label: "保存して開く",
-          tone: "primary",
-          intent: {
-            kind: "save-then",
-            then: { kind: "open", folder: cast.folder, discard: true },
-          },
-        },
-        {
-          id: "discard",
-          label: "保存しないで開く",
-          tone: "danger",
-          intent: { kind: "adopt", loaded: cast },
-        },
-      ],
+      choices: saveOrDiscard(
+        "開く",
+        { kind: "open", folder: cast.folder, discard: true },
+        { kind: "adopt", loaded: cast },
+      ),
     });
     return;
   }
@@ -738,14 +739,13 @@ function saved(step: Step, token: number, result: SavedCast): void {
   const then = task.then && editedWhileSaving ? keepChanges(task.then) : task.then;
   if (task.again && step.state.session?.dirty) save(step, then);
   else if (then) {
-    step.set({ dialog: null });
+    step.closeDialog();
     request(step, then);
   }
 }
 
 function keepChanges(intent: Intent): Intent {
-  if (intent.kind === "open" || intent.kind === "new" || intent.kind === "choose-root")
-    return { ...intent, discard: false };
+  if (isLeaving(intent)) return { ...intent, discard: false };
   if (intent.kind === "save-then") return { ...intent, then: keepChanges(intent.then) };
   return intent;
 }
@@ -819,6 +819,16 @@ function showConfirm(
   });
 }
 
+function withDoc(session: Session, doc: CastDocument, ui: SessionUi): Session {
+  return {
+    ...session,
+    doc,
+    revision: session.revision + 1,
+    dirty: canonicalJson(doc) !== session.savedJson,
+    ui,
+  };
+}
+
 function commit(step: Step, result: EditResult): void {
   const session = step.state.session;
   if (!session || !result) return;
@@ -826,19 +836,16 @@ function commit(step: Step, result: EditResult): void {
     step.toast(result.refused, "error");
     return;
   }
-  const revision = session.revision + 1;
+  const next = withDoc(session, result.doc, { ...session.ui, ...result.ui });
   const undoPoint: UndoPoint | null = result.removed
-    ? { sessionKey: session.key, revision, doc: session.doc, ui: { ...session.ui, focus: null } }
+    ? {
+        sessionKey: session.key,
+        revision: next.revision,
+        doc: session.doc,
+        ui: { ...session.ui, focus: null },
+      }
     : null;
-  step.set({
-    session: {
-      ...session,
-      doc: result.doc,
-      revision,
-      dirty: canonicalJson(result.doc) !== session.savedJson,
-      ui: { ...session.ui, ...result.ui },
-    },
-  });
+  step.set({ session: next });
   if (result.focus) step.focus(result.focus.path, result.focus.selection);
   if (result.removed && undoPoint) step.toast(result.removed, "info", undoPoint);
 }
@@ -854,15 +861,7 @@ function undo(step: Step, id: number): void {
     step.toast("そのあとに書き換えたので、元に戻せません。", "error");
     return;
   }
-  step.set({
-    session: {
-      ...session,
-      doc: point.doc,
-      revision: session.revision + 1,
-      dirty: canonicalJson(point.doc) !== session.savedJson,
-      ui: { ...point.ui, tab: session.ui.tab },
-    },
-  });
+  step.set({ session: withDoc(session, point.doc, { ...point.ui, tab: session.ui.tab }) });
   step.toast("元に戻しました。");
 }
 
@@ -1009,7 +1008,7 @@ function withCrop(step: Step, token: number, update: (dialog: CropDialog) => Cro
 function nextImage(step: Step, dialog: CropDialog, error: string | null): void {
   const [file, ...queue] = dialog.queue;
   if (!file) {
-    step.set({ dialog: null });
+    step.closeDialog();
     if (error) step.toast(error, "error");
     return;
   }
@@ -1031,22 +1030,17 @@ function encoded(step: Step, token: number, image: CroppedImage): void {
   const session = step.state.session;
   if (dialog?.kind !== "crop" || dialog.token !== token) return;
   if (!session || session.key !== dialog.sessionKey) {
-    step.set({ dialog: null });
+    step.closeDialog();
     return;
   }
   const file = `pending:img-${step.next()}`;
   step.set({
     session: { ...session, pendingImages: { ...session.pendingImages, [file]: image.dataUrl } },
   });
-  const result = placeImage(session.doc, dialog.path, {
-    file,
-    width: image.width,
-    height: image.height,
-    bytes: image.bytes,
-  });
+  const result = placeImage(session.doc, dialog.path, castImage(file, image));
   commit(step, result);
   if (!result || isRefusal(result)) {
-    step.set({ dialog: null });
+    step.closeDialog();
     return;
   }
   nextImage(step, dialog, null);
@@ -1082,6 +1076,14 @@ function withSettings(step: Step, update: (dialog: SettingsDialog) => SettingsDi
   if (dialog?.kind === "settings") step.set({ dialog: update(dialog) });
 }
 
+function settleSettings(
+  step: Step,
+  token: number,
+  update: (dialog: SettingsDialog) => SettingsDialog,
+): void {
+  withSettings(step, (dialog) => (dialog.token === token ? update(dialog) : dialog));
+}
+
 function saveSettings(step: Step): void {
   const dialog = step.state.dialog;
   if (dialog?.kind !== "settings" || dialog.busy) return;
@@ -1104,10 +1106,8 @@ function mcpLoaded(step: Step, token: number, info: McpInfo): void {
   const { state } = step;
   if (token !== state.mcpToken) return;
   step.set({ mcp: info });
-  withSettings(step, (dialog) =>
-    dialog.token === token && dialog.busy
-      ? { ...dialog, ...settingsForm(info.settings), busy: false }
-      : dialog,
+  settleSettings(step, token, (dialog) =>
+    dialog.busy ? { ...dialog, ...settingsForm(info.settings), busy: false } : dialog,
   );
   if (state.mcp === null && info.status.state === "failed")
     step.toast(`MCP サーバーを起動できませんでした: ${info.status.message}`, "error");
@@ -1115,17 +1115,22 @@ function mcpLoaded(step: Step, token: number, info: McpInfo): void {
 
 function mcpSaved(step: Step, token: number, info: McpInfo): void {
   step.set({ mcp: info });
-  withSettings(step, (dialog) =>
-    dialog.token === token
-      ? { ...dialog, ...settingsForm(info.settings), busy: false, error: null }
-      : dialog,
-  );
+  settleSettings(step, token, (dialog) => ({
+    ...dialog,
+    ...settingsForm(info.settings),
+    busy: false,
+    error: null,
+  }));
   step.toast(
     info.status.state === "failed"
       ? "設定を保存しました。MCP サーバーは起動できませんでした。"
       : "設定を保存しました。",
     info.status.state === "failed" ? "error" : "info",
   );
+}
+
+function copyRecord(step: Step, hash: string): CopyLog[string] {
+  return { hash, at: new Date(step.now).toISOString() };
 }
 
 function updateCopyLog(step: Step, update: (log: CopyLog) => CopyLog): void {
@@ -1146,7 +1151,7 @@ function copyField(step: Step, path: Path): void {
     step.toast(`「${item.label}」は空なので、コピーするものがありません。`);
     return;
   }
-  const base = {
+  const base: CopyMark = {
     sessionKey: session.key,
     key: item.key,
     hash: textHash(item.value),
@@ -1156,16 +1161,17 @@ function copyField(step: Step, path: Path): void {
     step.effect({ type: "copy/text", ...base, text: item.value });
     return;
   }
-  if (!session.folder || !item.image || isPendingImage(item.image)) {
+  const location = savedImageFile(session.folder, item.image);
+  if (!location) {
     step.toast("画像は保存すると、ファイルの場所をコピーできます。", "error");
     return;
   }
-  step.effect({ type: "copy/image-path", ...base, folder: session.folder, file: item.image.file });
+  step.effect({ type: "copy/image-path", ...base, ...location });
 }
 
-function copied(step: Step, sessionKey: number, key: string, hash: string, label: string): void {
+function copied(step: Step, { sessionKey, key, hash, label }: CopyMark): void {
   if (step.state.session?.key !== sessionKey) return;
-  updateCopyLog(step, (log) => ({ ...log, [key]: { hash, at: new Date(step.now).toISOString() } }));
+  updateCopyLog(step, (log) => ({ ...log, [key]: copyRecord(step, hash) }));
   step.ui({ flash: { key, nonce: step.next() } });
   const session = step.state.session;
   const next = session ? nextTransferItem(session.doc, session.copyLog) : null;
@@ -1201,7 +1207,7 @@ function mark(step: Step, path: Path, done: boolean): void {
   if (!item || item.kind !== "setting") return;
   updateCopyLog(step, (log) => {
     const next = { ...log };
-    if (done) next[item.key] = { hash: textHash(item.value), at: new Date(step.now).toISOString() };
+    if (done) next[item.key] = copyRecord(step, textHash(item.value));
     else delete next[item.key];
     return next;
   });
@@ -1212,16 +1218,17 @@ function showFile(step: Step, path: Path): void {
   if (!session || !isImagePath(path)) return;
   const image = readImage(session.doc, path);
   if (!image) return;
-  if (!session.folder || isPendingImage(image)) {
+  const location = savedImageFile(session.folder, image);
+  if (!location) {
     step.toast("画像は保存すると、フォルダで見られます。", "error");
     return;
   }
-  step.effect({ type: "image/show", folder: session.folder, file: image.file });
+  step.effect({ type: "image/show", ...location });
 }
 
 function openUrl(step: Step, path: Path): void {
   const session = step.state.session;
-  if (!session || path.join("/") !== "cast/zetterUrl") return;
+  if (!session || pathText(path) !== "cast/zetterUrl") return;
   const url = session.doc.zetterUrl.trim();
   if (!isZetterUrl(url)) {
     step.toast(

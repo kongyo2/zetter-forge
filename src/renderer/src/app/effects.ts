@@ -3,7 +3,7 @@ import type { CropCanvas, ImageKind } from "@shared/images";
 import type { SaveCastRequest } from "@shared/ipc";
 import type { McpSettings } from "@shared/mcp";
 
-import type { PickedFile } from "./types";
+import type { CopyMark, PickedFile } from "./types";
 
 export type Effect =
   | { type: "library/load"; token: number }
@@ -17,23 +17,8 @@ export type Effect =
   | { type: "image/read"; token: number; file: PickedFile }
   | { type: "image/encode"; token: number; canvas: CropCanvas; image: ImageKind }
   | { type: "image/show"; folder: string; file: string }
-  | {
-      type: "copy/text";
-      sessionKey: number;
-      key: string;
-      hash: string;
-      label: string;
-      text: string;
-    }
-  | {
-      type: "copy/image-path";
-      sessionKey: number;
-      key: string;
-      hash: string;
-      label: string;
-      folder: string;
-      file: string;
-    }
+  | ({ type: "copy/text"; text: string } & CopyMark)
+  | ({ type: "copy/image-path"; folder: string; file: string } & CopyMark)
   | { type: "url/open"; url: string }
   | { type: "toast/expire"; id: number; after: number }
   | { type: "mcp/load"; token: number }

@@ -1,17 +1,19 @@
-import { type CastDocument, type CastMember, castDisplayTitle } from "@shared/cast";
+import { AFFINITY_RANGE_FIELDS, type CastDocument, isFieldKey } from "@shared/cast";
+import { errorMessage } from "@shared/errors";
 import type { JsonObject } from "@shared/json";
+import { parsePath, pathText } from "@shared/path";
 import {
   type EditorReport,
   type RemoteEdit,
   type RemoteReply,
   type RemoteRequest,
   castReport,
-  parsePath,
-  pathText,
 } from "@shared/remote";
+import { numberText } from "@shared/text";
 
-import { introRoleValue } from "./edits";
+import { affinityConfig, characterSlot, introRoleValue } from "./edits";
 import type { AppEvent, FieldEvent } from "./events";
+import { displayTitle } from "./labels";
 import type { Mediator } from "./mediator";
 import type { AppState, ConfirmDialog, Session } from "./state";
 import { transferGroups, transferStatus } from "./transfer";
@@ -50,11 +52,7 @@ function saveState(session: Session): EditorReport["state"] {
 function editorReport(state: AppState): EditorReport | null {
   const session = state.session;
   if (!session) return null;
-  return {
-    folder: session.folder,
-    title: castDisplayTitle(session.doc).title || "名前未設定のキャスト",
-    state: saveState(session),
-  };
+  return { folder: session.folder, title: displayTitle(session.doc), state: saveState(session) };
 }
 
 function dialogReport(state: AppState): JsonObject | null {
@@ -76,6 +74,10 @@ function messagesSince(state: AppState, mark: number): Message[] {
   return state.toasts
     .filter((toast) => toast.id > mark)
     .map(({ tone, message }) => ({ tone, text: message }));
+}
+
+function errorTexts(messages: readonly Message[]): string[] {
+  return messages.filter((message) => message.tone === "error").map((message) => message.text);
 }
 
 function statusReport(state: AppState): JsonObject {
@@ -147,13 +149,14 @@ function storedValue(doc: CastDocument, path: Path): string | null {
   const [head, key, field, at, stageField] = path;
   if (head === "cast" && path.length === 2) return textOf(doc, key);
   if (head === "cast" || head === "members") {
-    const owner = head === "cast" ? doc : doc.members.find((member) => member.id === key);
-    const [name, sub, part] = path.slice(head === "cast" ? 1 : 2);
-    if (!owner || name === undefined) return null;
-    if (head === "members" && sub === undefined) return textOf(owner as CastMember, name);
-    if (name === "partnerSettings" && part === undefined) return textOf(owner.partnerSettings, sub);
+    const slot = characterSlot(doc, path);
+    const [name, sub, part] = slot?.rest ?? [];
+    if (!slot || name === undefined) return null;
+    if (head === "members" && sub === undefined) return textOf(slot.target, name);
+    if (name === "partnerSettings" && part === undefined)
+      return textOf(slot.target.partnerSettings, sub);
     if (name === "toneExamples" && typeof sub === "number" && part !== undefined) {
-      const tone = owner.toneExamples[sub];
+      const tone = slot.target.toneExamples[sub];
       return tone ? textOf(tone, part) : null;
     }
     return null;
@@ -175,10 +178,9 @@ function storedValue(doc: CastDocument, path: Path): string | null {
   }
   if (head === "tags" && typeof key === "number") return doc.tags[key] ?? null;
   if (head === "affinity" && typeof key === "string") {
-    const config = key === AFFINITY_DEFAULT ? doc.affinity?.default : doc.affinity?.overrides[key];
+    const config = affinityConfig(doc, key);
     if (!config) return null;
-    if (field === "minValue" || field === "maxValue" || field === "initialValue")
-      return config[field] === null ? "" : String(config[field]);
+    if (isFieldKey(AFFINITY_RANGE_FIELDS, field)) return numberText(config[field]);
     if (path.length === 3) return textOf(config, field);
     const stage = field === "stages" && typeof at === "number" ? config.stages[at] : undefined;
     return stage ? textOf(stage, stageField) : null;
@@ -194,8 +196,8 @@ function addedPath(doc: CastDocument, path: Path): string | null {
     return item ? `${pathText(path)}/${item.id}` : null;
   };
   if (path.at(-1) === "toneExamples") {
-    const owner = head === "cast" ? doc : doc.members.find((member) => member.id === key);
-    return owner ? last(owner.toneExamples) : null;
+    const slot = characterSlot(doc, path);
+    return slot ? last(slot.target.toneExamples) : null;
   }
   switch (head) {
     case "members":
@@ -211,8 +213,7 @@ function addedPath(doc: CastDocument, path: Path): string | null {
     case "affinity": {
       if (path.length === 1) return `affinity/${AFFINITY_DEFAULT}`;
       if (path.length === 2) return pathText(path);
-      const config =
-        key === AFFINITY_DEFAULT ? doc.affinity?.default : doc.affinity?.overrides[String(key)];
+      const config = affinityConfig(doc, key);
       return field === "stages" && config ? last(config.stages) : null;
     }
     default:
@@ -245,7 +246,7 @@ export class Remote {
     try {
       return await this.run(request);
     } catch (error) {
-      return fail(error instanceof Error ? error.message : String(error));
+      return fail(errorMessage(error));
     }
   };
 
@@ -276,23 +277,24 @@ export class Remote {
     }
   }
 
-  private read(): RemoteReply {
+  private withSession(report: (session: Session) => JsonObject): RemoteReply {
     const session = this.state().session;
-    if (!session) return fail("開いているキャストはありません。");
-    return ok({
+    return session ? ok(report(session)) : fail("開いているキャストはありません。");
+  }
+
+  private read(): RemoteReply {
+    return this.withSession((session) => ({
       source: "editor",
       folder: session.folder,
       state: saveState(session),
       cast: session.doc,
       notices: session.notices,
       ...castReport(session.doc),
-    });
+    }));
   }
 
   private transfer(): RemoteReply {
-    const session = this.state().session;
-    if (!session) return fail("開いているキャストはありません。");
-    return ok({
+    return this.withSession((session) => ({
       folder: session.folder,
       state: saveState(session),
       groups: transferGroups(session.doc).map((group) => ({
@@ -307,17 +309,23 @@ export class Remote {
           notes: item.notes,
         })),
       })),
-    });
+    }));
   }
 
   private refuse(state: AppState, reason: string): RemoteReply {
     return fail(reason, statusReport(state));
   }
 
-  private open(folder: string): Promise<RemoteReply> | RemoteReply {
+  private refusal(needsCast: boolean): RemoteReply | null {
     const state = this.state();
-    const reason = blocked(state, false);
-    if (reason) return this.refuse(state, reason);
+    const reason = blocked(state, needsCast);
+    return reason ? this.refuse(state, reason) : null;
+  }
+
+  private open(folder: string): Promise<RemoteReply> | RemoteReply {
+    const refused = this.refusal(false);
+    if (refused) return refused;
+    const state = this.state();
     if (state.session?.folder === folder) return ok({ done: true, ...statusReport(state) });
     return this.perform(
       { type: "library/open", folder },
@@ -327,10 +335,9 @@ export class Remote {
   }
 
   private create(): Promise<RemoteReply> | RemoteReply {
-    const state = this.state();
-    const reason = blocked(state, false);
-    if (reason) return this.refuse(state, reason);
-    const before = state.session?.key ?? null;
+    const refused = this.refusal(false);
+    if (refused) return refused;
+    const before = this.state().session?.key ?? null;
     return this.perform(
       { type: "library/new" },
       (next) => !!next.session && next.session.key !== before && next.session.folder === null,
@@ -339,13 +346,13 @@ export class Remote {
   }
 
   private save(): Promise<RemoteReply> | RemoteReply {
-    const state = this.state();
-    const reason = blocked(state, true);
-    if (reason) return this.refuse(state, reason);
-    return this.perform(
-      { type: "editor/save" },
-      (next) => !!next.session?.folder && !next.session.dirty,
-      "保存できませんでした。",
+    return (
+      this.refusal(true) ??
+      this.perform(
+        { type: "editor/save" },
+        (next) => !!next.session?.folder && !next.session.dirty,
+        "保存できませんでした。",
+      )
     );
   }
 
@@ -389,8 +396,7 @@ export class Remote {
       return ok({ done: true, ...report });
     if (state.dialog?.kind === "confirm") return ok({ done: false, note: DIALOG_NOTE, ...report });
     if (!settled) return fail("まだ終わっていません。get_status で様子を見てください。", report);
-    const errors = report.messages.filter((message) => message.tone === "error");
-    return fail(errors.map((message) => message.text).join("\n") || failure, report);
+    return fail(errorTexts(report.messages).join("\n") || failure, report);
   }
 
   private settle(): Promise<boolean> {
@@ -413,9 +419,8 @@ export class Remote {
   }
 
   private edit(edits: readonly RemoteEdit[]): RemoteReply {
-    const start = this.state();
-    const reason = blocked(start, true);
-    if (reason) return this.refuse(start, reason);
+    const refused = this.refusal(true);
+    if (refused) return refused;
     const results: JsonObject[] = [];
     let stopped = false;
     for (const edit of edits) {
@@ -453,16 +458,10 @@ export class Remote {
         });
         continue;
       }
-      const refusals = messagesSince(after, before.seq).filter(
-        (message) => message.tone === "error",
-      );
+      const refusals = errorTexts(messagesSince(after, before.seq));
       results.push(
         refusals.length > 0
-          ? {
-              ...base,
-              result: "refused",
-              reason: refusals.map((message) => message.text).join("\n"),
-            }
+          ? { ...base, result: "refused", reason: refusals.join("\n") }
           : { ...base, result: "ignored", reason: IGNORED },
       );
     }
