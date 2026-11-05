@@ -238,7 +238,7 @@ export function Disclosure({
   );
 }
 
-export function Avatar({ vm, size = "medium" }: { vm: AvatarVM; size?: "small" | "medium" }) {
+function Avatar({ vm, size = "medium" }: { vm: AvatarVM; size?: "small" | "medium" }) {
   const classes = ["avatar", `avatar-${size}`, vm.ink ? "is-inked" : ""].filter(Boolean).join(" ");
   return (
     <span
@@ -252,6 +252,33 @@ export function Avatar({ vm, size = "medium" }: { vm: AvatarVM; size?: "small" |
         vm.initial
       )}
     </span>
+  );
+}
+
+export function CastLine({
+  vm,
+  mark,
+  details,
+}: {
+  vm: { title: string; sub: string | null; mode: string; avatar: AvatarVM };
+  mark?: ReactNode;
+  details?: ReactNode;
+}) {
+  return (
+    <>
+      <Avatar vm={vm.avatar} />
+      <span className="cast-text">
+        <span className="cast-title">
+          <span className="cast-title-text">{vm.title}</span>
+          {mark}
+        </span>
+        <span className="cast-meta">
+          {vm.sub ? <span>{vm.sub}</span> : null}
+          <span>{vm.mode}</span>
+          {details}
+        </span>
+      </span>
+    </>
   );
 }
 

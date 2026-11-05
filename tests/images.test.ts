@@ -1,11 +1,13 @@
 import {
   type EncodableCanvas,
+  centerSquare,
   dataUrlBytes,
   encodeWithinLimit,
   IMAGE_SPECS,
   imageSlotName,
   JPEG_QUALITIES,
   SOURCE_IMAGE_MAX_BYTES,
+  usableAsSquare,
 } from "@shared/images";
 import { describe, expect, it } from "vitest";
 
@@ -218,5 +220,40 @@ describe("IMAGE_SPECS", () => {
     expect(imageSlotName("gallery", 9)).toBe("gallery-10");
     expect(imageSlotName("member")).toBe("member-02");
     expect(imageSlotName("persona")).toBe("persona-01");
+  });
+});
+
+describe("保存した画像を登場人物のアイコンにする", () => {
+  const jpeg = "data:image/jpeg;base64,AAAA";
+
+  it("正方形で、保存できる形式と大きさなら、そのまま使う", () => {
+    expect(usableAsSquare("member", jpeg, { width: 400, height: 400 })).toBe(true);
+    expect(usableAsSquare("member", "data:image/png;base64,AAAA", { width: 1, height: 1 })).toBe(
+      true,
+    );
+    expect(usableAsSquare("member", jpeg, { width: 600, height: 300 })).toBe(false);
+    expect(usableAsSquare("member", "data:image/gif;base64,AAAA", { width: 9, height: 9 })).toBe(
+      false,
+    );
+    expect(usableAsSquare("member", jpeg, { width: 0, height: 0 })).toBe(false);
+    const big = `data:image/jpeg;base64,${"A".repeat(IMAGE_SPECS.member.maxDataUrlLength)}`;
+    expect(usableAsSquare("member", big, { width: 400, height: 400 })).toBe(false);
+  });
+
+  it("そのまま使えなければ、中央の正方形を、切り抜きと同じ一辺 400 までに縮めて切り出す", () => {
+    expect(centerSquare("member", { width: 600, height: 300 })).toEqual({
+      x: 150,
+      y: 0,
+      size: 300,
+      side: 300,
+    });
+    expect(centerSquare("member", { width: 1000, height: 1600 })).toEqual({
+      x: 0,
+      y: 300,
+      size: 1000,
+      side: 400,
+    });
+    expect(centerSquare("gallery", { width: 3000, height: 2000 })).toMatchObject({ side: 1600 });
+    expect(centerSquare("member", { width: 0, height: 10 })).toBeNull();
   });
 });

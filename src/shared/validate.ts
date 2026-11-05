@@ -14,6 +14,7 @@ import {
   isNamelessPersona,
   overrideTitle,
   sendableMembers,
+  sendableToneExamples,
 } from "./cast";
 import { LIMITS } from "./limits";
 import type { Path } from "./path";
@@ -70,7 +71,7 @@ export function settingsUsage(doc: CastDocument): BudgetUsage {
   return usage(settingsShares(doc), LIMITS.settingsTotal);
 }
 
-function toneExamplesLength(list: readonly ToneExample[]): number {
+export function toneExamplesLength(list: readonly ToneExample[]): number {
   return list.reduce(
     (sum, item) => sum + utf16Length(item.situation) + utf16Length(item.example),
     0,
@@ -301,13 +302,9 @@ export function validateCast(doc: CastDocument): CastIssue[] {
     const message = `キャラクター設定（本人の性格・設定と登場人物のプロフィール）は合わせて${overTotal(settingsTotal, LIMITS.settingsTotal)}誰の設定を削るかはお任せします（「いまの状況」は別枠です）。`;
     issues.push(issue("error", "character", message, ["cast", "persona"]));
   }
-  const sentTone = (list: readonly ToneExample[]) =>
-    list
-      .map((tone) => ({ situation: tone.situation.trim(), example: tone.example.trim() }))
-      .filter((tone) => tone.situation && tone.example);
   const toneTotal = members.reduce(
-    (sum, member) => sum + toneExamplesLength(sentTone(member.toneExamples)),
-    toneExamplesLength(sentTone(doc.toneExamples)),
+    (sum, member) => sum + toneExamplesLength(sendableToneExamples(member.toneExamples)),
+    toneExamplesLength(sendableToneExamples(doc.toneExamples)),
   );
   if (toneTotal > LIMITS.toneTotal) {
     const message = `口調サンプルは全員の合計で${overTotal(toneTotal, LIMITS.toneTotal)}誰の口調サンプルを削るかはお任せします。`;

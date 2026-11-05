@@ -17,6 +17,7 @@ import {
   deleteCast,
   listCasts,
   loadCast,
+  readCastImage,
   sanitizeFolderName,
   saveCast,
   writeCopyLog,
@@ -155,6 +156,29 @@ describe("saveCast", () => {
     ).toBe(text);
   });
 
+  it("ライブ配信の許可のない前の版のファイルは、オフとして読み、保存すると liveAllowed が加わるだけ", async () => {
+    const { liveAllowed: _, ...older } = { ...createEmptyCast(), name: "灯里", persona: "店主。" };
+    const folder = "灯里-0.4";
+    const file = path.join(root, folder, "cast.json");
+    const text = `${JSON.stringify(older, null, 2)}\n`;
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, text, "utf8");
+
+    const loaded = await loadCast(root, folder);
+    expect(loaded.doc.liveAllowed).toBe(false);
+    expect(await fs.readFile(file, "utf8")).toBe(text);
+
+    await saveCast(root, { folder, doc: loaded.doc, pendingImages: {} });
+    const {
+      liveAllowed,
+      updatedAt: _updatedAt,
+      ...rest
+    } = JSON.parse(await fs.readFile(file, "utf8"));
+    const { updatedAt: _olderUpdatedAt, ...olderRest } = older;
+    expect(rest).toEqual(olderRest);
+    expect(liveAllowed).toBe(false);
+  });
+
   it("新しい版で保存されたファイルには知らせを付ける", async () => {
     const saved = await saveCast(root, {
       folder: null,
@@ -215,6 +239,47 @@ describe("画像のファイルの場所", () => {
     await expect(castImagePath(root, saved.folder, "images/../cast.json")).rejects.toThrow();
     await expect(castImagePath(root, saved.folder, "images/none.jpg")).rejects.toThrow(
       "見つかりません",
+    );
+  });
+});
+
+describe("画像を読む（ほかのキャストへ取り込むため）", () => {
+  it("キャストの images の中の JPEG・PNG・WebP を、dataURL にして返す", async () => {
+    const saved = await saveCast(root, {
+      folder: null,
+      doc: castWithImages(),
+      pendingImages: {
+        "pending:a": JPEG_A,
+        "pending:b": JPEG_B,
+      },
+    });
+    const file = saved.doc.avatar?.file as string;
+    expect(await readCastImage(root, saved.folder, file)).toBe(JPEG_A);
+    const images = path.join(root, saved.folder, "images");
+    await fs.writeFile(path.join(images, "extra.PNG"), Buffer.from("png"));
+    expect(await readCastImage(root, saved.folder, "images/extra.PNG")).toBe(
+      `data:image/png;base64,${Buffer.from("png").toString("base64")}`,
+    );
+  });
+
+  it("images の外・ほかの形式・5MB を超えるものは読まない", async () => {
+    const saved = await saveCast(root, {
+      folder: null,
+      doc: castWithImages(),
+      pendingImages: {
+        "pending:a": JPEG_A,
+        "pending:b": JPEG_B,
+      },
+    });
+    const images = path.join(root, saved.folder, "images");
+    await expect(readCastImage(root, saved.folder, "cast.json")).rejects.toThrow();
+    await fs.writeFile(path.join(images, "note.gif"), Buffer.from("gif"));
+    await expect(readCastImage(root, saved.folder, "images/note.gif")).rejects.toThrow(
+      "JPEG・PNG・WebP の画像ではないので読めません。",
+    );
+    await fs.writeFile(path.join(images, "huge.jpg"), Buffer.alloc(5 * 1024 * 1024 + 1));
+    await expect(readCastImage(root, saved.folder, "images/huge.jpg")).rejects.toThrow(
+      "画像が5MBより大きいので読めません。",
     );
   });
 });

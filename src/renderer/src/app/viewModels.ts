@@ -162,7 +162,25 @@ export type DialogVM =
       busy: boolean;
       error: string | null;
     }
-  | SettingsDialogVM;
+  | SettingsDialogVM
+  | ImportDialogVM;
+
+export interface ImportDialogVM {
+  kind: "import";
+  title: string;
+  lead: string;
+  items: {
+    folder: string;
+    title: string;
+    sub: string | null;
+    mode: string;
+    avatar: AvatarVM;
+    loading: boolean;
+  }[];
+  empty: string | null;
+  busy: boolean;
+  error: string | null;
+}
 
 export interface SettingsDialogVM {
   kind: "settings";
@@ -271,6 +289,7 @@ export interface CharacterSheetVM {
   scope: Path;
   ink: string;
   removeLabel: string | null;
+  importTarget: string | null;
   avatar: ImageFieldVM;
   name: TextFieldVM;
   avatarBlurred: ToggleVM | null;
@@ -285,6 +304,7 @@ export interface CharacterTabVM {
   allowances: AllowanceVM[];
   scale: string;
   castTabs: { items: TabItemVM<string>[]; canAdd: boolean } | null;
+  notes: string[];
   sheet: CharacterSheetVM;
   labelledBy: string | null;
   leftover: string | null;
@@ -437,6 +457,7 @@ export interface PublishTabVM {
   background: ImageFieldVM;
   gallery: { scope: Path; meta: string; items: GalleryItemVM[]; canAdd: boolean };
   visibility: ToggleVM[];
+  live: ToggleVM;
   pageInfo: ToggleVM[];
 }
 

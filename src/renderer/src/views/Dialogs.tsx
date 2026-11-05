@@ -10,10 +10,10 @@ import {
 } from "react";
 
 import type { ViewEvent } from "../app/events";
-import type { DialogVM, SettingsDialogVM } from "../app/viewModels";
+import type { DialogVM, ImportDialogVM, SettingsDialogVM } from "../app/viewModels";
 import { createCropper } from "../runtime/crop";
 import { type Emit, Link, useEmit } from "./chain";
-import { EmitButton, Toggle } from "./parts/basics";
+import { CastLine, EmitButton, Toggle } from "./parts/basics";
 import { IconCopy } from "./parts/icons";
 
 function Modal({
@@ -166,6 +166,54 @@ function CropDialog({ vm }: { vm: Extract<DialogVM, { kind: "crop" }> }) {
   );
 }
 
+function ImportDialog({ vm }: { vm: ImportDialogVM }) {
+  const emit = useEmit();
+  return (
+    <Modal
+      label={vm.title}
+      className="import-modal"
+      onCancel={() => emit({ type: "dialog/cancel" })}
+    >
+      <h2 className="modal-title">{vm.title}</h2>
+      <p className="modal-message">{vm.lead}</p>
+      {vm.error ? (
+        <p className="field-error block" role="alert">
+          {vm.error}
+        </p>
+      ) : null}
+      {vm.empty ? (
+        <p className="note">{vm.empty}</p>
+      ) : (
+        <ul className="import-list" aria-label="保存したキャスト" aria-busy={vm.busy || undefined}>
+          {vm.items.map((item, index) => (
+            <li key={item.folder}>
+              <button
+                type="button"
+                className={item.loading ? "cast-item is-loading" : "cast-item"}
+                disabled={vm.busy}
+                data-initial-focus={index === 0 || undefined}
+                onClick={() => emit({ type: "member/import-pick", folder: item.folder })}
+              >
+                <CastLine vm={item} details={item.loading ? <span>読み込み中…</span> : null} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="modal-actions">
+        <button
+          type="button"
+          className="btn btn-plain"
+          data-initial-focus={vm.items.length === 0 || undefined}
+          onClick={() => emit({ type: "dialog/cancel" })}
+        >
+          キャンセル
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 const PORT_ID = "settings-port";
 const PORT_HINT_ID = "settings-port-hint";
 
@@ -263,5 +311,7 @@ export function Dialog({ vm }: { vm: DialogVM }) {
       return <CropDialog vm={vm} />;
     case "settings":
       return <SettingsDialog vm={vm} />;
+    case "import":
+      return <ImportDialog vm={vm} />;
   }
 }

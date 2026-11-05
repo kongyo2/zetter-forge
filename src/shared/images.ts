@@ -130,6 +130,47 @@ export function encodeWithinLimit<C extends EncodableCanvas>(
   return null;
 }
 
+const SAVABLE_DATA_URL = /^data:image\/(jpeg|png|webp);base64,/u;
+
+export function usableAsSquare(
+  kind: ImageKind,
+  dataUrl: string,
+  size: { width: number; height: number },
+): boolean {
+  return (
+    size.width > 0 &&
+    size.width === size.height &&
+    SAVABLE_DATA_URL.test(dataUrl) &&
+    dataUrl.length <= IMAGE_SPECS[kind].maxDataUrlLength
+  );
+}
+
+export interface SquareCrop {
+  x: number;
+  y: number;
+  size: number;
+  side: number;
+}
+
+export function centerSquare(
+  kind: ImageKind,
+  size: { width: number; height: number },
+): SquareCrop | null {
+  const square = Math.min(size.width, size.height);
+  if (!(square > 0)) return null;
+  const { output } = IMAGE_SPECS[kind];
+  const limit =
+    "width" in output
+      ? Math.min(output.width, output.height)
+      : Math.min(output.maxWidth, output.maxHeight);
+  return {
+    x: Math.round((size.width - square) / 2),
+    y: Math.round((size.height - square) / 2),
+    size: square,
+    side: Math.min(square, limit),
+  };
+}
+
 const FIRST_SLOT_NUMBER: Partial<Record<ImageKind, number>> = { gallery: 1, member: 2, persona: 1 };
 
 export function imageSlotName(kind: ImageKind, index?: number): string {

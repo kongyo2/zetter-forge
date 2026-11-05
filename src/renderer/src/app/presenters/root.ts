@@ -1,17 +1,26 @@
 import { castDisplayTitle, sendableMembers } from "@shared/cast";
 import { IMAGE_SPECS } from "@shared/images";
+import type { CastSummary } from "@shared/ipc";
 import { MCP_PORT_MAX, MCP_PORT_MIN, type McpInfo, parsePort } from "@shared/mcp";
 import { type CastIssue, type EditorTab, missingRequired } from "@shared/validate";
 
 import { issuesOf } from "../checks";
-import { displayTitle } from "../labels";
-import type { AppState, Session, SettingsDialog } from "../state";
+import { displayTitle, memberLabel } from "../labels";
+import {
+  type AppState,
+  type ImportDialog,
+  type Session,
+  type SettingsDialog,
+  importCandidates,
+} from "../state";
 import { isOutstanding, transferItems } from "../transfer";
 import type { ViewTab } from "../types";
 import type {
+  AvatarVM,
   ChecksVM,
   DialogVM,
   EditorVM,
+  ImportDialogVM,
   IssueVM,
   PanelVM,
   RootVM,
@@ -66,6 +75,23 @@ function relativeTime(iso: string, now: number): string {
   return new Date(time).toLocaleDateString("ja-JP");
 }
 
+function castRow(cast: CastSummary): {
+  folder: string;
+  title: string;
+  sub: string | null;
+  mode: string;
+  avatar: AvatarVM;
+} {
+  const { title, sub } = castDisplayTitle(cast);
+  return {
+    folder: cast.folder,
+    title: title || "名前未設定",
+    sub: sub || null,
+    mode: cast.mode === "chat" ? "雑談" : "ストーリー",
+    avatar: avatar(cast.avatarUrl, cast.name, null, cast.avatarBlurred),
+  };
+}
+
 function presentSidebar(state: AppState): SidebarVM {
   const { library, session } = state;
   const listing = library.listing;
@@ -95,15 +121,10 @@ function presentSidebar(state: AppState): SidebarVM {
     query: state.query,
     status,
     items: shown.map((cast) => {
-      const { title, sub } = castDisplayTitle(cast);
       const current = cast.folder === session?.folder;
       return {
-        folder: cast.folder,
-        title: title || "名前未設定",
-        sub: sub || null,
-        mode: cast.mode === "chat" ? "雑談" : "ストーリー",
+        ...castRow(cast),
         time: relativeTime(cast.updatedAt, state.now),
-        avatar: avatar(cast.avatarUrl, cast.name, null, cast.avatarBlurred),
         current,
         dirty: current && !!session?.dirty,
       };
@@ -275,10 +296,39 @@ function presentSettings(state: AppState, dialog: SettingsDialog): SettingsDialo
   };
 }
 
+const COPIED_PARTS = "名前・性格・設定・口調サンプル・アイコン";
+
+function presentImport(state: AppState, dialog: ImportDialog): ImportDialogVM {
+  const casts = importCandidates(state);
+  const members = state.session?.doc.members ?? [];
+  const position = members.findIndex((member) => member.id === dialog.target);
+  return {
+    kind: "import",
+    title: dialog.target === null ? "保存したキャストから追加" : "保存したキャストから取り込む",
+    lead:
+      dialog.target === null
+        ? `選んだキャストの${COPIED_PARTS}を写して、登場人物を1人足します。元のキャストは変わりません。`
+        : `選んだキャストの${COPIED_PARTS}を「${memberLabel(members[position], position)}」に写します。いま書いてある内容は置き換わります。元のキャストは変わりません。`,
+    items: casts.map((cast) => ({
+      ...castRow(cast),
+      loading: dialog.loading?.folder === cast.folder,
+    })),
+    empty:
+      casts.length > 0
+        ? null
+        : state.library.listing
+          ? "ほかに保存したキャストがありません。"
+          : "読み込み中…",
+    busy: dialog.loading !== null,
+    error: dialog.error,
+  };
+}
+
 function presentDialog(state: AppState): DialogVM | null {
   const dialog = state.dialog;
   if (!dialog) return null;
   if (dialog.kind === "settings") return presentSettings(state, dialog);
+  if (dialog.kind === "import") return presentImport(state, dialog);
   if (dialog.kind === "confirm") {
     const danger = dialog.choices.every((choice) => choice.tone === "danger");
     return {

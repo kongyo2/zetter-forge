@@ -131,6 +131,7 @@ export interface CastDocument {
   personaHidden: boolean;
   toneExamplesHidden: boolean;
   situationHidden: boolean;
+  liveAllowed: boolean;
   authorHidden: boolean;
   showFavoriteCount: boolean;
   showTalkCount: boolean;
@@ -329,6 +330,7 @@ export function createEmptyCast(now = new Date()): CastDocument {
     personaHidden: true,
     toneExamplesHidden: true,
     situationHidden: true,
+    liveAllowed: false,
     authorHidden: false,
     showFavoriteCount: true,
     showTalkCount: true,
@@ -559,6 +561,7 @@ export function normalizeCastDocument(raw: unknown, options: NormalizeOptions = 
     personaHidden: booleanOr(raw.personaHidden, empty.personaHidden),
     toneExamplesHidden: booleanOr(raw.toneExamplesHidden, empty.toneExamplesHidden),
     situationHidden: booleanOr(raw.situationHidden, empty.situationHidden),
+    liveAllowed: booleanOr(raw.liveAllowed, empty.liveAllowed),
     authorHidden: booleanOr(raw.authorHidden, empty.authorHidden),
     showFavoriteCount: booleanOr(raw.showFavoriteCount, empty.showFavoriteCount),
     showTalkCount: booleanOr(raw.showTalkCount, empty.showTalkCount),
@@ -611,6 +614,12 @@ export function sendableMembers(doc: CastDocument): CastMember[] {
         member.avatar ||
         member.toneExamples.some((tone) => tone.situation.trim() || tone.example.trim()),
     );
+}
+
+export function sendableToneExamples(tones: readonly ToneExample[]): ToneExample[] {
+  return tones
+    .map((tone) => ({ situation: tone.situation.trim(), example: tone.example.trim() }))
+    .filter((tone) => tone.situation && tone.example);
 }
 
 export function castDisplayTitle(doc: Pick<CastDocument, "mode" | "tagline" | "name">): {

@@ -59,9 +59,17 @@ function Tones({ vm }: { vm: ToneListVM }) {
 function Sheet({ vm }: { vm: CharacterSheetVM }) {
   return (
     <>
-      {vm.removeLabel ? (
+      {vm.removeLabel || vm.importTarget ? (
         <div className="cast-sheet-actions">
-          <RemoveButton>{vm.removeLabel}</RemoveButton>
+          {vm.importTarget ? (
+            <EmitButton
+              event={{ type: "member/import-open", target: vm.importTarget }}
+              className="btn btn-plain btn-small"
+            >
+              保存したキャストから取り込む
+            </EmitButton>
+          ) : null}
+          {vm.removeLabel ? <RemoveButton>{vm.removeLabel}</RemoveButton> : null}
         </div>
       ) : null}
       <div className="identity">
@@ -108,19 +116,37 @@ export function CharacterTab({ vm }: { vm: CharacterTabVM }) {
       )}
 
       <div className="cast-desk">
+        {vm.notes.length > 0 ? (
+          <div className="cast-notes">
+            {vm.notes.map((note) => (
+              <p key={note} className="note">
+                {note}
+              </p>
+            ))}
+          </div>
+        ) : null}
         {vm.castTabs ? (
           <div className="cast-bar">
             <TabMeaning to={(id) => ({ type: "editor/character", id })}>
               <CastTabs items={vm.castTabs.items} label="編集するキャラクター" />
             </TabMeaning>
-            <EmitButton
-              event={{ type: "add", path: ["members"] }}
-              className="btn btn-plain btn-small"
-              disabled={!vm.castTabs.canAdd}
-            >
-              <IconPlus />
-              登場人物を追加
-            </EmitButton>
+            <div className="cast-bar-actions">
+              <EmitButton
+                event={{ type: "add", path: ["members"] }}
+                className="btn btn-plain btn-small"
+                disabled={!vm.castTabs.canAdd}
+              >
+                <IconPlus />
+                登場人物を追加
+              </EmitButton>
+              <EmitButton
+                event={{ type: "member/import-open", target: null }}
+                className="btn btn-plain btn-small"
+                disabled={!vm.castTabs.canAdd}
+              >
+                保存したキャストから追加
+              </EmitButton>
+            </div>
           </div>
         ) : null}
 

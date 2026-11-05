@@ -21,6 +21,7 @@ import {
   applyMove,
   applyRemove,
   imageKindAt,
+  importMember,
   insertTimeChip,
   introRoleValue,
   isImagePath,
@@ -238,6 +239,7 @@ describe("オン・オフ", () => {
     ["coverBlurred", true, { coverBlurred: true }],
     ["toneExamplesVisible", true, { toneExamplesHidden: false }],
     ["situationVisible", true, { situationHidden: false }],
+    ["liveAllowed", true, { liveAllowed: true }],
     ["authorVisible", false, { authorHidden: true }],
     ["showFavoriteCount", false, { showFavoriteCount: false }],
     ["showTalkCount", false, { showTalkCount: false }],
@@ -570,7 +572,7 @@ describe("足す・消す・並べ替える", () => {
   it("消したものは知らせの文言を付けて返す（元に戻すため）", () => {
     const doc = { ...createEmptyCast(), tags: ["a", "b"] };
     const result = applyRemove(doc, ["tags", 0], { stage: 0 });
-    expect(result).toMatchObject({ removed: "タグを外しました。" });
+    expect(result).toMatchObject({ undo: "タグを外しました。" });
     expect(docOf(result).tags).toEqual(["b"]);
   });
 
@@ -594,7 +596,7 @@ describe("足す・消す・並べ替える", () => {
     };
     doc.affinity!.overrides[AFFINITY_BASE_SUBJECT] = createDefaultAffinityConfig();
     const removed = (path: (string | number)[]) =>
-      (applyRemove(doc, path, { stage: 0 }) as { removed?: string } | null)?.removed;
+      (applyRemove(doc, path, { stage: 0 }) as { undo?: string } | null)?.undo;
     expect(removed(["gallery", "g1"])).toBe("ギャラリー画像を外しました。");
     expect(removed(["members", member.id, "avatar"])).toBe("画像を外しました。");
     expect(removed(["cast", "toneExamples", 0])).toBe("口調サンプルを削除しました。");
@@ -618,7 +620,7 @@ describe("足す・消す・並べ替える", () => {
     expect(docOf(first).affinity?.default.stages.map((stage) => stage.startValue)).toEqual([
       0, 50, 75,
     ]);
-    expect(extrasOf(first)).toEqual({ ui: { stage: 1 }, removed: "段階を削除しました。" });
+    expect(extrasOf(first)).toEqual({ ui: { stage: 1 }, undo: "段階を削除しました。" });
     expect(
       extrasOf(applyRemove(doc, ["affinity", "default", "stages", 3], { stage: 1 })).ui,
     ).toEqual({
@@ -770,7 +772,7 @@ describe("画像", () => {
     };
     const result = applyRemove(doc, ["cast", "cover"], { stage: 0 });
     expect(docOf(result).cover).toBeNull();
-    expect(result).toMatchObject({ removed: "画像を外しました。" });
+    expect(result).toMatchObject({ undo: "画像を外しました。" });
   });
 
   it("切り抜いた画像を、本人・登場人物・ペルソナの枠に入れ、ギャラリーには末尾に足す", () => {
@@ -809,5 +811,144 @@ describe("画像", () => {
     expect(isImagePath(["cast", "avatar", "file"])).toBe(false);
     expect(isImagePath(["members", "m1", "name"])).toBe(false);
     expect(readImage(createEmptyCast(), ["cast", "name"])).toBeNull();
+  });
+});
+
+describe("保存したキャストから登場人物に取り込む", () => {
+  const avatar = { file: "pending:img-1", width: 400, height: 400, bytes: 3 };
+  const source = (patch: Partial<CastDocument> = {}): CastDocument => ({
+    ...createEmptyCast(),
+    name: "  灯  ",
+    tagline: "霧の夜にだけ灯る喫茶室",
+    persona: "\n岬の喫茶室の店主。\n",
+    toneExamples: [
+      { situation: " 客が来たとき ", example: " いらっしゃいませ " },
+      { situation: "書きかけ", example: "" },
+      { situation: "", example: "  " },
+    ],
+    partnerSettings: {
+      dailyRoutine: "夕方に店を開ける。",
+      messageHabits: "",
+      proactiveMessages: "",
+      distanceWhenApart: "",
+      freeform: "",
+    },
+    ...patch,
+  });
+  const story = (patch: Partial<CastDocument> = {}): CastDocument => ({
+    ...createEmptyCast(),
+    name: "桃",
+    persona: "花屋",
+    ...patch,
+  });
+
+  it("名前・性格・設定・送られる口調サンプル・アイコンを写した登場人物を足し、その人を開く", () => {
+    const { result, cuts } = importMember(story(), null, source(), avatar);
+    const doc = docOf(result);
+    const [member] = doc.members;
+    expect(member).toMatchObject({
+      name: "灯",
+      profile: "岬の喫茶室の店主。",
+      toneExamples: [{ situation: "客が来たとき", example: "いらっしゃいませ" }],
+      avatar,
+    });
+    expect(member?.partnerSettings.dailyRoutine).toBe("");
+    expect(extrasOf(result)).toEqual({ ui: { character: member?.id } });
+    expect(cuts).toEqual([]);
+  });
+
+  it("選んだ登場人物の名前・性格・設定・口調サンプルは置き換え、パートナー設定は残す", () => {
+    const member = {
+      ...createEmptyMember(),
+      name: "古い名前",
+      profile: "古い設定",
+      toneExamples: [{ situation: "古い", example: "例" }],
+      partnerSettings: { ...createEmptyMember().partnerSettings, freeform: "残る" },
+    };
+    const doc = docOf(importMember(story({ members: [member] }), member.id, source(), null).result);
+    expect(doc.members).toHaveLength(1);
+    expect(doc.members[0]).toMatchObject({
+      id: member.id,
+      name: "灯",
+      profile: "岬の喫茶室の店主。",
+      toneExamples: [{ situation: "客が来たとき", example: "いらっしゃいませ" }],
+      partnerSettings: { freeform: "残る" },
+    });
+  });
+
+  it("取り込み元にアイコンがなければ、いまのアイコンを残す", () => {
+    const kept = { file: "images/member-02.jpg", width: 400, height: 400, bytes: 9 };
+    const member = { ...createEmptyMember(), avatar: kept };
+    const doc = docOf(importMember(story({ members: [member] }), member.id, source(), null).result);
+    expect(doc.members[0]?.avatar).toEqual(kept);
+  });
+
+  it("性格・設定が空なら、キャッチコピーを写す", () => {
+    const doc = docOf(importMember(story(), null, source({ persona: "  " }), null).result);
+    expect(doc.members[0]?.profile).toBe("霧の夜にだけ灯る喫茶室");
+  });
+
+  it("名前は10文字で切り、絵文字の途中では切らない", () => {
+    const long = docOf(
+      importMember(story(), null, source({ name: "一二三四五六七八九十十一" }), null).result,
+    );
+    expect(long.members[0]?.name).toBe("一二三四五六七八九十");
+    const emoji = docOf(
+      importMember(story(), null, source({ name: "一二三四五六七八九🌙" }), null).result,
+    );
+    expect(emoji.members[0]?.name).toBe("一二三四五六七八九");
+  });
+
+  it("性格・設定は全員の合計の残りまで写し、切ったことを字数つきで知らせる", () => {
+    const member = { ...createEmptyMember(), profile: "古い" };
+    const doc = story({ persona: "あ".repeat(19000), members: [member] });
+    const { result, cuts } = importMember(
+      doc,
+      member.id,
+      source({ persona: "い".repeat(1500) }),
+      null,
+    );
+    expect(docOf(result).members[0]?.profile).toBe("い".repeat(1000));
+    expect(cuts).toEqual([
+      "キャラクター設定は本人と登場人物全員で合わせて20,000字までです。残っていた1,000字ぶんだけ取り込みました（元は1,500字）。ほかの人の設定を削れば、その分をここに回せます。",
+    ]);
+  });
+
+  it("口調サンプルは1人10件まで、全員の合計の残りに収まる件まで、上から順に写して知らせる", () => {
+    const tone = (index: number) => ({
+      situation: `場面${String(index).padStart(2, "0")}`,
+      example: "え".repeat(595),
+    });
+    const twelve = Array.from({ length: 12 }, (_, index) => tone(index));
+    const byItems = importMember(story(), null, source({ toneExamples: twelve }), null);
+    expect(docOf(byItems.result).members[0]?.toneExamples).toEqual(twelve.slice(0, 10));
+    expect(byItems.cuts).toEqual([
+      "口調サンプルは12件中10件だけ取り込みました（1人10件までのため）。",
+    ]);
+
+    const own = {
+      ...createEmptyMember(),
+      toneExamples: [{ situation: "古", example: "い".repeat(99) }],
+    };
+    const crowded = story({
+      toneExamples: [{ situation: "朝", example: "お".repeat(5999) }],
+      members: [own],
+    });
+    const byTotal = importMember(crowded, own.id, source({ toneExamples: twelve }), null);
+    expect(docOf(byTotal.result).members[0]?.toneExamples).toEqual(twelve.slice(0, 6));
+    expect(byTotal.cuts).toEqual([
+      "口調サンプルは12件中6件だけ取り込みました（全員の合計で10,000字までのため）。",
+    ]);
+  });
+
+  it("10人いるときは足さず、雑談モードと、いない登場人物には取り込まない", () => {
+    const full = story({
+      members: Array.from({ length: LIMITS.members }, () => createEmptyMember()),
+    });
+    expect(importMember(full, null, source(), null).result).toEqual({
+      refused: "登場人物は本人を含めて10人までです。",
+    });
+    expect(importMember(story({ mode: "chat" }), null, source(), null).result).toBeNull();
+    expect(importMember(story(), "いない", source(), null).result).toBeNull();
   });
 });

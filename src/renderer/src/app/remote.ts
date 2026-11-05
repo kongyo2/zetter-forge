@@ -55,6 +55,12 @@ function editorReport(state: AppState): EditorReport | null {
   return { folder: session.folder, title: displayTitle(session.doc), state: saveState(session) };
 }
 
+const DIALOG_TITLES = {
+  crop: "画像の切り抜き",
+  settings: "設定",
+  import: "保存したキャストから取り込む",
+} as const;
+
 function dialogReport(state: AppState): JsonObject | null {
   const dialog = state.dialog;
   if (!dialog) return null;
@@ -67,7 +73,7 @@ function dialogReport(state: AppState): JsonObject | null {
       cancel: dialog.cancelLabel,
     };
   }
-  return { kind: dialog.kind, title: dialog.kind === "crop" ? "画像の切り抜き" : "設定" };
+  return { kind: dialog.kind, title: DIALOG_TITLES[dialog.kind] };
 }
 
 function messagesSince(state: AppState, mark: number): Message[] {
@@ -104,6 +110,8 @@ function blocked(state: AppState, needsCast: boolean): string | null {
       return "画像を切り抜く画面が開いています。利用者が閉じるまで待ってください。";
     case "settings":
       return "設定の画面が開いています。利用者が閉じるまで待ってください。";
+    case "import":
+      return "保存したキャストから取り込む画面が開いています。利用者が閉じるまで待ってください。";
     default:
       break;
   }

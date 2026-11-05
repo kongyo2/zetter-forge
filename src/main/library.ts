@@ -15,7 +15,7 @@ import {
 } from "@shared/cast";
 import { type CopyLog, copyLogFile, normalizeCopyLog } from "@shared/copyLog";
 import { errorMessage } from "@shared/errors";
-import { imageSlotName } from "@shared/images";
+import { SOURCE_IMAGE_MAX_BYTES, imageSlotName } from "@shared/images";
 import type {
   CastHeader,
   FolderError,
@@ -188,6 +188,22 @@ export async function castImagePath(root: string, folder: string, file: string):
     throw new Error(`キャストの画像ではありません: ${file}`);
   if (!(await exists(full))) throw new Error("画像のファイルが見つかりません。");
   return full;
+}
+
+const IMAGE_TYPES: Readonly<Record<string, string>> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
+
+export async function readCastImage(root: string, folder: string, file: string): Promise<string> {
+  const full = await castImagePath(root, folder, file);
+  const type = IMAGE_TYPES[path.extname(full).toLowerCase()];
+  if (!type) throw new Error("JPEG・PNG・WebP の画像ではないので読めません。");
+  if ((await fs.stat(full)).size > SOURCE_IMAGE_MAX_BYTES)
+    throw new Error("画像が5MBより大きいので読めません。");
+  return `data:${type};base64,${(await fs.readFile(full)).toString("base64")}`;
 }
 
 export function sanitizeFolderName(name: string): string {

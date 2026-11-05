@@ -204,6 +204,7 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
     ],
     scale: `マス目はひとつ${CHARS_PER_CELL}字（原稿用紙1枚ぶん）です。`,
     castTabs: story ? { items: castTabs, canAdd: characterCount < LIMITS.charactersTotal } : null,
+    notes: story ? peopleNotes(characterCount) : [],
     sheet: member
       ? memberSheet(ctx, member, memberIndex, settingsCounter)
       : mainSheet(ctx, settingsCounter),
@@ -215,6 +216,19 @@ export function presentCharacter(ctx: Context): CharacterTabVM {
   };
 }
 
+const EXPERIMENTAL_PEOPLE = 4;
+
+function peopleNotes(characterCount: number): string[] {
+  const notes: string[] = [];
+  if (characterCount >= EXPERIMENTAL_PEOPLE)
+    notes.push(
+      "登場人物が3人以上いるキャストは、Zetter では実験的です。口調や一人称がまれに不安定になります。",
+    );
+  if (characterCount >= LIMITS.charactersTotal)
+    notes.push(`登場人物は本人を含めて${LIMITS.charactersTotal}人までです。`);
+  return notes;
+}
+
 function mainSheet(ctx: Context, settingsCounter: (length: number) => CounterVM): CharacterSheetVM {
   const { doc } = ctx;
   const scope = ["cast"];
@@ -223,6 +237,7 @@ function mainSheet(ctx: Context, settingsCounter: (length: number) => CounterVM)
     scope,
     ink: castInk(0),
     removeLabel: null,
+    importTarget: null,
     avatar: own.avatar,
     name: textField(ctx, scope, ["name"], {
       label: "名前",
@@ -265,6 +280,7 @@ function memberSheet(
     scope,
     ink: castInk(index + 1),
     removeLabel: `${label}を削除`,
+    importTarget: member.id,
     avatar: imageField(ctx, scope, ["avatar"], member.avatar, {
       label: "アイコン",
       shape: "circle",

@@ -22,6 +22,7 @@ import {
   normalizeCastDocument,
   removeMember,
   sendableMembers,
+  sendableToneExamples,
   sortAffinityStages,
 } from "@shared/cast";
 import { describe, expect, it } from "vitest";
@@ -36,6 +37,7 @@ describe("createEmptyCast", () => {
       personaHidden: true,
       toneExamplesHidden: true,
       situationHidden: true,
+      liveAllowed: false,
       authorHidden: false,
       avatarBlurred: false,
       coverBlurred: false,
@@ -256,13 +258,18 @@ describe("normalizeCastDocument", () => {
       authorHidden: "true",
       showTalkCount: 0,
       avatarBlurred: true,
+      liveAllowed: "true",
     });
     expect(doc).toMatchObject({
       personaHidden: false,
       authorHidden: false,
       showTalkCount: true,
       avatarBlurred: true,
+      liveAllowed: false,
     });
+    expect(normalizeCastDocument({ format: CAST_FILE_FORMAT, liveAllowed: true }).liveAllowed).toBe(
+      true,
+    );
   });
 
   it("版は整数のときだけ使い、id と日時が欠けていれば作る", () => {
@@ -627,6 +634,18 @@ describe("sendableMembers", () => {
     partnerOnly.partnerSettings.freeform = "毎朝連絡する";
     const doc = { ...createEmptyCast(), members: [blank, avatarOnly, partnerOnly] };
     expect(sendableMembers(doc)).toEqual([avatarOnly]);
+  });
+});
+
+describe("sendableToneExamples", () => {
+  it("Zetter に送られる形にする（前後の空白を除き、状況と発話例の両方があるものだけ）", () => {
+    expect(
+      sendableToneExamples([
+        { situation: " 朝 ", example: " おはよう " },
+        { situation: "書きかけ", example: "  " },
+        { situation: "", example: "発話例だけ" },
+      ]),
+    ).toEqual([{ situation: "朝", example: "おはよう" }]);
   });
 });
 

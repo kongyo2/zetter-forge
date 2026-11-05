@@ -1,7 +1,7 @@
 import type { CastDocument } from "@shared/cast";
 import type { CopyLog } from "@shared/copyLog";
 import type { ImageKind } from "@shared/images";
-import type { LibraryListing, LoadedCast } from "@shared/ipc";
+import type { CastSummary, LibraryListing, LoadedCast } from "@shared/ipc";
 import type { McpInfo } from "@shared/mcp";
 
 import {
@@ -118,7 +118,15 @@ export interface SettingsDialog {
   error: string | null;
 }
 
-type Dialog = ConfirmDialog | CropDialog | SettingsDialog;
+export interface ImportDialog {
+  kind: "import";
+  sessionKey: number;
+  target: string | null;
+  loading: { token: number; folder: string } | null;
+  error: string | null;
+}
+
+type Dialog = ConfirmDialog | CropDialog | SettingsDialog | ImportDialog;
 
 export interface Toast {
   id: number;
@@ -164,6 +172,11 @@ export function initialState(now: number): AppState {
     mcp: null,
     mcpToken: 0,
   };
+}
+
+export function importCandidates(state: AppState): CastSummary[] {
+  const current = state.session?.folder ?? null;
+  return (state.library.listing?.casts ?? []).filter((cast) => cast.folder !== current);
 }
 
 export function initialUi(): SessionUi {

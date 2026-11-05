@@ -19,6 +19,7 @@ const api: ForgeApi = {
   openLibraryFolder: () => invoke("library:open-folder"),
   showImage: (folder, file) => invoke("cast:show-image", folder, file),
   imagePath: (folder, file) => invoke("cast:image-path", folder, file),
+  readImage: (folder, file) => invoke("cast:read-image", folder, file),
   writeCopyLog: (folder, log) => invoke("cast:write-copy-log", folder, log),
   copyText: (text) => invoke("clipboard:write", text),
   openExternal: (url) => invoke("shell:open-external", url),

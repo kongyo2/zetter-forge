@@ -46,6 +46,7 @@ import {
   isCastMissing,
   listCasts,
   loadCast,
+  readCastImage,
   referencedImages,
   saveCast,
   summarize,
@@ -223,6 +224,9 @@ function registerIpc(): void {
   });
   handle("cast:image-path", async (folder: string, file: string) =>
     castImagePath(settings.libraryRoot, folder, file),
+  );
+  handle("cast:read-image", async (folder: string, file: string) =>
+    readCastImage(settings.libraryRoot, folder, file),
   );
   handle("cast:write-copy-log", async (folder: string, log: CopyLog) =>
     writeCopyLog(settings.libraryRoot, folder, log),

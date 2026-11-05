@@ -611,6 +611,162 @@ describe("書き換え", () => {
   });
 });
 
+describe("保存したキャストから取り込む", () => {
+  const AVATAR_DATA = "data:image/jpeg;base64,QUtBUkk=";
+  const akari = castNamed("灯", {
+    tagline: "霧の喫茶室",
+    persona: "岬の喫茶室の店主。",
+    toneExamples: [{ situation: "朝", example: "おはようございます" }],
+    avatar: { file: "images/avatar-1.jpg", width: 400, height: 400, bytes: 3 },
+  });
+
+  async function picking(target: string | null = null) {
+    const world = await started([{ name: "灯", tagline: "霧の喫茶室" }, { name: "桃" }]);
+    await opened(world, "cast-1", castNamed("桃"));
+    world.dispatch({ type: "member/import-open", target });
+    return world;
+  }
+
+  async function readAkari(world: Awaited<ReturnType<typeof picking>>) {
+    world.dispatch({ type: "member/import-pick", folder: "cast-0" });
+    const load = world.take("loadCast");
+    expect(load.args).toEqual(["cast-0"]);
+    load.resolve(loadedCast("cast-0", akari));
+    await world.flush();
+    const image = world.take("readImage");
+    expect(image.args).toEqual(["cast-0", "images/avatar-1.jpg"]);
+    image.resolve(AVATAR_DATA);
+    await world.flush();
+  }
+
+  it("ほかの保存したキャストを並べ、選んだキャストを写した登場人物を足す（元に戻せる）", async () => {
+    const world = await picking();
+    const dialog = world.vm().dialog;
+    expect(dialog).toMatchObject({
+      kind: "import",
+      title: "保存したキャストから追加",
+      busy: false,
+    });
+    expect(dialog?.kind === "import" && dialog.items.map((item) => item.folder)).toEqual([
+      "cast-0",
+    ]);
+
+    await readAkari(world);
+    expect(world.vm().dialog).toMatchObject({ kind: "import", busy: true });
+    const square = world.take("square");
+    expect(square.args).toEqual([AVATAR_DATA, "member"]);
+    square.resolve(croppedImage);
+    await world.flush();
+
+    expect(world.mediator.getState().dialog).toBeNull();
+    const member = world.session().doc.members[0];
+    expect(member).toMatchObject({
+      name: "灯",
+      profile: "岬の喫茶室の店主。",
+      toneExamples: [{ situation: "朝", example: "おはようございます" }],
+    });
+    expect(world.session().pendingImages[member?.avatar?.file ?? ""]).toBe(croppedImage.dataUrl);
+    expect(world.session().ui.character).toBe(member?.id);
+    const toast = world.vm().toasts.at(-1);
+    expect(toast).toMatchObject({
+      message: "「霧の喫茶室」から登場人物を足しました。",
+      undoable: true,
+    });
+    world.dispatch({ type: "toast/undo", id: toast?.id as number });
+    expect(world.session().doc.members).toEqual([]);
+  });
+
+  it("登場人物の欄から取り込むと、その人を置き換える", async () => {
+    const world = await started([{ name: "灯" }, { name: "桃" }]);
+    await opened(world, "cast-1", castNamed("桃"));
+    world.dispatch({ type: "add", path: ["members"] });
+    const id = world.session().doc.members[0]?.id as string;
+    world.dispatch({ type: "input", path: ["members", id, "name"], value: "葵" });
+    world.dispatch({ type: "member/import-open", target: id });
+    expect(world.vm().dialog).toMatchObject({ title: "保存したキャストから取り込む" });
+    await readAkari(world);
+    world.take("square").resolve(croppedImage);
+    await world.flush();
+    expect(world.session().doc.members.map((member) => [member.id, member.name])).toEqual([
+      [id, "灯"],
+    ]);
+    expect(world.vm().toasts.at(-1)).toMatchObject({
+      message: "「霧の喫茶室」から取り込みました。",
+    });
+  });
+
+  it("アイコンが読めなくても、ほかの項目は写して、アイコンのことだけ知らせる", async () => {
+    const world = await picking();
+    world.dispatch({ type: "member/import-pick", folder: "cast-0" });
+    world.take("loadCast").resolve(loadedCast("cast-0", akari));
+    await world.flush();
+    world.take("readImage").reject(new Error("画像のファイルが見つかりません。"));
+    await world.flush();
+    expect(world.pending()).not.toContain("square");
+    expect(world.session().doc.members[0]).toMatchObject({ name: "灯", avatar: null });
+    expect(world.mediator.getState().toasts.at(-1)).toMatchObject({
+      message: "アイコンは取り込めませんでした: 画像のファイルが見つかりません。",
+      tone: "error",
+    });
+  });
+
+  it("切り出せない画像も、アイコンだけ取り込めなかったと知らせる", async () => {
+    const world = await picking();
+    await readAkari(world);
+    world.take("square").reject(new Error("画像が大きすぎます。別の画像を選んでください。"));
+    await world.flush();
+    expect(world.session().doc.members[0]).toMatchObject({ name: "灯", avatar: null });
+    expect(world.mediator.getState().toasts.at(-1)).toMatchObject({
+      message: "アイコンは取り込めませんでした: 画像が大きすぎます。別の画像を選んでください。",
+    });
+  });
+
+  it("読めなければ、開いたまま知らせて選び直せる", async () => {
+    const world = await picking();
+    world.dispatch({ type: "member/import-pick", folder: "cast-0" });
+    world.take("loadCast").reject(new Error("cast.json が JSON として読めません。"));
+    await world.flush();
+    expect(world.vm().dialog).toMatchObject({
+      kind: "import",
+      busy: false,
+      error: "「霧の喫茶室」を読めませんでした: cast.json が JSON として読めません。",
+    });
+    expect(world.session().doc.members).toEqual([]);
+    world.dispatch({ type: "member/import-pick", folder: "cast-0" });
+    expect(world.pending()).toContain("loadCast");
+  });
+
+  it("読み込みのあいだに閉じたら、あとから届いた中身は使わない（開き直していても）", async () => {
+    const world = await picking();
+    world.dispatch({ type: "member/import-pick", folder: "cast-0" });
+    world.dispatch({ type: "dialog/cancel" });
+    expect(world.mediator.getState().dialog).toBeNull();
+    world.dispatch({ type: "member/import-open", target: null });
+    world.take("loadCast").resolve(loadedCast("cast-0", { ...akari, avatar: null }));
+    await world.flush();
+    expect(world.session().doc.members).toEqual([]);
+    expect(world.vm().dialog).toMatchObject({ kind: "import", busy: false });
+  });
+
+  it("いま開いているキャストと一覧にないフォルダは選べず、雑談モードと10人いるときは開かない", async () => {
+    const world = await picking();
+    world.dispatch({ type: "member/import-pick", folder: "cast-1" });
+    world.dispatch({ type: "member/import-pick", folder: "どこにもない" });
+    expect(world.pending()).not.toContain("loadCast");
+    world.dispatch({ type: "dialog/cancel" });
+
+    world.dispatch({ type: "input", path: ["cast", "mode"], value: "chat" });
+    world.dispatch({ type: "member/import-open", target: null });
+    expect(world.mediator.getState().dialog).toBeNull();
+
+    world.dispatch({ type: "input", path: ["cast", "mode"], value: "story" });
+    for (let count = 0; count < LIMITS.members; count += 1)
+      world.dispatch({ type: "add", path: ["members"] });
+    world.dispatch({ type: "member/import-open", target: null });
+    expect(world.mediator.getState().dialog).toBeNull();
+  });
+});
+
 describe("画像", () => {
   it("ギャラリーは空きの枚数だけ切り抜き、読めない画像は飛ばす", async () => {
     const world = await started();

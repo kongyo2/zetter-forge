@@ -1,9 +1,17 @@
+import type { CastDocument } from "@shared/cast";
 import type { CroppedImage, CropCanvas } from "@shared/images";
 import type { LibraryListing, LoadedCast, MenuCommand, SavedCast } from "@shared/ipc";
 import type { McpInfo } from "@shared/mcp";
 import type { EditorTab } from "@shared/validate";
 
 import type { CopyMark, Path, PickedFile, Selection, ViewTab } from "./types";
+
+export interface MemberSource {
+  folder: string;
+  doc: CastDocument;
+  avatar: CroppedImage | null;
+  avatarError: string | null;
+}
 
 export type FieldEvent =
   | { type: "input"; path: Path; value: string }
@@ -34,6 +42,8 @@ export type ViewEvent =
   | { type: "editor/checks"; open: boolean }
   | { type: "editor/jump"; tab: EditorTab; target: Path | null }
   | { type: "editor/character"; id: string }
+  | { type: "member/import-open"; target: string | null }
+  | { type: "member/import-pick"; folder: string }
   | { type: "editor/subject"; key: string }
   | { type: "editor/stage"; index: number }
   | { type: "transfer/next" }
@@ -71,6 +81,8 @@ type SystemEvent =
   | { type: "image/read-failed"; token: number; message: string }
   | { type: "image/encoded"; token: number; image: CroppedImage }
   | { type: "image/encode-failed"; token: number; message: string }
+  | { type: "member/source-read"; token: number; source: MemberSource }
+  | { type: "member/source-failed"; token: number; message: string }
   | ({ type: "copy/done" } & CopyMark)
   | { type: "copy/failed"; message: string }
   | { type: "task/failed"; message: string }
