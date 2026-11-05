@@ -1,5 +1,5 @@
 import { LIMITS } from "@shared/limits";
-import { codePointLength, formatCount, utf16Length } from "@shared/text";
+import { clipUtf16, codePointLength, formatCount, utf16Length } from "@shared/text";
 import { describe, expect, it } from "vitest";
 
 describe("LIMITS", () => {
@@ -69,6 +69,14 @@ describe("字数の数え方", () => {
     expect(codePointLength("灯里")).toBe(2);
     expect(codePointLength("🌙")).toBe(1);
     expect(codePointLength("👨‍👩‍👧")).toBe(5);
+  });
+
+  it("字数で切るときは、UTF-16 で数え、絵文字（サロゲートペア）の途中では切らない", () => {
+    expect(clipUtf16("灯里", 5)).toBe("灯里");
+    expect(clipUtf16("一二三", 2)).toBe("一二");
+    expect(clipUtf16("一🌙", 2)).toBe("一");
+    expect(clipUtf16("一🌙", 3)).toBe("一🌙");
+    expect(clipUtf16("灯里", 0)).toBe("");
   });
 
   it("件数は ja-JP の 3 桁区切りにする（数でないものは 0）", () => {

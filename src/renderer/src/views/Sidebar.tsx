@@ -1,6 +1,6 @@
 import type { SidebarVM } from "../app/viewModels";
 import { useEmit } from "./chain";
-import { Avatar, EmitButton } from "./parts/basics";
+import { CastLine, EmitButton } from "./parts/basics";
 import { IconPlus, IconSettings } from "./parts/icons";
 
 function ChooseRootButton() {
@@ -89,20 +89,15 @@ export function Sidebar({ vm }: { vm: SidebarVM }) {
             aria-current={item.current || undefined}
             onClick={() => emit({ type: "library/open", folder: item.folder })}
           >
-            <Avatar vm={item.avatar} />
-            <span className="cast-text">
-              <span className="cast-title">
-                <span className="cast-title-text">{item.title}</span>
-                {item.dirty ? (
+            <CastLine
+              vm={item}
+              mark={
+                item.dirty ? (
                   <span className="dirty-dot" title="保存していない変更があります" />
-                ) : null}
-              </span>
-              <span className="cast-meta">
-                {item.sub ? <span>{item.sub}</span> : null}
-                <span>{item.mode}</span>
-                <span>{item.time}</span>
-              </span>
-            </span>
+                ) : null
+              }
+              details={<span>{item.time}</span>}
+            />
           </button>
         ))}
         {vm.errors.map((error) => (

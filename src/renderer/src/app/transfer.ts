@@ -236,7 +236,7 @@ function memberItems(
   builder.sectionOf(`${memberOrdinal(doc.members.indexOf(member))}${quoted(member.name)}`);
   builder.text([...base, "name"], "名前", member.name, {
     max: LIMITS.memberName,
-    notes: first ? ["Zetter の「登場人物を追加」で人数分の枠を足してから写します。"] : [],
+    notes: first ? ["Zetter の「キャラクター追加」で人数分の枠を足してから写します。"] : [],
   });
   builder.image([...base, "avatar"], "アイコン", member.avatar);
   builder.text([...base, "profile"], "性格・設定", member.profile, { max: LIMITS.settingsTotal });
@@ -462,6 +462,12 @@ function build(doc: CastDocument): TransferGroup[] {
     "設定の公開範囲「シチュエーション」",
     onOff(!doc.situationHidden),
     doc.situationHidden === DEFAULTS.situationHidden,
+  );
+  builder.setting(
+    ["cast", "liveAllowed"],
+    "ライブ配信を許可",
+    onOff(doc.liveAllowed),
+    doc.liveAllowed === DEFAULTS.liveAllowed,
   );
   builder.setting(
     ["cast", "authorVisible"],

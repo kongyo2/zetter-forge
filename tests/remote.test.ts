@@ -237,6 +237,25 @@ describe("MCP サーバーからの頼み: 書き換える", () => {
     });
     expect(world.session().doc.name).toBe("灯里");
   });
+
+  it("利用者が保存したキャストから取り込む画面を開いているあいだは、書き換えず答えもしない", async () => {
+    const world = await started([{ name: "灯里" }, { name: "桃" }]);
+    const remote = remoteOf(world);
+    await opened(world, "cast-1", castNamed("桃"));
+    world.dispatch({ type: "member/import-open", target: null });
+    const change: RemoteEdit = { action: "set", path: "cast/name", value: "灯" };
+    expect(await remote.handle({ kind: "edit", edits: [change] })).toMatchObject({
+      ok: false,
+      error: "保存したキャストから取り込む画面が開いています。利用者が閉じるまで待ってください。",
+      detail: { dialog: { kind: "import", title: "保存したキャストから取り込む" } },
+    });
+    expect(await remote.handle({ kind: "answer", choice: "cancel" })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("答えられません"),
+    });
+    expect(world.mediator.getState().dialog).toMatchObject({ kind: "import" });
+    expect(world.session().doc.name).toBe("桃");
+  });
 });
 
 describe("MCP サーバーからの頼み: 開く・作る・保存する", () => {

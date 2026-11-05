@@ -5,8 +5,10 @@ import {
   type ImageKind,
   type ImageSpec,
   SOURCE_IMAGE_MAX_BYTES,
+  centerSquare,
   dataUrlBytes,
   encodeWithinLimit,
+  usableAsSquare,
 } from "@shared/images";
 import Cropper from "cropperjs";
 
@@ -62,13 +64,35 @@ function resizeCanvas(source: CropCanvas, width: number, height: number): CropCa
   return resized;
 }
 
-function imageSize(dataUrl: string): Promise<{ width: number; height: number }> {
+function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onload = () => resolve(image);
     image.onerror = () => reject(new ImageInputError("画像の読み込みに失敗しました。"));
     image.src = dataUrl;
   });
+}
+
+async function imageSize(dataUrl: string): Promise<{ width: number; height: number }> {
+  const image = await loadImage(dataUrl);
+  return { width: image.naturalWidth, height: image.naturalHeight };
+}
+
+async function squareImage(source: string, kind: ImageKind): Promise<CroppedImage> {
+  const image = await loadImage(source);
+  const size = { width: image.naturalWidth, height: image.naturalHeight };
+  if (usableAsSquare(kind, source, size))
+    return { dataUrl: source, ...size, bytes: dataUrlBytes(source) };
+  const crop = centerSquare(kind, size);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!crop || !context) throw new ImageInputError("画像の読み込みに失敗しました。");
+  canvas.width = crop.side;
+  canvas.height = crop.side;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, crop.x, crop.y, crop.size, crop.size, 0, 0, crop.side, crop.side);
+  return encodeCrop(canvas, kind);
 }
 
 async function encodeCrop(canvas: CropCanvas, kind: ImageKind): Promise<CroppedImage> {
@@ -81,4 +105,8 @@ async function encodeCrop(canvas: CropCanvas, kind: ImageKind): Promise<CroppedI
   return { dataUrl, ...size, bytes: dataUrlBytes(dataUrl) };
 }
 
-export const browserImages: ImagePort = { read: readImageFile, encode: encodeCrop };
+export const browserImages: ImagePort = {
+  read: readImageFile,
+  encode: encodeCrop,
+  square: squareImage,
+};

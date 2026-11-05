@@ -22,12 +22,18 @@ import {
   newId,
   normalizeAffinityConfig,
   removeMember,
+  sendableToneExamples,
   sortAffinityStages,
 } from "@shared/cast";
 import type { ImageKind } from "@shared/images";
 import { LIMITS } from "@shared/limits";
-import { formatCount, utf16Length } from "@shared/text";
-import { limitPartnerSettingsValue } from "@shared/validate";
+import { clipUtf16, formatCount, utf16Length } from "@shared/text";
+import {
+  limitPartnerSettingsValue,
+  settingsUsage,
+  toneExamplesLength,
+  toneUsage,
+} from "@shared/validate";
 
 import { memberLabel } from "./labels";
 import {
@@ -44,7 +50,7 @@ export interface EditOutcome {
   doc: CastDocument;
   focus?: FocusTarget;
   ui?: { character?: string; subject?: string; stage?: number };
-  removed?: string;
+  undo?: string;
 }
 
 export interface EditRefusal {
@@ -344,6 +350,7 @@ const CAST_SWITCHES: Record<string, (draft: CastDocument, checked: boolean) => v
   personaVisible: (draft, checked) => void (draft.personaHidden = !checked),
   toneExamplesVisible: (draft, checked) => void (draft.toneExamplesHidden = !checked),
   situationVisible: (draft, checked) => void (draft.situationHidden = !checked),
+  liveAllowed: (draft, checked) => void (draft.liveAllowed = checked),
   authorVisible: (draft, checked) => void (draft.authorHidden = !checked),
   showFavoriteCount: (draft, checked) => void (draft.showFavoriteCount = checked),
   showTalkCount: (draft, checked) => void (draft.showTalkCount = checked),
@@ -552,7 +559,7 @@ function removal(
   message: string,
   remove: (draft: CastDocument) => boolean,
 ): EditResult {
-  return edit(doc, (draft) => (remove(draft) ? { doc: draft, removed: message } : null));
+  return edit(doc, (draft) => (remove(draft) ? { doc: draft, undo: message } : null));
 }
 
 function removeAt(items: unknown[], at: unknown): boolean {
@@ -617,7 +624,7 @@ export function applyRemove(doc: CastDocument, path: Path, ui: { stage: number }
       if (position === 0 && first) first.startValue = config.minValue;
       const stage =
         ui.stage > position ? ui.stage - 1 : Math.min(ui.stage, config.stages.length - 1);
-      return { doc: draft, ui: { stage }, removed: "段階を削除しました。" };
+      return { doc: draft, ui: { stage }, undo: "段階を削除しました。" };
     });
   }
   return null;
@@ -639,6 +646,71 @@ export function removeMemberById(doc: CastDocument, id: string): EditOutcome {
   const draft = structuredClone(doc);
   removeMember(draft, id);
   return { doc: draft, ui: { character: MAIN_CHARACTER } };
+}
+
+export interface MemberImport {
+  result: EditResult;
+  cuts: string[];
+}
+
+export function importMember(
+  doc: CastDocument,
+  target: string | null,
+  source: CastDocument,
+  avatar: CastImage | null,
+): MemberImport {
+  if (doc.mode !== "story") return { result: null, cuts: [] };
+  const draft = structuredClone(doc);
+  let member = draft.members.find((candidate) => candidate.id === target);
+  if (target === null) {
+    if (1 + draft.members.length >= LIMITS.charactersTotal) {
+      const refused = `登場人物は本人を含めて${LIMITS.charactersTotal}人までです。`;
+      return { result: { refused }, cuts: [] };
+    }
+    member = createEmptyMember();
+    draft.members.push(member);
+  }
+  if (!member) return { result: null, cuts: [] };
+  const cuts: string[] = [];
+  member.name = clipUtf16(source.name.trim(), LIMITS.memberName);
+
+  const profile = source.persona.trim() || source.tagline.trim();
+  const settingsLeft = Math.max(
+    0,
+    LIMITS.settingsTotal - (settingsUsage(draft).total - utf16Length(member.profile)),
+  );
+  member.profile = clipUtf16(profile, settingsLeft);
+  if (utf16Length(profile) > settingsLeft) {
+    cuts.push(
+      `キャラクター設定は本人と登場人物全員で合わせて${formatCount(LIMITS.settingsTotal)}字までです。残っていた${formatCount(settingsLeft)}字ぶんだけ取り込みました（元は${formatCount(utf16Length(profile))}字）。ほかの人の設定を削れば、その分をここに回せます。`,
+    );
+  }
+
+  const tones = sendableToneExamples(source.toneExamples);
+  const allowed = tones.slice(0, LIMITS.toneItemsPerCharacter);
+  const toneLeft = Math.max(
+    0,
+    LIMITS.toneTotal - (toneUsage(draft).total - toneExamplesLength(member.toneExamples)),
+  );
+  const kept: ToneExample[] = [];
+  let used = 0;
+  for (const tone of allowed) {
+    const length = toneExamplesLength([tone]);
+    if (used + length > toneLeft) break;
+    kept.push(tone);
+    used += length;
+  }
+  member.toneExamples = kept;
+  if (kept.length < tones.length) {
+    const reason =
+      kept.length < allowed.length
+        ? `全員の合計で${formatCount(LIMITS.toneTotal)}字までのため`
+        : `1人${LIMITS.toneItemsPerCharacter}件までのため`;
+    cuts.push(`口調サンプルは${tones.length}件中${kept.length}件だけ取り込みました（${reason}）。`);
+  }
+
+  if (avatar) member.avatar = avatar;
+  return { result: { doc: draft, ui: { character: member.id } }, cuts };
 }
 
 export function removeAffinity(doc: CastDocument): EditOutcome {

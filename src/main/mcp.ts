@@ -60,7 +60,7 @@ path は / でつなぐ。<id> は read_cast の cast にある id、<i> は 0 �
 - この会話でのあなた: personas（add）, personas/<id>（remove）, personas/<id>/<name|tagline|note>, personas/<id>/useViewerName（switch）
 - 好感度: affinity（add で 4 段階のひな形を作る、remove で全部消す）。<対象> は default（共通設定）、__cast_base__（本体）か登場人物の id。affinity/<対象>（add で個別設定を作る、remove で共通設定に戻す）, affinity/<対象>/<itemName|minValue|maxValue|initialValue|pace>（pace は gentle・normal・rapid）, affinity/<対象>/showInChat（switch）, affinity/<対象>/disabled（switch。オンでそのキャラは好感度を使わない。default にはない）, affinity/<対象>/stages（add）, affinity/<対象>/stages/<i>（remove）, affinity/<対象>/stages/<i>/<startValue|callText|speechText|distanceText|agencyText|avoidText|freeText>（1 段階目の startValue は最小値で決まる）
 - 設定集: lorebooks（add）, lorebooks/<id>（remove・move）, lorebooks/<id>/<title|note>
-- 見た目・公開: cast/public, cast/coverBlurred, cast/personaVisible, cast/toneExamplesVisible, cast/situationVisible, cast/authorVisible, cast/showFavoriteCount, cast/showTalkCount（どれも switch）, cast/hook（一言セリフ）, tags（add）, tags/<i>（set・remove）, gallery/<id>/blurred（switch）
+- 見た目・公開: cast/public, cast/coverBlurred, cast/personaVisible, cast/toneExamplesVisible, cast/situationVisible, cast/liveAllowed（ライブ配信を許可）, cast/authorVisible, cast/showFavoriteCount, cast/showTalkCount（どれも switch）, cast/hook（一言セリフ）, tags（add）, tags/<i>（set・remove）, gallery/<id>/blurred（switch）
 - メモ（Zetter には送られない）: cast/zetterUrl, cast/memo
 - 画像は外す（remove）ことだけできる: cast/avatar, cast/cover, cast/background, members/<id>/avatar, personas/<id>/avatar, gallery/<id>
 

@@ -30,6 +30,7 @@ import {
   applyMove,
   applyRemove,
   imageKindAt,
+  importMember,
   isImagePath,
   isRefusal,
   placeImage,
@@ -40,7 +41,7 @@ import {
   trimIntro,
 } from "./edits";
 import type { Effect } from "./effects";
-import type { AppEvent, FieldEvent } from "./events";
+import type { AppEvent, FieldEvent, MemberSource } from "./events";
 import {
   canonicalJson,
   dropSavedImages,
@@ -52,12 +53,14 @@ import {
   type AppState,
   type ConfirmDialog,
   type CropDialog,
+  type ImportDialog,
   type Intent,
   type Session,
   type SessionUi,
   type SettingsDialog,
   type Toast,
   type UndoPoint,
+  importCandidates,
   initialUi,
 } from "./state";
 import { findTransferItem, nextTransferItem, transferItems } from "./transfer";
@@ -154,6 +157,8 @@ const NOT_USER_ACTIONS = new Set<AppEvent["type"]>([
   "image/read-failed",
   "image/encoded",
   "image/encode-failed",
+  "member/source-read",
+  "member/source-failed",
   "copy/done",
   "copy/failed",
   "task/failed",
@@ -285,6 +290,22 @@ function handle(step: Step, event: AppEvent): void {
     case "editor/character":
       step.ui({ character: event.id });
       return;
+    case "member/import-open":
+      openImport(step, event.target);
+      return;
+    case "member/import-pick":
+      pickImport(step, event.folder);
+      return;
+    case "member/source-read":
+      sourceRead(step, event.token, event.source);
+      return;
+    case "member/source-failed":
+      withImport(step, event.token, (dialog, folder) => ({
+        ...dialog,
+        loading: null,
+        error: `「${castTitle(state, folder)}」を読めませんでした: ${event.message}`,
+      }));
+      return;
     case "editor/subject":
       step.ui({ subject: event.key, stage: 0 });
       return;
@@ -328,6 +349,7 @@ function handle(step: Step, event: AppEvent): void {
     case "dialog/cancel":
       if (
         state.dialog?.kind === "confirm" ||
+        state.dialog?.kind === "import" ||
         (state.dialog?.kind === "settings" && !state.dialog.busy)
       )
         step.closeDialog();
@@ -837,7 +859,7 @@ function commit(step: Step, result: EditResult): void {
     return;
   }
   const next = withDoc(session, result.doc, { ...session.ui, ...result.ui });
-  const undoPoint: UndoPoint | null = result.removed
+  const undoPoint: UndoPoint | null = result.undo
     ? {
         sessionKey: session.key,
         revision: next.revision,
@@ -847,7 +869,7 @@ function commit(step: Step, result: EditResult): void {
     : null;
   step.set({ session: next });
   if (result.focus) step.focus(result.focus.path, result.focus.selection);
-  if (result.removed && undoPoint) step.toast(result.removed, "info", undoPoint);
+  if (result.undo && undoPoint) step.toast(result.undo, "info", undoPoint);
 }
 
 function undo(step: Step, id: number): void {
@@ -1044,6 +1066,72 @@ function encoded(step: Step, token: number, image: CroppedImage): void {
     return;
   }
   nextImage(step, dialog, null);
+}
+
+function openImport(step: Step, target: string | null): void {
+  const { state } = step;
+  const session = state.session;
+  if (!session || state.dialog || session.doc.mode !== "story") return;
+  const { members } = session.doc;
+  const unavailable =
+    target === null
+      ? 1 + members.length >= LIMITS.charactersTotal
+      : !members.some((member) => member.id === target);
+  if (unavailable) return;
+  step.set({
+    dialog: { kind: "import", sessionKey: session.key, target, loading: null, error: null },
+  });
+}
+
+function pickImport(step: Step, folder: string): void {
+  const { state } = step;
+  const dialog = state.dialog;
+  if (dialog?.kind !== "import" || dialog.loading) return;
+  if (!importCandidates(state).some((cast) => cast.folder === folder)) return;
+  const token = step.next();
+  step.set({ dialog: { ...dialog, loading: { token, folder }, error: null } });
+  step.effect({ type: "member/read-source", token, folder });
+}
+
+function withImport(
+  step: Step,
+  token: number,
+  update: (dialog: ImportDialog, folder: string) => ImportDialog,
+): void {
+  const dialog = step.state.dialog;
+  if (dialog?.kind === "import" && dialog.loading?.token === token)
+    step.set({ dialog: update(dialog, dialog.loading.folder) });
+}
+
+function sourceRead(step: Step, token: number, source: MemberSource): void {
+  const { state } = step;
+  const dialog = state.dialog;
+  if (dialog?.kind !== "import" || dialog.loading?.token !== token) return;
+  step.closeDialog();
+  const session = state.session;
+  if (!session || session.key !== dialog.sessionKey) return;
+  const picked = source.avatar
+    ? { file: `pending:img-${step.next()}`, image: source.avatar }
+    : null;
+  const avatar = picked ? castImage(picked.file, picked.image) : null;
+  const { result, cuts } = importMember(session.doc, dialog.target, source.doc, avatar);
+  if (!result || isRefusal(result)) {
+    commit(step, result);
+    return;
+  }
+  if (picked) {
+    const pendingImages = { ...session.pendingImages, [picked.file]: picked.image.dataUrl };
+    step.set({ session: { ...session, pendingImages } });
+  }
+  const title = castDisplayTitle(source.doc).title || source.folder;
+  const notice =
+    dialog.target === null
+      ? `「${title}」から登場人物を足しました。`
+      : `「${title}」から取り込みました。`;
+  commit(step, { ...result, undo: notice });
+  for (const cut of cuts) step.toast(cut, "error");
+  if (source.avatarError)
+    step.toast(`アイコンは取り込めませんでした: ${source.avatarError}`, "error");
 }
 
 function loadMcp(step: Step): void {

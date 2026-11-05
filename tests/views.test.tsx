@@ -165,6 +165,56 @@ describe("画面の部品", () => {
     expect(html).toContain("この設定にする");
   });
 
+  it("登場人物に取り込むボタンとダイアログ、人数の注意を描ける", async () => {
+    const world = await started([{ name: "灯", tagline: "霧の喫茶室" }, { name: "桃" }]);
+    await opened(world, "cast-1", castNamed("桃"));
+    const initial = renderToString(<Root mediator={world.mediator} />);
+    expect(initial).toContain("保存したキャストから追加");
+    expect(initial).not.toContain("実験的");
+
+    for (let count = 0; count < 3; count += 1) world.dispatch({ type: "add", path: ["members"] });
+    const crowded = renderToString(<Root mediator={world.mediator} />);
+    expect(crowded).toContain("保存したキャストから取り込む");
+    expect(crowded).toContain(
+      "登場人物が3人以上いるキャストは、Zetter では実験的です。口調や一人称がまれに不安定になります。",
+    );
+    expect(crowded).not.toContain("登場人物は本人を含めて10人までです。");
+    for (let count = 3; count < 9; count += 1) world.dispatch({ type: "add", path: ["members"] });
+    expect(renderToString(<Root mediator={world.mediator} />)).toContain(
+      "登場人物は本人を含めて10人までです。",
+    );
+
+    world.dispatch({
+      type: "member/import-open",
+      target: world.session().doc.members[0]?.id ?? null,
+    });
+    const dialog = renderToString(<Root mediator={world.mediator} />);
+    expect(dialog).toContain("<dialog");
+    expect(dialog).toContain("「2人目」に写します");
+    expect(dialog).toContain("霧の喫茶室");
+    world.dispatch({ type: "member/import-pick", folder: "cast-0" });
+    expect(renderToString(<Root mediator={world.mediator} />)).toContain("読み込み中…");
+  });
+
+  it("見た目・公開に、完成のときの選び方のメモと、ライブ配信の許可を描く", async () => {
+    const world = await started([{ name: "灯里" }]);
+    await opened(world, "cast-0", castNamed("灯里"));
+    world.dispatch({ type: "editor/tab", tab: "publish" });
+    const html = renderToString(<Root mediator={world.mediator} />);
+    expect(html).toContain("「公開して完成」と「非公開のまま完成」のどちらを選ぶかのメモです。");
+    expect(html).toContain("ライブ配信を許可");
+    expect(html).toContain("設定の公開範囲・ライブ配信・ページに出す情報");
+  });
+
+  it("取り込める保存したキャストがなければ、そう書く", async () => {
+    const world = await started([{ name: "桃" }]);
+    await opened(world, "cast-0", castNamed("桃"));
+    world.dispatch({ type: "member/import-open", target: null });
+    expect(renderToString(<Root mediator={world.mediator} />)).toContain(
+      "ほかに保存したキャストがありません。",
+    );
+  });
+
   it("切り抜きのダイアログを描ける", async () => {
     const world = await started();
     world.dispatch({ type: "library/new" });

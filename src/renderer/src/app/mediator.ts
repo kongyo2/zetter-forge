@@ -4,7 +4,7 @@ import type { CroppedImage, CropCanvas, ImageKind } from "@shared/images";
 import type { ForgeApi } from "@shared/ipc";
 
 import type { Effect } from "./effects";
-import type { AppEvent } from "./events";
+import type { AppEvent, MemberSource } from "./events";
 import { arbitrate } from "./machine";
 import { type AppState, initialState } from "./state";
 import type { PickedFile } from "./types";
@@ -12,6 +12,7 @@ import type { PickedFile } from "./types";
 export interface ImagePort {
   read(file: PickedFile): Promise<string>;
   encode(canvas: CropCanvas, image: ImageKind): Promise<CroppedImage>;
+  square(dataUrl: string, image: ImageKind): Promise<CroppedImage>;
 }
 
 export interface Ports {
@@ -28,6 +29,7 @@ type FailureType =
   | "cast/delete-failed"
   | "image/read-failed"
   | "image/encode-failed"
+  | "member/source-failed"
   | "mcp/load-failed"
   | "mcp/save-failed";
 
@@ -92,6 +94,20 @@ export class Mediator {
 
   private writeCopyLog(folder: string, log: CopyLog): void {
     this.attempt(this.ports.forge.writeCopyLog(folder, log), "コピーの記録を残せませんでした");
+  }
+
+  private async readSource(folder: string): Promise<MemberSource> {
+    const { forge, images } = this.ports;
+    const loaded = await forge.loadCast(folder);
+    const source = { folder, doc: loaded.doc, avatar: null, avatarError: null };
+    const file = loaded.doc.avatar?.file;
+    if (!file) return source;
+    try {
+      const dataUrl = await forge.readImage(folder, file);
+      return { ...source, avatar: await images.square(dataUrl, "member") };
+    } catch (error) {
+      return { ...source, avatarError: errorMessage(error) };
+    }
   }
 
   private run(effect: Effect): void {
@@ -170,6 +186,13 @@ export class Mediator {
           images.encode(effect.canvas, effect.image),
           (image) => ({ type: "image/encoded", token: effect.token, image }),
           toFailure("image/encode-failed", effect.token),
+        );
+        return;
+      case "member/read-source":
+        this.settle(
+          this.readSource(effect.folder),
+          (source) => ({ type: "member/source-read", token: effect.token, source }),
+          toFailure("member/source-failed", effect.token),
         );
         return;
       case "image/show":

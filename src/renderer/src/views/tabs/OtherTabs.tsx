@@ -216,13 +216,20 @@ export function PublishTab({ vm }: { vm: PublishTabVM }) {
         </Link>
       </Section>
 
-      <Disclosure summary="オプション設定" hint="設定の公開範囲・ページに出す情報">
+      <Disclosure summary="オプション設定" hint="設定の公開範囲・ライブ配信・ページに出す情報">
         <Link scope={vm.scope}>
           <Subsection title="設定の公開範囲">
             <p className="note">既定では、キャストの中身は作者だけが見られます。</p>
             {vm.visibility.map((item) => (
               <Toggle key={item.name.join("/")} vm={item} />
             ))}
+          </Subsection>
+          <Subsection title="ライブ配信">
+            <p className="note">
+              公開中のキャストだけがライブ配信に使えます。Zetter
+              でこの欄が出るのは、ライブ配信を使えるアカウントだけです。
+            </p>
+            <Toggle vm={vm.live} />
           </Subsection>
           <Subsection title="ページに出す情報">
             {vm.pageInfo.map((item) => (

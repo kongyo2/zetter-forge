@@ -59,7 +59,7 @@ export function presentPublish(ctx: Context): PublishTabVM {
       ["public"],
       doc.status === "public" ? "公開する" : "非公開（下書き）",
       doc.status === "public",
-      "Zetter で「完成」するときに公開するかどうかのメモです。公開すると「みんなのキャスト」に並び、他のユーザーも話せるようになります。",
+      "Zetter で「完成」を押したときに、「公開して完成」と「非公開のまま完成」のどちらを選ぶかのメモです。公開すると「みんなのキャスト」に並び、他のユーザーも話せるようになります。",
     ),
     cover: imageField(ctx, scope, ["cover"], doc.cover, {
       label: "カバーを選ぶ",
@@ -137,6 +137,12 @@ export function presentPublish(ctx: Context): PublishTabVM {
         "ONにすると詳細ページのシチュエーション欄で誰でも読めます。",
       ),
     ],
+    live: toggle(
+      ["liveAllowed"],
+      "ライブ配信を許可",
+      doc.liveAllowed,
+      "ONにすると、ほかの人がこのキャストとのトークをライブ配信できます。OFFに戻すと、配信中のライブも終わります。",
+    ),
     pageInfo: [
       toggle(
         ["authorVisible"],

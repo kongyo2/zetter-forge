@@ -16,6 +16,7 @@ export type Effect =
   | { type: "cast/write-copy-log"; folder: string; log: CopyLog }
   | { type: "image/read"; token: number; file: PickedFile }
   | { type: "image/encode"; token: number; canvas: CropCanvas; image: ImageKind }
+  | { type: "member/read-source"; token: number; folder: string }
   | { type: "image/show"; folder: string; file: string }
   | ({ type: "copy/text"; text: string } & CopyMark)
   | ({ type: "copy/image-path"; folder: string; file: string } & CopyMark)

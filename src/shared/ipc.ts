@@ -71,6 +71,7 @@ export interface ForgeApi {
   openLibraryFolder(): Promise<void>;
   showImage(folder: string, file: string): Promise<void>;
   imagePath(folder: string, file: string): Promise<string>;
+  readImage(folder: string, file: string): Promise<string>;
   writeCopyLog(folder: string, log: CopyLog): Promise<void>;
   copyText(text: string): Promise<void>;
   openExternal(url: string): Promise<void>;

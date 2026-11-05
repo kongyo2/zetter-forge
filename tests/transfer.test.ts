@@ -40,6 +40,7 @@ const publishOptions = [
   "cast/personaVisible",
   "cast/toneExamplesVisible",
   "cast/situationVisible",
+  "cast/liveAllowed",
   "cast/authorVisible",
   "cast/showFavoriteCount",
   "cast/showTalkCount",
@@ -162,7 +163,7 @@ describe("写す項目", () => {
     ]);
     expect(itemOf(doc, `${m}/name`)).toMatchObject({
       section: "2人目「葵」",
-      notes: ["Zetter の「登場人物を追加」で人数分の枠を足してから写します。"],
+      notes: ["Zetter の「キャラクター追加」で人数分の枠を足してから写します。"],
     });
     expect(itemOf(doc, "lorebooks/b1/title")).toMatchObject({
       kind: "setting",
@@ -237,13 +238,14 @@ describe("写す項目", () => {
       ["cast/avatarBlurred", "cast/coverBlurred", ...publishOptions].map(
         (key) => itemOf(defaults, key)?.skip,
       ),
-    ).toEqual(Array(8).fill("default"));
+    ).toEqual(Array(9).fill("default"));
     const changed = cast({
       avatarBlurred: true,
       coverBlurred: true,
       personaHidden: false,
       toneExamplesHidden: false,
       situationHidden: false,
+      liveAllowed: true,
       authorHidden: true,
       showFavoriteCount: false,
       showTalkCount: false,
@@ -259,10 +261,12 @@ describe("写す項目", () => {
       [null, "オン"],
       [null, "オン"],
       [null, "オン"],
+      [null, "オン"],
       [null, "オフ"],
       [null, "オフ"],
       [null, "オフ"],
     ]);
+    expect(itemOf(changed, "cast/liveAllowed")?.label).toBe("ライブ配信を許可");
   });
 
   it("好感度の個別設定は、ひな形とも共通設定とも同じ欄だけを、何もしない項目にする", () => {
